@@ -21,7 +21,7 @@
 
 | ID | Name | Summary | Evidence | Disposition | Dependencies | Workstream |
 |---|---|---|---|---|---|---|
-| PRODUCT | Product contract | Read-only fantasy-baseball decision support and documented user promises | `<skout-repo>/README.md`, `<skout-repo>/arch.md` | Unresolved drift | All capability groups | CLI and operations |
+| PRODUCT | Product contract | Read-only fantasy-baseball decision support and documented user promises | `<skout-repo>/README.md`, `<skout-repo>/arch.md`, `docs/skout-cli-operations.md#documentation-claim-extraction` | Unresolved drift | All capability groups | CLI and operations |
 | META-DEPS | Go dependency surface | Runtime, CLI, keychain, terminal, OAuth, and SQLite dependencies | `<skout-repo>/go.mod` | Required | None | Providers and storage |
 | CLI-ROOT | Root CLI contract | Help, version, global flags, attribution, startup hooks, and exit handling | `<skout-repo>/cmd/skout/root.go` | Required | OPS-CONFIG, OPS-DAEMON | CLI and operations |
 | CLI-AUTH | Authentication commands | Login, logout, status, league selection, and credential lifecycle | `<skout-repo>/cmd/skout/auth.go` | Required | PROV-YAHOO, OPS-CONFIG | CLI and operations |
@@ -278,9 +278,9 @@
 
 | ID | Competing evidence | Current observed behavior | Compatibility question | Director decision |
 |---|---|---|---|---|
-| CF-001 | `<skout-repo>/arch.md:113` and `<skout-repo>/arch.md:199` describe `skout odds` and `internal/oddsapi`; no matching command or package exists in the tracked source | Odds data is stored and displayed through existing store/display code, but no `odds` command is registered | Restore a dedicated command, preserve only reachable odds behavior, or retire the documented surface? | Unresolved |
-| CF-002 | `<skout-repo>/README.md:68` describes top 10 player browse results; `<skout-repo>/cmd/skout/playerpool.go:171` defaults to 20 | Executable command behavior takes precedence over the README claim | Preserve the executable default or intentionally restore the documented default? | Unresolved |
-| CF-003 | `<skout-repo>/arch.md:162` documents `--no-advise/-A`; `<skout-repo>/cmd/skout/match.go:661` registers `--advise/-a` | Advisory is opt-in through `--advise/-a` | Preserve opt-in advisory or reintroduce an opt-out surface? | Unresolved |
+| CF-001 | `<skout-repo>/arch.md:113` and `<skout-repo>/arch.md:199` describe `skout odds` and `internal/oddsapi`; no matching command or package exists in the tracked source | Odds data is stored and displayed through existing store/display code, but no `odds` command is registered | Restore a dedicated command, preserve only reachable odds behavior, or retire the documented surface? | Resolved — preserve current executable behavior; do not restore the retired standalone command, totals, or strikeout props; see `docs/skout-cli-operations.md#settled-drift` |
+| CF-002 | `<skout-repo>/README.md:68` describes top 10 player browse results; `<skout-repo>/cmd/skout/playerpool.go:171` defaults to 20 | Executable command behavior takes precedence over the README claim | Preserve the executable default or intentionally restore the documented default? | Resolved — preserve the executable default of 20; see `docs/skout-cli-operations.md#settled-drift` |
+| CF-003 | `<skout-repo>/arch.md:162` documents `--no-advise/-A`; `<skout-repo>/cmd/skout/match.go:661` registers `--advise/-a` | Advisory is opt-in through `--advise/-a` | Preserve opt-in advisory or reintroduce an opt-out surface? | Resolved — preserve opt-in `--advise/-a`; see `docs/skout-cli-operations.md#settled-drift` |
 
 ## Initial Design Observations
 
@@ -299,7 +299,7 @@ No design recommendation or compatibility choice is settled by this catalog.
 
 Use outside-in discovery order: establish observable CLI and operational contracts before analyzing the provider, storage, analysis, display, and advisory internals that satisfy them. This is not the implementation order.
 
-1. **CLI and operations** — expand CLI-ROOT through OPS-SYNC into command, argument, flag, output, error, exit, configuration, filesystem, daemon, logging, debug, and reset contracts; resolve its assigned conflicts.
+1. **CLI and operations** — detailed inventory: [`docs/skout-cli-operations.md`](skout-cli-operations.md). Expand CLI-ROOT through OPS-SYNC into command, argument, flag, output, error, exit, configuration, filesystem, daemon, logging, debug, and reset contracts; resolve its assigned conflicts.
 2. **Providers and storage** — expand META-DEPS, provider, cache, and store capabilities into authentication, fetch, normalization, schema, migration, write, snapshot, freshness, fallback, reconciliation, and failure contracts.
 3. **Analysis, display, and advisory** — expand domain, analysis, display, and advisory capabilities into computation, terminology, layout, TUI, prompt, provider, parsing, and decision-grounding contracts.
 
