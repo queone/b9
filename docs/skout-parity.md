@@ -300,7 +300,7 @@ No design recommendation or compatibility choice is settled by this catalog.
 Use outside-in discovery order: establish observable CLI and operational contracts before analyzing the provider, storage, analysis, display, and advisory internals that satisfy them. This is not the implementation order.
 
 1. **CLI and operations** — detailed inventory: [`docs/skout-cli-operations.md`](skout-cli-operations.md). Expand CLI-ROOT through OPS-SYNC into command, argument, flag, output, error, exit, configuration, filesystem, daemon, logging, debug, and reset contracts; resolve its assigned conflicts.
-2. **Providers and storage** — expand META-DEPS, provider, cache, and store capabilities into authentication, fetch, normalization, schema, migration, write, snapshot, freshness, fallback, reconciliation, and failure contracts.
+2. **Providers and storage** — detailed inventory: [`docs/skout-providers-storage.md`](skout-providers-storage.md). Expand META-DEPS, provider, cache, and store capabilities into authentication, fetch, normalization, schema, migration, write, snapshot, freshness, fallback, reconciliation, and failure contracts.
 3. **Analysis, display, and advisory** — expand domain, analysis, display, and advisory capabilities into computation, terminology, layout, TUI, prompt, provider, parsing, and decision-grounding contracts.
 
 Each detailed-discovery AC must define deterministic pre-release tests separately from live-provider checks, reconcile its assigned conflicts through explicit Director decisions, and remain Ratified before Rust feature implementation begins for its capabilities. Final parity and replacement-readiness evidence will be defined only after all three detailed inventories are complete.
