@@ -1,0 +1,22 @@
+# Build artifacts
+*.out
+*.test
+*.exe
+
+# Coverage
+build-cover-*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Rust
+/target/
+**/*.rs.bk

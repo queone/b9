@@ -1,0 +1,10 @@
+[package]
+name = "b9"
+version = "0.2.0"
+edition = "2024"
+
+[[bin]]
+name = "b9"
+path = "src/main.rs"
+
+[dependencies]
