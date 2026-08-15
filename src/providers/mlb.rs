@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use reqwest::Url;
@@ -192,9 +193,226 @@ pub struct PersonIdentity {
     pub birth_date: Option<String>,
 }
 
-/// The cache disposition that led to a schedule result.
+/// One MLB hitting-stat block with provider-native ratio strings.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct HittingStats {
+    #[serde(default, rename = "gamesPlayed")]
+    pub games_played: i64,
+    #[serde(default, rename = "plateAppearances")]
+    pub plate_appearances: i64,
+    #[serde(default, rename = "atBats")]
+    pub at_bats: i64,
+    #[serde(default)]
+    pub hits: i64,
+    #[serde(default, rename = "homeRuns")]
+    pub home_runs: i64,
+    #[serde(default)]
+    pub rbi: i64,
+    #[serde(default)]
+    pub runs: i64,
+    #[serde(default, rename = "stolenBases")]
+    pub stolen_bases: i64,
+    #[serde(default, rename = "avg")]
+    pub average: String,
+    #[serde(default, rename = "obp")]
+    pub on_base_percentage: String,
+    #[serde(default, rename = "slg")]
+    pub slugging_percentage: String,
+    #[serde(default, rename = "ops")]
+    pub on_base_plus_slugging: String,
+    #[serde(default, rename = "strikeOuts")]
+    pub strikeouts: i64,
+    #[serde(default, rename = "baseOnBalls")]
+    pub walks: i64,
+    #[serde(default)]
+    pub doubles: i64,
+    #[serde(default)]
+    pub triples: i64,
+    #[serde(default, rename = "caughtStealing")]
+    pub caught_stealing: i64,
+    #[serde(default, rename = "hitByPitch")]
+    pub hit_by_pitch: i64,
+    #[serde(default, rename = "totalBases")]
+    pub total_bases: i64,
+    #[serde(default, rename = "sacFlies")]
+    pub sacrifice_flies: i64,
+    #[serde(default, rename = "sacBunts")]
+    pub sacrifice_bunts: i64,
+    #[serde(default, rename = "groundIntoDoublePlay")]
+    pub grounded_into_double_play: i64,
+    #[serde(default, rename = "intentionalWalks")]
+    pub intentional_walks: i64,
+    #[serde(default)]
+    pub babip: String,
+}
+
+/// One MLB pitching-stat block with provider-native ratio and innings strings.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct PitchingStats {
+    #[serde(default, rename = "gamesPitched")]
+    pub games_pitched: i64,
+    #[serde(default, rename = "gamesStarted")]
+    pub games_started: i64,
+    #[serde(default, rename = "inningsPitched")]
+    pub innings_pitched: String,
+    #[serde(default)]
+    pub wins: i64,
+    #[serde(default)]
+    pub losses: i64,
+    #[serde(default)]
+    pub saves: i64,
+    #[serde(default)]
+    pub holds: i64,
+    #[serde(default, rename = "strikeOuts")]
+    pub strikeouts: i64,
+    #[serde(default, rename = "baseOnBalls")]
+    pub walks: i64,
+    #[serde(default)]
+    pub era: String,
+    #[serde(default)]
+    pub whip: String,
+    #[serde(default, rename = "qualityStarts")]
+    pub quality_starts: i64,
+    #[serde(default)]
+    pub runs: i64,
+    #[serde(default, rename = "hits")]
+    pub hits_allowed: i64,
+    #[serde(default, rename = "earnedRuns")]
+    pub earned_runs: i64,
+    #[serde(default, rename = "homeRuns")]
+    pub home_runs_allowed: i64,
+    #[serde(default, rename = "hitBatsmen")]
+    pub hit_batsmen: i64,
+    #[serde(default)]
+    pub balks: i64,
+    #[serde(default, rename = "wildPitches")]
+    pub wild_pitches: i64,
+    #[serde(default, rename = "battersFaced")]
+    pub batters_faced: i64,
+    #[serde(default, rename = "gamesFinished")]
+    pub games_finished: i64,
+    #[serde(default, rename = "saveOpportunities")]
+    pub save_opportunities: i64,
+    #[serde(default, rename = "blownSaves")]
+    pub blown_saves: i64,
+    #[serde(default, rename = "completeGames")]
+    pub complete_games: i64,
+    #[serde(default)]
+    pub shutouts: i64,
+    #[serde(default, rename = "intentionalWalks")]
+    pub intentional_walks: i64,
+    #[serde(default, rename = "strikeoutsPer9Inn")]
+    pub strikeouts_per_nine: String,
+    #[serde(default, rename = "walksPer9Inn")]
+    pub walks_per_nine: String,
+    #[serde(default, rename = "hitsPer9Inn")]
+    pub hits_per_nine: String,
+    #[serde(default, rename = "homeRunsPer9Inn")]
+    pub home_runs_per_nine: String,
+    #[serde(default, rename = "strikeoutWalkRatio")]
+    pub strikeout_walk_ratio: String,
+    #[serde(default, rename = "inheritedRunners")]
+    pub inherited_runners: i64,
+    #[serde(default, rename = "inheritedRunnersScored")]
+    pub inherited_runners_scored: i64,
+    #[serde(default)]
+    pub pickoffs: i64,
+    #[serde(default, rename = "stolenBases")]
+    pub stolen_bases_allowed: i64,
+    #[serde(default, rename = "caughtStealing")]
+    pub caught_stealing_allowed: i64,
+    #[serde(default, rename = "numberOfPitches")]
+    pub number_of_pitches: i64,
+    #[serde(default, rename = "pitchesPerInning")]
+    pub pitches_per_inning: String,
+}
+
+/// Player identity embedded in an MLB bulk-stat split.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct BulkPlayer {
+    #[serde(default, rename = "id")]
+    pub person_id: i64,
+    #[serde(default, rename = "fullName")]
+    pub full_name: String,
+}
+
+/// Team identity embedded in an MLB bulk-stat split.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct BulkTeam {
+    #[serde(default, rename = "id")]
+    pub team_id: i64,
+}
+
+/// Position classification embedded in an MLB bulk-stat split.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub struct BulkPosition {
+    #[serde(default, rename = "type")]
+    pub position_type: String,
+}
+
+/// One bulk hitting-stat split.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct BulkHittingSplit {
+    #[serde(default)]
+    pub player: BulkPlayer,
+    #[serde(default)]
+    pub team: BulkTeam,
+    #[serde(default)]
+    pub position: BulkPosition,
+    #[serde(default)]
+    pub stat: HittingStats,
+}
+
+/// One bulk pitching-stat split.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct BulkPitchingSplit {
+    #[serde(default)]
+    pub player: BulkPlayer,
+    #[serde(default)]
+    pub team: BulkTeam,
+    #[serde(default)]
+    pub position: BulkPosition,
+    #[serde(default)]
+    pub stat: PitchingStats,
+}
+
+/// One hitter game-log entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HittingGameLogEntry {
+    pub date: String,
+    pub game_id: i64,
+    pub is_home: bool,
+    pub opponent_abbreviation: String,
+    pub stat: HittingStats,
+}
+
+/// One pitcher game-log entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PitchingGameLogEntry {
+    pub date: String,
+    pub game_id: i64,
+    pub is_home: bool,
+    pub opponent_abbreviation: String,
+    pub stat: PitchingStats,
+}
+
+/// One pitcher-specific quality-start acquisition issue.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QualityStartIssue {
+    pub person_id: i64,
+    pub detail: String,
+}
+
+/// Deterministic successful quality-start counts and partial failures.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct QualityStartResult {
+    pub counts: BTreeMap<i64, i64>,
+    pub issues: Vec<QualityStartIssue>,
+}
+
+/// The cache disposition that led to an MLB result.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ScheduleCacheStatus {
+pub enum MlbCacheStatus {
     Hit,
     Miss,
     Expired,
@@ -205,7 +423,23 @@ pub enum ScheduleCacheStatus {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CachedSchedule {
     pub games: Vec<ScheduleGame>,
-    pub cache_status: ScheduleCacheStatus,
+    pub cache_status: MlbCacheStatus,
+    pub cache_write_issue: Option<String>,
+}
+
+/// One cached or live hitting date-range result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CachedHittingStats {
+    pub splits: Vec<BulkHittingSplit>,
+    pub cache_status: MlbCacheStatus,
+    pub cache_write_issue: Option<String>,
+}
+
+/// One cached or live pitching date-range result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CachedPitchingStats {
+    pub splits: Vec<BulkPitchingSplit>,
+    pub cache_status: MlbCacheStatus,
     pub cache_write_issue: Option<String>,
 }
 
@@ -272,21 +506,21 @@ impl MlbClient {
                 Ok(games) => {
                     return Ok(CachedSchedule {
                         games,
-                        cache_status: ScheduleCacheStatus::Hit,
+                        cache_status: MlbCacheStatus::Hit,
                         cache_write_issue: None,
                     });
                 }
-                Err(_) => ScheduleCacheStatus::Corrupt,
+                Err(_) => MlbCacheStatus::Corrupt,
             },
-            CacheLookup::Missing => ScheduleCacheStatus::Miss,
+            CacheLookup::Missing => MlbCacheStatus::Miss,
             CacheLookup::Expired(entry) => {
                 if decode_schedule(&entry.payload).is_err() {
-                    ScheduleCacheStatus::Corrupt
+                    MlbCacheStatus::Corrupt
                 } else {
-                    ScheduleCacheStatus::Expired
+                    MlbCacheStatus::Expired
                 }
             }
-            CacheLookup::Corrupt { .. } => ScheduleCacheStatus::Corrupt,
+            CacheLookup::Corrupt { .. } => MlbCacheStatus::Corrupt,
         };
         let (payload, games) = self.fetch_schedule_payload(date)?;
         let cache_write_issue = cache
@@ -437,6 +671,395 @@ impl MlbClient {
             .collect())
     }
 
+    /// Fetch one player's season hitting statistics.
+    pub fn fetch_hitting_stats(
+        &self,
+        person_id: i64,
+        season: i64,
+    ) -> Result<HittingStats, ProviderError> {
+        validate_id("person ID", person_id)?;
+        validate_season(season)?;
+        let response: StatsResponse<StatWire<HittingStats>> = self.get_json(
+            "fetch MLB player hitting stats",
+            self.player_stats_url(person_id, season, "season", "hitting"),
+        )?;
+        first_stat(response, "fetch MLB player hitting stats")
+    }
+
+    /// Fetch one player's season pitching statistics.
+    pub fn fetch_pitching_stats(
+        &self,
+        person_id: i64,
+        season: i64,
+    ) -> Result<PitchingStats, ProviderError> {
+        validate_id("person ID", person_id)?;
+        validate_season(season)?;
+        let response: StatsResponse<StatWire<PitchingStats>> = self.get_json(
+            "fetch MLB player pitching stats",
+            self.player_stats_url(person_id, season, "season", "pitching"),
+        )?;
+        first_stat(response, "fetch MLB player pitching stats")
+    }
+
+    /// Fetch all matching season hitting-stat splits.
+    pub fn fetch_bulk_hitting_stats(
+        &self,
+        season: i64,
+        game_type: &str,
+    ) -> Result<Vec<BulkHittingSplit>, ProviderError> {
+        validate_season(season)?;
+        validate_game_type(game_type)?;
+        let season_value = season.to_string();
+        let response: StatsResponse<BulkHittingSplit> = self.get_json(
+            "fetch MLB bulk hitting stats",
+            self.url(
+                &["stats"],
+                &[
+                    ("stats", "season"),
+                    ("group", "hitting"),
+                    ("gameType", game_type),
+                    ("season", &season_value),
+                    ("playerPool", "All"),
+                    ("limit", "2000"),
+                ],
+            ),
+        )?;
+        Ok(all_splits(response))
+    }
+
+    /// Fetch all matching season pitching-stat splits.
+    pub fn fetch_bulk_pitching_stats(
+        &self,
+        season: i64,
+        game_type: &str,
+    ) -> Result<Vec<BulkPitchingSplit>, ProviderError> {
+        validate_season(season)?;
+        validate_game_type(game_type)?;
+        let season_value = season.to_string();
+        let response: StatsResponse<BulkPitchingSplit> = self.get_json(
+            "fetch MLB bulk pitching stats",
+            self.url(
+                &["stats"],
+                &[
+                    ("stats", "season"),
+                    ("group", "pitching"),
+                    ("gameType", game_type),
+                    ("season", &season_value),
+                    ("playerPool", "All"),
+                    ("limit", "2000"),
+                ],
+            ),
+        )?;
+        Ok(all_splits(response))
+    }
+
+    /// Fetch regular-season hitting-stat splits for one inclusive date range.
+    pub fn fetch_hitting_stats_by_date_range(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<BulkHittingSplit>, ProviderError> {
+        let (_, splits) = self.fetch_hitting_range_payload(season, start_date, end_date)?;
+        Ok(splits)
+    }
+
+    /// Fetch a hitting date range through the bounded MLB cache.
+    pub fn fetch_hitting_stats_by_date_range_cached(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+        cache: &DiskCache,
+    ) -> Result<CachedHittingStats, ProviderError> {
+        validate_range(season, start_date, end_date)?;
+        let key = format!("hitting-range-{season}-{start_date}-{end_date}");
+        let lookup = cache.get("mlb", &key, SCHEDULE_TTL).map_err(|error| {
+            ProviderError::operation(
+                "fetch cached MLB hitting stats",
+                "read statistics cache",
+                error,
+            )
+        })?;
+        let status = match lookup {
+            CacheLookup::Hit(entry) => {
+                match decode_splits(&entry.payload, "fetch MLB hitting stats") {
+                    Ok(splits) => {
+                        return Ok(CachedHittingStats {
+                            splits,
+                            cache_status: MlbCacheStatus::Hit,
+                            cache_write_issue: None,
+                        });
+                    }
+                    Err(_) => MlbCacheStatus::Corrupt,
+                }
+            }
+            CacheLookup::Missing => MlbCacheStatus::Miss,
+            CacheLookup::Expired(entry) => {
+                if decode_splits::<BulkHittingSplit>(&entry.payload, "fetch MLB hitting stats")
+                    .is_ok()
+                {
+                    MlbCacheStatus::Expired
+                } else {
+                    MlbCacheStatus::Corrupt
+                }
+            }
+            CacheLookup::Corrupt { .. } => MlbCacheStatus::Corrupt,
+        };
+        let (payload, splits) = self.fetch_hitting_range_payload(season, start_date, end_date)?;
+        let cache_write_issue = cache
+            .put("mlb", &key, &payload)
+            .err()
+            .map(|error| bounded(&error.to_string(), MAX_ISSUE_DETAIL));
+        Ok(CachedHittingStats {
+            splits,
+            cache_status: status,
+            cache_write_issue,
+        })
+    }
+
+    /// Fetch regular-season pitching-stat splits for one inclusive date range.
+    pub fn fetch_pitching_stats_by_date_range(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<BulkPitchingSplit>, ProviderError> {
+        let (_, splits) = self.fetch_pitching_range_payload(season, start_date, end_date)?;
+        Ok(splits)
+    }
+
+    /// Fetch a pitching date range through the bounded MLB cache.
+    pub fn fetch_pitching_stats_by_date_range_cached(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+        cache: &DiskCache,
+    ) -> Result<CachedPitchingStats, ProviderError> {
+        validate_range(season, start_date, end_date)?;
+        let key = format!("pitching-range-{season}-{start_date}-{end_date}");
+        let lookup = cache.get("mlb", &key, SCHEDULE_TTL).map_err(|error| {
+            ProviderError::operation(
+                "fetch cached MLB pitching stats",
+                "read statistics cache",
+                error,
+            )
+        })?;
+        let status = match lookup {
+            CacheLookup::Hit(entry) => {
+                match decode_splits(&entry.payload, "fetch MLB pitching stats") {
+                    Ok(splits) => {
+                        return Ok(CachedPitchingStats {
+                            splits,
+                            cache_status: MlbCacheStatus::Hit,
+                            cache_write_issue: None,
+                        });
+                    }
+                    Err(_) => MlbCacheStatus::Corrupt,
+                }
+            }
+            CacheLookup::Missing => MlbCacheStatus::Miss,
+            CacheLookup::Expired(entry) => {
+                if decode_splits::<BulkPitchingSplit>(&entry.payload, "fetch MLB pitching stats")
+                    .is_ok()
+                {
+                    MlbCacheStatus::Expired
+                } else {
+                    MlbCacheStatus::Corrupt
+                }
+            }
+            CacheLookup::Corrupt { .. } => MlbCacheStatus::Corrupt,
+        };
+        let (payload, splits) = self.fetch_pitching_range_payload(season, start_date, end_date)?;
+        let cache_write_issue = cache
+            .put("mlb", &key, &payload)
+            .err()
+            .map(|error| bounded(&error.to_string(), MAX_ISSUE_DETAIL));
+        Ok(CachedPitchingStats {
+            splits,
+            cache_status: status,
+            cache_write_issue,
+        })
+    }
+
+    /// Fetch one hitter's chronological season game log.
+    pub fn fetch_hitter_game_log(
+        &self,
+        person_id: i64,
+        season: i64,
+    ) -> Result<Vec<HittingGameLogEntry>, ProviderError> {
+        validate_id("person ID", person_id)?;
+        validate_season(season)?;
+        let response: StatsResponse<GameLogWire<HittingStats>> = self.get_json(
+            "fetch MLB hitter game log",
+            self.player_stats_url(person_id, season, "gameLog", "hitting"),
+        )?;
+        Ok(all_splits(response).into_iter().map(Into::into).collect())
+    }
+
+    /// Fetch one pitcher's chronological season game log.
+    pub fn fetch_pitcher_game_log(
+        &self,
+        person_id: i64,
+        season: i64,
+    ) -> Result<Vec<PitchingGameLogEntry>, ProviderError> {
+        validate_id("person ID", person_id)?;
+        validate_season(season)?;
+        let response: StatsResponse<GameLogWire<PitchingStats>> = self.get_json(
+            "fetch MLB pitcher game log",
+            self.player_stats_url(person_id, season, "gameLog", "pitching"),
+        )?;
+        Ok(all_splits(response).into_iter().map(Into::into).collect())
+    }
+
+    /// Derive positive quality-start counts for an inclusive date range.
+    pub fn fetch_quality_starts_by_date_range(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+        person_ids: &[i64],
+    ) -> Result<QualityStartResult, ProviderError> {
+        validate_range(season, start_date, end_date)?;
+        self.aggregate_quality_starts(person_ids, false, &|person_id| {
+            self.fetch_pitcher_game_log(person_id, season)
+                .map(|entries| {
+                    entries
+                        .into_iter()
+                        .filter(|entry| {
+                            entry.date.as_str() >= start_date
+                                && entry.date.as_str() <= end_date
+                                && entry.stat.games_started == 1
+                                && parse_innings_pitched(&entry.stat.innings_pitched)
+                                    .is_some_and(|value| value >= 6.0)
+                                && entry.stat.earned_runs <= 3
+                        })
+                        .count() as i64
+                })
+        })
+    }
+
+    /// Fetch season quality-start totals for each requested pitcher.
+    pub fn fetch_quality_starts(
+        &self,
+        season: i64,
+        person_ids: &[i64],
+    ) -> Result<QualityStartResult, ProviderError> {
+        validate_season(season)?;
+        self.aggregate_quality_starts(person_ids, true, &|person_id| {
+            self.fetch_pitching_stats(person_id, season)
+                .map(|stats| stats.quality_starts)
+        })
+    }
+
+    fn aggregate_quality_starts(
+        &self,
+        person_ids: &[i64],
+        include_zero: bool,
+        fetch: &(dyn Fn(i64) -> Result<i64, ProviderError> + Sync),
+    ) -> Result<QualityStartResult, ProviderError> {
+        let mut seen = HashSet::new();
+        let unique: Vec<i64> = person_ids
+            .iter()
+            .copied()
+            .filter(|id| seen.insert(*id))
+            .collect();
+        for id in &unique {
+            validate_id("person ID", *id)?;
+        }
+        let mut result = QualityStartResult::default();
+        for batch in unique.chunks(5) {
+            let outcomes = thread::scope(|scope| {
+                let workers = batch
+                    .iter()
+                    .map(|person_id| {
+                        let id = *person_id;
+                        (id, scope.spawn(move || fetch(id)))
+                    })
+                    .collect::<Vec<_>>();
+                workers
+                    .into_iter()
+                    .map(|(person_id, worker)| (person_id, worker.join()))
+                    .collect::<Vec<_>>()
+            });
+            for (person_id, outcome) in outcomes {
+                match outcome {
+                    Ok(Ok(count)) if include_zero || count > 0 => {
+                        result.counts.insert(person_id, count);
+                    }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => result.issues.push(QualityStartIssue {
+                        person_id,
+                        detail: bounded(&error.to_string(), MAX_ISSUE_DETAIL),
+                    }),
+                    Err(_) => result.issues.push(QualityStartIssue {
+                        person_id,
+                        detail:
+                            "quality-start worker did not complete normally; retry the acquisition"
+                                .into(),
+                    }),
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn player_stats_url(&self, person_id: i64, season: i64, stats: &str, group: &str) -> Url {
+        let season_value = season.to_string();
+        self.url(
+            &["people", &person_id.to_string(), "stats"],
+            &[
+                ("stats", stats),
+                ("season", &season_value),
+                ("group", group),
+            ],
+        )
+    }
+
+    fn fetch_hitting_range_payload(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<(Vec<u8>, Vec<BulkHittingSplit>), ProviderError> {
+        validate_range(season, start_date, end_date)?;
+        let url = self.range_url(season, start_date, end_date, "hitting");
+        let payload = self.get_bytes("fetch MLB hitting stats", url)?;
+        let splits = decode_splits(&payload, "fetch MLB hitting stats")?;
+        Ok((payload, splits))
+    }
+
+    fn fetch_pitching_range_payload(
+        &self,
+        season: i64,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<(Vec<u8>, Vec<BulkPitchingSplit>), ProviderError> {
+        validate_range(season, start_date, end_date)?;
+        let url = self.range_url(season, start_date, end_date, "pitching");
+        let payload = self.get_bytes("fetch MLB pitching stats", url)?;
+        let splits = decode_splits(&payload, "fetch MLB pitching stats")?;
+        Ok((payload, splits))
+    }
+
+    fn range_url(&self, season: i64, start_date: &str, end_date: &str, group: &str) -> Url {
+        let season_value = season.to_string();
+        self.url(
+            &["stats"],
+            &[
+                ("stats", "byDateRange"),
+                ("group", group),
+                ("gameType", "R"),
+                ("season", &season_value),
+                ("playerPool", "All"),
+                ("limit", "2000"),
+                ("startDate", start_date),
+                ("endDate", end_date),
+            ],
+        )
+    }
+
     fn fetch_schedule_payload(
         &self,
         date: &str,
@@ -519,6 +1142,29 @@ fn validate_id(label: &str, value: i64) -> Result<(), ProviderError> {
     Ok(())
 }
 
+fn validate_game_type(game_type: &str) -> Result<(), ProviderError> {
+    if !matches!(game_type, "R" | "S") {
+        return Err(ProviderError::invalid(
+            "validate MLB game type",
+            "game type must be R or S",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_range(season: i64, start_date: &str, end_date: &str) -> Result<(), ProviderError> {
+    validate_season(season)?;
+    validate_date(start_date)?;
+    validate_date(end_date)?;
+    if start_date > end_date {
+        return Err(ProviderError::invalid(
+            "validate MLB date range",
+            "start date must not follow end date",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_date(value: &str) -> Result<(), ProviderError> {
     let bytes = value.as_bytes();
     if bytes.len() != 10
@@ -553,6 +1199,52 @@ fn invalid_date() -> ProviderError {
         "validate MLB schedule date",
         "date must be a real MLB calendar date in YYYY-MM-DD form",
     )
+}
+
+fn parse_innings_pitched(value: &str) -> Option<f64> {
+    let (whole, outs) = value.split_once('.')?;
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !matches!(outs, "0" | "1" | "2")
+    {
+        return None;
+    }
+    let innings = whole.parse::<u64>().ok()?;
+    let outs = outs.parse::<u64>().ok()?;
+    Some(innings as f64 + outs as f64 / 3.0)
+}
+
+fn first_stat<T>(
+    response: StatsResponse<StatWire<T>>,
+    operation: &'static str,
+) -> Result<T, ProviderError> {
+    response
+        .stats
+        .and_then(|groups| groups.into_iter().next())
+        .and_then(|group| group.splits.into_iter().next())
+        .map(|split| split.stat)
+        .ok_or_else(|| {
+            ProviderError::invalid(
+                operation,
+                "statistics envelope or splits are absent or empty",
+            )
+        })
+}
+
+fn all_splits<T>(response: StatsResponse<T>) -> Vec<T> {
+    response
+        .stats
+        .and_then(|groups| groups.into_iter().next())
+        .map_or_else(Vec::new, |group| group.splits)
+}
+
+fn decode_splits<T: for<'de> Deserialize<'de>>(
+    payload: &[u8],
+    operation: &'static str,
+) -> Result<Vec<T>, ProviderError> {
+    let response: StatsResponse<T> = serde_json::from_slice(payload)
+        .map_err(|error| ProviderError::operation(operation, "decode JSON response", error))?;
+    Ok(all_splits(response))
 }
 
 fn decode_schedule(payload: &[u8]) -> Result<Vec<ScheduleGame>, ProviderError> {
@@ -657,6 +1349,68 @@ fn bounded(value: &str, limit: usize) -> String {
 #[derive(Deserialize)]
 struct SeasonResponse {
     seasons: Option<Vec<SeasonWire>>,
+}
+
+#[derive(Deserialize)]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
+struct StatsResponse<T> {
+    stats: Option<Vec<StatsGroup<T>>>,
+}
+
+#[derive(Deserialize)]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
+struct StatsGroup<T> {
+    #[serde(default)]
+    splits: Vec<T>,
+}
+
+#[derive(Deserialize)]
+struct StatWire<T> {
+    stat: T,
+}
+
+#[derive(Deserialize)]
+struct GameLogWire<T> {
+    #[serde(default)]
+    date: String,
+    #[serde(default)]
+    stat: T,
+    #[serde(default)]
+    game: GameIdWire,
+    #[serde(default, rename = "isHome")]
+    is_home: bool,
+    #[serde(default)]
+    opponent: AbbreviationWire,
+}
+
+#[derive(Default, Deserialize)]
+struct GameIdWire {
+    #[serde(default, rename = "gamePk")]
+    game_id: i64,
+}
+
+impl From<GameLogWire<HittingStats>> for HittingGameLogEntry {
+    fn from(value: GameLogWire<HittingStats>) -> Self {
+        Self {
+            date: value.date,
+            game_id: value.game.game_id,
+            is_home: value.is_home,
+            opponent_abbreviation: value.opponent.abbreviation,
+            stat: value.stat,
+        }
+    }
+}
+
+impl From<GameLogWire<PitchingStats>> for PitchingGameLogEntry {
+    fn from(value: GameLogWire<PitchingStats>) -> Self {
+        Self {
+            date: value.date,
+            game_id: value.game.game_id,
+            is_home: value.is_home,
+            opponent_abbreviation: value.opponent.abbreviation,
+            stat: value.stat,
+        }
+    }
 }
 
 #[derive(Deserialize)]

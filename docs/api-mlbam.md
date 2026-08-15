@@ -14,6 +14,10 @@ Treat `https://statsapi.mlb.com/api/v1` as a public, unauthenticated JSON servic
 | Implemented | `/standings?leagueId=103,104&season={season}` | Acquire AL and NL standings |
 | Implemented | `/teams/{team-id}/roster?rosterType=40Man` | Acquire one 40-man roster |
 | Implemented | `/people?personIds={comma-separated-batch}` | Acquire people identities in batches of 100 |
+| Implemented | `/people/{id}/stats?stats=season&season={season}&group={hitting\|pitching}` | Acquire one player's season statistics |
+| Implemented | `/stats?stats=season&group={hitting\|pitching}&gameType={R\|S}&season={season}&playerPool=All&limit=2000` | Acquire bulk season statistics |
+| Implemented | `/stats?stats=byDateRange&group={hitting\|pitching}&gameType=R&season={season}&playerPool=All&limit=2000&startDate={date}&endDate={date}` | Acquire bulk regular-season date-range statistics |
+| Implemented | `/people/{id}/stats?stats=gameLog&season={season}&group={hitting\|pitching}` | Acquire one player's game log and derive quality starts |
 
 Use GET with a 10-second total timeout and an 8 MiB response limit. Construct every request inside the MLB adapter and dispatch it through b9's validating `HttpClient`. Keep response bodies out of status errors and user-facing diagnostics.
 
@@ -21,11 +25,8 @@ Use GET with a 10-second total timeout and an 8 MiB response limit. Construct ev
 
 | Status | Path family | Deferred capability |
 |---|---|---|
-| Deferred | `/people/{id}/stats` | Single-player hitting, pitching, and quality starts |
 | Deferred | `/people/search` | Approximate player-name lookup |
 | Deferred | `/sports/1/players` | All-player identity seed |
-| Deferred | `/stats` | Bulk season and date-range hitting and pitching |
-| Deferred | `/stats?stats=gameLog` | Hitter and pitcher game logs |
 | Deferred | `/transactions` | Injury acquisition |
 
 ## Reference-Only Endpoints
@@ -56,11 +57,19 @@ Normalize roster positions and statuses to uppercase, trim jersey numbers, and d
 
 Deduplicate requested people IDs by first occurrence, partition them into batches of 100, and restore first-request order after decoding. Omit missing upstream people and abort the complete acquisition on any batch failure.
 
+Preserve every named hitting and pitching count plus provider-native ratio and innings-pitched strings. Preserve player ID/name, team ID, and position type on bulk splits. Return empty bulk and game-log collections for absent or empty stat groups; reject absent or empty single-player season statistics.
+
+Derive date-range quality starts from pitcher game logs. Accept only nonnegative decimal-outs notation ending in `.0`, `.1`, or `.2`; require one start, at least six parsed innings, and no more than three earned runs. Deduplicate requested pitchers by first occurrence and execute deterministic batches of at most five. Preserve successful results when a pitcher request or worker fails and report bounded secret-safe issues in request order. Include successful zero counts for season totals and omit zero counts for date ranges.
+
 ## Schedule Cache
 
 Use namespace `mlb`, logical key `schedule-<YYYY-MM-DD>`, and a 60-second TTL. Treat age 60 seconds as expired. Return `Hit`, `Miss`, `Expired`, or `Corrupt` with the typed schedule result. Refetch missing, expired, corrupt-frame, and corrupt-JSON entries.
 
 Propagate cache read failures. Preserve a successful live schedule when cache persistence fails and return a cache-write issue capped at 256 Unicode scalar values. Keep URLs and credentials out of cache keys.
+
+## Statistics Cache
+
+Use namespace `mlb`, logical keys `hitting-range-<season>-<start>-<end>` and `pitching-range-<season>-<start>-<end>`, and the same 60-second boundary and `MlbCacheStatus` dispositions as schedules. Cache raw successful JSON payloads, refetch corrupt or expired entries, propagate read failures, and retain live data with a bounded issue when persistence fails.
 
 ## Fixture Provenance
 
@@ -74,6 +83,12 @@ The fixtures were derived from the Skout executable contracts, its MLB provider 
 | `standings.json` | `/standings?leagueId=103,104&season=2026` | Skout standings adapter contract |
 | `roster.json` | `/teams/119/roster?rosterType=40Man` | Skout roster tests including two-way compatibility |
 | `people.json` | `/people?personIds=699009,699008` | Skout people identity tests and model contract |
+| `player-hitting.json` | `/people/700001/stats?stats=season&season=2026&group=hitting` | Skout single-player hitting model contract |
+| `player-pitching.json` | `/people/600001/stats?stats=season&season=2026&group=pitching` | Skout single-player pitching model contract |
+| `bulk-hitting.json` | `/stats?stats=season&group=hitting&gameType=S&season=2026&playerPool=All&limit=2000` | Skout bulk hitting model and date-range tests |
+| `bulk-pitching.json` | `/stats?stats=season&group=pitching&gameType=R&season=2026&playerPool=All&limit=2000` | Skout bulk pitching model and date-range tests |
+| `hitter-game-log.json` | `/people/700001/stats?stats=gameLog&season=2026&group=hitting` | Skout hitter game-log contract |
+| `pitcher-game-log.json` | `/people/600001/stats?stats=gameLog&season=2026&group=pitching` | Skout pitcher game-log and quality-start contract |
 
 ## Post-Release Verification
 

@@ -1,10 +1,14 @@
 use std::collections::VecDeque;
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use b9::cache::DiskCache;
-use b9::providers::mlb::{MlbClient, MlbEndpoints, PrimaryType, ScheduleCacheStatus};
+use b9::providers::mlb::{
+    HittingStats, MlbCacheStatus, MlbClient, MlbEndpoints, PitchingStats, PrimaryType,
+};
 use b9::store::Clock;
 use b9::transport::{
     ExecutorError, HttpClient, HttpExecutor, HttpMethod, HttpResponse, ValidatedRequest,
@@ -17,6 +21,12 @@ const BOXSCORE: &[u8] = include_bytes!("fixtures/mlb/boxscore.json");
 const STANDINGS: &[u8] = include_bytes!("fixtures/mlb/standings.json");
 const ROSTER: &[u8] = include_bytes!("fixtures/mlb/roster.json");
 const PEOPLE: &[u8] = include_bytes!("fixtures/mlb/people.json");
+const PLAYER_HITTING: &[u8] = include_bytes!("fixtures/mlb/player-hitting.json");
+const PLAYER_PITCHING: &[u8] = include_bytes!("fixtures/mlb/player-pitching.json");
+const BULK_HITTING: &[u8] = include_bytes!("fixtures/mlb/bulk-hitting.json");
+const BULK_PITCHING: &[u8] = include_bytes!("fixtures/mlb/bulk-pitching.json");
+const HITTER_GAME_LOG: &[u8] = include_bytes!("fixtures/mlb/hitter-game-log.json");
+const PITCHER_GAME_LOG: &[u8] = include_bytes!("fixtures/mlb/pitcher-game-log.json");
 
 // Fixture provenance is recorded in docs/api-mlbam.md. These scrubbed fixture
 // shapes contain no credentials or personal operator data.
@@ -59,6 +69,62 @@ impl HttpExecutor for QueueExecutor {
             .unwrap()
             .pop_front()
             .expect("queued MLB response")
+    }
+}
+
+struct QualityStartExecutor {
+    requests: Mutex<Vec<ValidatedRequest>>,
+    active: AtomicUsize,
+    maximum: AtomicUsize,
+}
+
+impl QualityStartExecutor {
+    fn new() -> Self {
+        Self {
+            requests: Mutex::new(Vec::new()),
+            active: AtomicUsize::new(0),
+            maximum: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl HttpExecutor for QualityStartExecutor {
+    fn execute(&self, request: ValidatedRequest) -> Result<HttpResponse, ExecutorError> {
+        let url = reqwest::Url::parse(request.url()).unwrap();
+        let path = url.path().to_owned();
+        let person_id = path
+            .split('/')
+            .nth_back(1)
+            .and_then(|value| value.parse::<i64>().ok())
+            .expect("person ID in statistics path");
+        let stats = url
+            .query_pairs()
+            .find(|(key, _)| key == "stats")
+            .map(|(_, value)| value.into_owned())
+            .unwrap();
+        self.requests.lock().unwrap().push(request);
+        let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+        self.maximum.fetch_max(active, Ordering::SeqCst);
+        thread::sleep(Duration::from_millis(10));
+        self.active.fetch_sub(1, Ordering::SeqCst);
+        if person_id == 3 {
+            return status(503);
+        }
+        if person_id == 6 {
+            panic!("simulated worker failure");
+        }
+        if stats == "gameLog" {
+            return response(PITCHER_GAME_LOG);
+        }
+        let quality_starts = person_id % 2;
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: format!(
+                r#"{{"stats":[{{"splits":[{{"stat":{{"qualityStarts":{quality_starts}}}}}]}}]}}"#
+            )
+            .into_bytes(),
+        })
     }
 }
 
@@ -386,14 +452,14 @@ fn schedule_cache_honors_hit_expiry_corruption_and_write_degradation() {
     let client = make_client(executor.clone());
 
     let first = client.fetch_schedule_cached("2026-05-15", &cache).unwrap();
-    assert_eq!(first.cache_status, ScheduleCacheStatus::Miss);
+    assert_eq!(first.cache_status, MlbCacheStatus::Miss);
     assert!(first.cache_write_issue.is_none());
     let hit = client.fetch_schedule_cached("2026-05-15", &cache).unwrap();
-    assert_eq!(hit.cache_status, ScheduleCacheStatus::Hit);
+    assert_eq!(hit.cache_status, MlbCacheStatus::Hit);
     assert_eq!(executor.requests.lock().unwrap().len(), 1);
     clock.set(160);
     let expired = client.fetch_schedule_cached("2026-05-15", &cache).unwrap();
-    assert_eq!(expired.cache_status, ScheduleCacheStatus::Expired);
+    assert_eq!(expired.cache_status, MlbCacheStatus::Expired);
     assert_eq!(executor.requests.lock().unwrap().len(), 2);
 
     cache
@@ -403,7 +469,7 @@ fn schedule_cache_honors_hit_expiry_corruption_and_write_degradation() {
     let corrupt = make_client(executor)
         .fetch_schedule_cached("2026-05-16", &cache)
         .unwrap();
-    assert_eq!(corrupt.cache_status, ScheduleCacheStatus::Corrupt);
+    assert_eq!(corrupt.cache_status, MlbCacheStatus::Corrupt);
 
     cache.put("mlb", "schedule-2026-05-17", SCHEDULE).unwrap();
     let path = cache.entry_path("mlb", "schedule-2026-05-17").unwrap();
@@ -412,7 +478,7 @@ fn schedule_cache_honors_hit_expiry_corruption_and_write_degradation() {
     let corrupt = make_client(executor)
         .fetch_schedule_cached("2026-05-17", &cache)
         .unwrap();
-    assert_eq!(corrupt.cache_status, ScheduleCacheStatus::Corrupt);
+    assert_eq!(corrupt.cache_status, MlbCacheStatus::Corrupt);
 
     let failure_root = tempdir().unwrap();
     let cache = DiskCache::at(failure_root.path());
@@ -428,7 +494,7 @@ fn schedule_cache_honors_hit_expiry_corruption_and_write_degradation() {
     let degraded = make_client(executor)
         .fetch_schedule_cached("2026-05-15", &cache)
         .unwrap();
-    assert_eq!(degraded.cache_status, ScheduleCacheStatus::Miss);
+    assert_eq!(degraded.cache_status, MlbCacheStatus::Miss);
     assert!(degraded.cache_write_issue.is_some());
     assert!(degraded.cache_write_issue.unwrap().chars().count() <= 256);
 }
@@ -460,4 +526,395 @@ fn provider_source_has_no_database_or_persistence_dependency() {
     assert!(!source.contains("rusqlite"));
     assert!(!source.contains("crate::store"));
     assert!(!source.contains("Store"));
+}
+
+#[test]
+fn statistics_fixtures_decode_complete_records_and_bulk_identity() {
+    let executor = Arc::new(QueueExecutor::new(vec![
+        response(PLAYER_HITTING),
+        response(PLAYER_PITCHING),
+        response(BULK_HITTING),
+        response(BULK_PITCHING),
+        response(HITTER_GAME_LOG),
+        response(PITCHER_GAME_LOG),
+    ]));
+    let client = make_client(executor);
+
+    assert_eq!(
+        client.fetch_hitting_stats(700001, 2026).unwrap(),
+        HittingStats {
+            games_played: 10,
+            plate_appearances: 44,
+            at_bats: 40,
+            hits: 14,
+            home_runs: 3,
+            rbi: 11,
+            runs: 9,
+            stolen_bases: 2,
+            average: ".350".into(),
+            on_base_percentage: ".409".into(),
+            slugging_percentage: ".650".into(),
+            on_base_plus_slugging: "1.059".into(),
+            strikeouts: 8,
+            walks: 4,
+            doubles: 2,
+            triples: 1,
+            caught_stealing: 1,
+            hit_by_pitch: 1,
+            total_bases: 26,
+            sacrifice_flies: 1,
+            sacrifice_bunts: 0,
+            grounded_into_double_play: 2,
+            intentional_walks: 1,
+            babip: ".407".into(),
+        }
+    );
+    assert_eq!(
+        client.fetch_pitching_stats(600001, 2026).unwrap(),
+        PitchingStats {
+            games_pitched: 8,
+            games_started: 7,
+            innings_pitched: "42.2".into(),
+            wins: 5,
+            losses: 1,
+            saves: 0,
+            holds: 1,
+            strikeouts: 51,
+            walks: 9,
+            era: "2.11".into(),
+            whip: "0.98".into(),
+            quality_starts: 6,
+            runs: 12,
+            hits_allowed: 33,
+            earned_runs: 10,
+            home_runs_allowed: 4,
+            hit_batsmen: 2,
+            balks: 1,
+            wild_pitches: 3,
+            batters_faced: 166,
+            games_finished: 1,
+            save_opportunities: 1,
+            blown_saves: 0,
+            complete_games: 1,
+            shutouts: 1,
+            intentional_walks: 2,
+            strikeouts_per_nine: "10.76".into(),
+            walks_per_nine: "1.90".into(),
+            hits_per_nine: "6.96".into(),
+            home_runs_per_nine: "0.84".into(),
+            strikeout_walk_ratio: "5.67".into(),
+            inherited_runners: 3,
+            inherited_runners_scored: 1,
+            pickoffs: 2,
+            stolen_bases_allowed: 4,
+            caught_stealing_allowed: 1,
+            number_of_pitches: 650,
+            pitches_per_inning: "15.23".into(),
+        }
+    );
+
+    let hitters = client.fetch_bulk_hitting_stats(2026, "S").unwrap();
+    assert_eq!(hitters[0].player.person_id, 700001);
+    assert_eq!(hitters[0].player.full_name, "Bulk Hitter");
+    assert_eq!(hitters[0].team.team_id, 147);
+    assert_eq!(hitters[0].position.position_type, "Fielder");
+    assert_eq!(hitters[0].stat.on_base_plus_slugging, "1.205");
+    let pitchers = client.fetch_bulk_pitching_stats(2026, "R").unwrap();
+    assert_eq!(pitchers[0].player.person_id, 600001);
+    assert_eq!(pitchers[0].team.team_id, 110);
+    assert_eq!(pitchers[0].position.position_type, "Pitcher");
+    assert_eq!(pitchers[0].stat.innings_pitched, "12.1");
+
+    let hitter_log = client.fetch_hitter_game_log(700001, 2026).unwrap();
+    assert_eq!(hitter_log[0].date, "2026-04-01");
+    assert_eq!(hitter_log[0].game_id, 800010);
+    assert!(hitter_log[0].is_home);
+    assert_eq!(hitter_log[0].opponent_abbreviation, "BOS");
+    assert_eq!(hitter_log[0].stat.on_base_plus_slugging, "2.417");
+    let pitcher_log = client.fetch_pitcher_game_log(600001, 2026).unwrap();
+    assert_eq!(pitcher_log.len(), 10);
+    assert_eq!(pitcher_log[0].game_id, 800011);
+    assert!(!pitcher_log[0].is_home);
+    assert_eq!(pitcher_log[0].opponent_abbreviation, "TOR");
+    assert_eq!(pitcher_log[0].stat.innings_pitched, "6.0");
+}
+
+#[test]
+fn statistics_requests_use_exact_paths_queries_and_limits() {
+    let executor = Arc::new(QueueExecutor::new(vec![
+        response(PLAYER_HITTING),
+        response(PLAYER_PITCHING),
+        response(BULK_HITTING),
+        response(BULK_PITCHING),
+        response(BULK_HITTING),
+        response(BULK_PITCHING),
+        response(HITTER_GAME_LOG),
+        response(PITCHER_GAME_LOG),
+    ]));
+    let client = make_client(executor.clone());
+    client.fetch_hitting_stats(7, 2026).unwrap();
+    client.fetch_pitching_stats(8, 2026).unwrap();
+    client.fetch_bulk_hitting_stats(2026, "S").unwrap();
+    client.fetch_bulk_pitching_stats(2026, "R").unwrap();
+    client
+        .fetch_hitting_stats_by_date_range(2026, "2026-04-01", "2026-04-30")
+        .unwrap();
+    client
+        .fetch_pitching_stats_by_date_range(2026, "2026-04-01", "2026-04-30")
+        .unwrap();
+    client.fetch_hitter_game_log(7, 2026).unwrap();
+    client.fetch_pitcher_game_log(8, 2026).unwrap();
+
+    let requests = executor.requests.lock().unwrap();
+    let urls = requests
+        .iter()
+        .map(|request| request.url())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        urls[0],
+        "http://127.0.0.1:12345/api/v1/people/7/stats?stats=season&season=2026&group=hitting"
+    );
+    assert_eq!(
+        urls[1],
+        "http://127.0.0.1:12345/api/v1/people/8/stats?stats=season&season=2026&group=pitching"
+    );
+    assert!(urls[2].ends_with(
+        "/stats?stats=season&group=hitting&gameType=S&season=2026&playerPool=All&limit=2000"
+    ));
+    assert!(urls[3].ends_with(
+        "/stats?stats=season&group=pitching&gameType=R&season=2026&playerPool=All&limit=2000"
+    ));
+    assert!(urls[4].ends_with("/stats?stats=byDateRange&group=hitting&gameType=R&season=2026&playerPool=All&limit=2000&startDate=2026-04-01&endDate=2026-04-30"));
+    assert!(urls[5].ends_with("/stats?stats=byDateRange&group=pitching&gameType=R&season=2026&playerPool=All&limit=2000&startDate=2026-04-01&endDate=2026-04-30"));
+    assert!(urls[6].ends_with("/people/7/stats?stats=gameLog&season=2026&group=hitting"));
+    assert!(urls[7].ends_with("/people/8/stats?stats=gameLog&season=2026&group=pitching"));
+    for request in requests.iter() {
+        assert_eq!(request.timeout(), Duration::from_secs(10));
+        assert_eq!(request.body_limit(), 8 * 1024 * 1024);
+    }
+}
+
+#[test]
+fn statistics_empty_envelopes_and_validation_are_explicit() {
+    for body in [
+        br#"{}"#.as_slice(),
+        br#"{"stats":[]}"#.as_slice(),
+        br#"{"stats":[{"splits":[]}]}"#.as_slice(),
+    ] {
+        let executor = Arc::new(QueueExecutor::new(vec![response(body)]));
+        let error = make_client(executor)
+            .fetch_hitting_stats(1, 2026)
+            .unwrap_err();
+        assert_eq!(error.operation_name(), "fetch MLB player hitting stats");
+        assert!(error.to_string().contains("retry"));
+    }
+    for body in [
+        br#"{}"#.as_slice(),
+        br#"{"stats":[]}"#.as_slice(),
+        br#"{"stats":[{"splits":[]}]}"#.as_slice(),
+    ] {
+        let executor = Arc::new(QueueExecutor::new(vec![response(body)]));
+        assert!(
+            make_client(executor)
+                .fetch_bulk_hitting_stats(2026, "R")
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let executor = Arc::new(QueueExecutor::new(Vec::new()));
+    let client = make_client(executor.clone());
+    assert!(client.fetch_hitting_stats(0, 2026).is_err());
+    assert!(client.fetch_hitting_stats(1, 1875).is_err());
+    assert!(client.fetch_bulk_hitting_stats(2026, "P").is_err());
+    assert!(
+        client
+            .fetch_hitting_stats_by_date_range(2026, "2026-02-30", "2026-03-01")
+            .is_err()
+    );
+    assert!(
+        client
+            .fetch_hitting_stats_by_date_range(2026, "2026-04-02", "2026-04-01")
+            .is_err()
+    );
+    assert!(client.fetch_quality_starts(2026, &[1, 0]).is_err());
+    assert!(executor.requests.lock().unwrap().is_empty());
+}
+
+#[test]
+fn statistics_range_caches_are_typed_separate_and_bounded() {
+    let directory = tempdir().unwrap();
+    let clock = AdjustableClock::at(100);
+    let cache = DiskCache::at_with_clock(directory.path(), Arc::new(clock.clone()));
+    let executor = Arc::new(QueueExecutor::new(vec![
+        response(BULK_HITTING),
+        response(BULK_HITTING),
+        response(BULK_HITTING),
+    ]));
+    let client = make_client(executor.clone());
+    let first = client
+        .fetch_hitting_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &cache)
+        .unwrap();
+    assert_eq!(first.cache_status, MlbCacheStatus::Miss);
+    let hit = client
+        .fetch_hitting_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &cache)
+        .unwrap();
+    assert_eq!(hit.cache_status, MlbCacheStatus::Hit);
+    clock.set(160);
+    let expired = client
+        .fetch_hitting_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &cache)
+        .unwrap();
+    assert_eq!(expired.cache_status, MlbCacheStatus::Expired);
+    cache
+        .put(
+            "mlb",
+            "hitting-range-2026-2026-05-01-2026-05-31",
+            b"bad json",
+        )
+        .unwrap();
+    let corrupt = client
+        .fetch_hitting_stats_by_date_range_cached(2026, "2026-05-01", "2026-05-31", &cache)
+        .unwrap();
+    assert_eq!(corrupt.cache_status, MlbCacheStatus::Corrupt);
+    assert_eq!(executor.requests.lock().unwrap().len(), 3);
+
+    let executor = Arc::new(QueueExecutor::new(vec![response(BULK_PITCHING)]));
+    let pitching = make_client(executor)
+        .fetch_pitching_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &cache)
+        .unwrap();
+    assert_eq!(pitching.cache_status, MlbCacheStatus::Miss);
+    assert_eq!(pitching.splits[0].stat.innings_pitched, "12.1");
+}
+
+#[test]
+fn quality_start_derivation_rejects_invalid_decimal_outs() {
+    let executor = Arc::new(QueueExecutor::new(vec![response(PITCHER_GAME_LOG)]));
+    let result = make_client(executor)
+        .fetch_quality_starts_by_date_range(2026, "2026-04-01", "2026-05-31", &[600001])
+        .unwrap();
+    assert_eq!(result.counts.get(&600001), Some(&3));
+    assert!(result.issues.is_empty());
+}
+
+#[test]
+fn statistics_cache_failures_preserve_context_and_live_data() {
+    let read_root = tempdir().unwrap();
+    fs::write(read_root.path().join("mlb"), b"not a directory").unwrap();
+    let read_cache = DiskCache::at(read_root.path());
+    let executor = Arc::new(QueueExecutor::new(Vec::new()));
+    let error = make_client(executor.clone())
+        .fetch_hitting_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &read_cache)
+        .unwrap_err();
+    assert_eq!(error.operation_name(), "fetch cached MLB hitting stats");
+    assert!(executor.requests.lock().unwrap().is_empty());
+
+    let write_root = tempdir().unwrap();
+    let write_cache = DiskCache::at(write_root.path());
+    let namespace = write_root.path().join("mlb");
+    let executor = Arc::new(QueueExecutor::with_hook(
+        vec![response(BULK_PITCHING)],
+        move || {
+            if !namespace.exists() {
+                fs::write(&namespace, b"block directory creation").unwrap();
+            }
+        },
+    ));
+    let result = make_client(executor)
+        .fetch_pitching_stats_by_date_range_cached(2026, "2026-04-01", "2026-04-30", &write_cache)
+        .unwrap();
+    assert_eq!(result.cache_status, MlbCacheStatus::Miss);
+    assert_eq!(result.splits.len(), 1);
+    assert!(result.cache_write_issue.is_some());
+    assert!(result.cache_write_issue.unwrap().chars().count() <= 256);
+}
+
+#[test]
+fn statistics_transport_and_json_failures_are_safe() {
+    for failure in [
+        status(429),
+        response(br#"{"stats":["#),
+        Err(ExecutorError::ResponseTooLarge { limit: 8 }),
+        Err(ExecutorError::Dispatch {
+            detail: "secret transport detail".into(),
+            source: None,
+        }),
+    ] {
+        let executor = Arc::new(QueueExecutor::new(vec![failure]));
+        let error = make_client(executor.clone())
+            .fetch_pitching_stats(600001, 2026)
+            .unwrap_err();
+        assert_eq!(error.operation_name(), "fetch MLB player pitching stats");
+        assert!(!error.to_string().contains("secret provider detail"));
+        assert_eq!(executor.requests.lock().unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn quality_start_aggregation_is_bounded_ordered_and_partial() {
+    let executor = Arc::new(QualityStartExecutor::new());
+    let client = MlbClient::new(
+        Arc::new(HttpClient::new(executor.clone())),
+        MlbEndpoints::new("http://127.0.0.1:12345/api/v1/").unwrap(),
+    );
+    let season = client
+        .fetch_quality_starts(2026, &[1, 2, 3, 4, 5, 6, 7, 1])
+        .unwrap();
+    assert_eq!(season.counts.get(&1), Some(&1));
+    assert_eq!(season.counts.get(&2), Some(&0));
+    assert_eq!(season.counts.get(&7), Some(&1));
+    assert_eq!(
+        season
+            .issues
+            .iter()
+            .map(|issue| issue.person_id)
+            .collect::<Vec<_>>(),
+        vec![3, 6]
+    );
+    assert!(
+        season
+            .issues
+            .iter()
+            .all(|issue| issue.detail.chars().count() <= 256)
+    );
+    assert!(season.issues[0].detail.contains("HTTP 503"));
+    assert!(
+        season.issues[1]
+            .detail
+            .contains("did not complete normally")
+    );
+    assert!(executor.maximum.load(Ordering::SeqCst) <= 5);
+    assert_eq!(executor.requests.lock().unwrap().len(), 7);
+
+    let before = executor.requests.lock().unwrap().len();
+    let empty = client.fetch_quality_starts(2026, &[]).unwrap();
+    assert!(empty.counts.is_empty());
+    assert!(empty.issues.is_empty());
+    assert_eq!(executor.requests.lock().unwrap().len(), before);
+}
+
+#[test]
+fn date_range_quality_start_partial_results_omit_zero_counts() {
+    let executor = Arc::new(QualityStartExecutor::new());
+    let client = MlbClient::new(
+        Arc::new(HttpClient::new(executor.clone())),
+        MlbEndpoints::new("http://127.0.0.1:12345/api/v1/").unwrap(),
+    );
+    let result = client
+        .fetch_quality_starts_by_date_range(
+            2026,
+            "2026-04-01",
+            "2026-04-01",
+            &[1, 2, 3, 4, 5, 6, 7],
+        )
+        .unwrap();
+    assert_eq!(result.counts.len(), 5);
+    assert!(result.counts.values().all(|count| *count == 1));
+    assert_eq!(
+        result
+            .issues
+            .iter()
+            .map(|issue| issue.person_id)
+            .collect::<Vec<_>>(),
+        vec![3, 6]
+    );
+    assert!(executor.maximum.load(Ordering::SeqCst) <= 5);
 }
