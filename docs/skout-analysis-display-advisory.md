@@ -231,7 +231,7 @@ Require the Director to record rationale and accept residual risk before a waive
 
 | Capability | Inventory | Slice | Implementation | Deterministic | Live | Decision | Evidence | Overall |
 |---|---|---|---|---|---|---|---|---|
-| CORE-DOMAIN | DOM-* | SLICE-DOM | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | No conflict; migration pending | NOT READY |
+| CORE-DOMAIN | DOM-* | SLICE-DOM | COMPLETE | PASS | NOT REQUIRED | NONE | `src/domain.rs` and `tests/domain.rs`; no migration required for the internal, non-persisted model | READY |
 | AN-SIGNALS | AN-*, FORM-* | analysis slices | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | No conflict | NOT READY |
 | DISP-TABLES | DISP-* | view/display slices | NOT STARTED | NOT RUN | PENDING | NONE | LIVE-TERM pending | NOT READY |
 | ADV-LLM | ADV-* | advisory slices | NOT STARTED | NOT RUN | PENDING | RESOLVED | DESIGN-003 resolves DO-006; live gates pending | NOT READY |
