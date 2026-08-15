@@ -6,7 +6,7 @@ Port `skout` from Go to Rust over multiple releases.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, a reusable domain library, an embedded read-only glossary, an isolated SQLite persistence core, and the build and governance infrastructure for subsequent porting work. Runtime orchestration and external integrations remain to be established by later acceptance-criteria cycles.
+The repository contains a metadata-driven Rust CLI, a reusable domain library, an embedded read-only glossary, an isolated SQLite persistence core, a bounded disk cache, an injectable synchronous HTTP boundary, and the build and governance infrastructure for subsequent porting work. Runtime orchestration and provider integrations remain to be established by later acceptance-criteria cycles.
 
 ## Current Platform
 
@@ -15,6 +15,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 ## Major Components
 
 - `src/main.rs`: Rust executable entry point and independently versioned utility declaration
+- `src/cache.rs`: bounded b9-owned provider payload caching, atomic replacement, and explicit pruning
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
@@ -24,6 +25,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 - `src/store/seasons.rs`: typed source-season completeness manifests
 - `src/store/sync_runs.rs`: typed synchronization-run lifecycle and deterministic counts
 - `src/terminal.rs`: deterministic terminal-color policy and CLI presentation styles
+- `src/transport.rs`: validating synchronous HTTP client, injectable executor, and blocking Rustls implementation
 - `src/lib.rs`: reusable Rust library root
 - `src/domain.rs`: provider-neutral fantasy-baseball domain records and invariants
 - `build.sh`: canonical build, validation, and release workflow
@@ -43,7 +45,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 
 ## Data And Control Flow
 
-Provider adapters and later persistence APIs will construct and store owned domain records through later slices. The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness and lifecycle writes deterministic. Typed item, row, season, run, and snapshot APIs return contextual failures instead of silently interpreting storage errors as missing or stale state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
+Provider adapters and later persistence APIs will construct and store owned domain records through later slices. The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness, lifecycle, and cache writes deterministic. The disk cache stores bounded opaque payload bytes under hashed logical keys and replaces entries atomically. Provider adapters will submit validated requests through `HttpClient`; injected executors keep network I/O testable without moving provider authentication, endpoint, parsing, or error policy into shared transport. Typed persistence and transport APIs return contextual failures instead of silently interpreting operational errors as missing state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
 
 The executable passes its utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. A terminal presentation boundary enables the contracted 256-color roles only for supported terminal stdout and otherwise renders the byte-equivalent plain layout. The canonical `i` command dispatches into the library, where `docs/glossary.md` is embedded at compile time and parsed without filesystem or network access. Plain-text glossary rendering remains separate from lookup behavior so a later terminal adapter can add interactive selection and presentation.
 
@@ -69,6 +71,10 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep successful timestamps and snapshot payloads unchanged across failed refreshes.
 - Validate durable JSON before replacing the prior successful snapshot.
 - Keep provider TTL values and fallback selection outside the persistence layer.
+- Keep cache keys free of URLs, credentials, tokens, and secrets.
+- Keep cache pruning explicit and independent from successful cache writes.
+- Keep provider adapters behind the validating HTTP client boundary.
+- Keep provider authentication, endpoints, retries, parsing, and error interpretation outside shared transport.
 
 ## Conventions
 
