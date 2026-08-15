@@ -243,6 +243,8 @@ Require the Director to record rationale and accept residual risk before a waive
 | CLI-TEAM | CMD-TEAM | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Prior inventories authoritative | NOT READY |
 | CLI-GLOSSARY | CMD-WHAT/DISP-GLOSS | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Embedded parsing, lookup, suggestions, and plain rendering tested; selector and ANSI deferred | NOT READY |
 
+Deterministic Skout-style root-help layout, ANSI-role, and plain-fallback tests provide CLI-ROOT evidence only. They do not complete TEST-DISP, LIVE-TERM, CLI-GLOSSARY, or DISP-TABLES and do not change the readiness values above.
+
 Use only the fixed AC status vocabularies. Mark a Required capability READY only after COMPLETE implementation, PASS deterministic tests, PASS live checks or an accepted waiver, resolved decisions, and no executable conflict. Keep aggregate readiness NOT READY while any Required capability is NOT READY.
 
 ## Source Coverage

@@ -15,10 +15,15 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "Usage: b9 [OPTIONS] [COMMAND]\n\nFantasy Baseball Advisor\n\nCommands:\n  whatis  Look up a term in the b9 glossary [aliases: i]\n  help    Print help\n\nOptions:\n  -h, --help     Print help\n  -v, --version  Print version\n"
+        "b9 v0.1.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  whatis [term]                Look up a term in the b9 glossary\n  i [term]                     Alias for whatis\n  help                         Print this help\n\nFLAGS\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
-    for form in [["-h"].as_slice(), ["--help"].as_slice(), ["-?"].as_slice()] {
+    for form in [
+        ["-h"].as_slice(),
+        ["--help"].as_slice(),
+        ["-?"].as_slice(),
+        ["help"].as_slice(),
+    ] {
         let output = b9(form);
         assert!(output.status.success(), "help form {form:?}");
         assert_eq!(output.stdout, help.as_bytes(), "help form {form:?}");
@@ -26,6 +31,19 @@ fn root_help_forms_share_the_golden_surface() {
     }
     for absent in ["league", "debug", "login", "sync"] {
         assert!(!help.contains(absent));
+    }
+}
+
+#[test]
+fn command_specific_help_remains_the_shipped_clap_error() {
+    for command in ["whatis", "i"] {
+        let output = b9(&[command, "--help"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            "error: unexpected argument '--help' found\n\n  tip: to pass '--help' as a value, use '-- --help'\n\nUsage: b9 whatis [TERM]\n"
+        );
     }
 }
 

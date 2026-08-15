@@ -39,12 +39,13 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 
 ## Implemented b9 Subset
 
-- Implement CLI-1 metadata, root parsing, generated help, utility version, stream routing, and exit classification for the current command surface.
+- Implement CLI-1 shared descriptors, root parsing, Skout-style root help, utility version, stream routing, and exit classification for the current command surface.
+- Implement Skout's compact title, uppercase sections, aligned rows, 256-color roles, and automatic plain fallback for root help.
 - Implement CMD-GLOSSARY deterministic parsing, full display, exact and substring lookup, Unicode-scalar suggestions, and both `whatis` and visible `i` routing.
 - Embed the pinned glossary at compile time instead of retaining Skout's runtime source-path lookup.
 - Replace ambiguous-match selection with deterministic matching-key guidance until the terminal slice.
-- Render plain text until the ANSI and visible-width display slice.
-- Defer `-l/--league`, `-d/--debug`, startup hooks, Yahoo attribution, unimplemented commands, terminal selection, and colored presentation.
+- Retain plain glossary rendering until the ANSI and visible-width display slice.
+- Defer `-l/--league`, `-d/--debug`, startup hooks, Yahoo attribution, unimplemented commands, command-specific help parity, terminal selection, and colored glossary presentation.
 - Preserve the inherited mismatch between the glossary Coverage Checklist and its 113 defined entries.
 
 ## Operational Contracts
@@ -201,7 +202,7 @@ All executable capability dispositions remain `Required`. A Director decision is
 
 | ID | Recommendation | Evidence | Compatibility impact | Tradeoffs | Affected capabilities | Decision status |
 |---|---|---|---|---|---|---|
-| DR-001 | Generate parser registration and help presentation from one command metadata model | `<skout-repo>/cmd/skout/root.go`, CF-002, CF-003 | Preserve current parsing/help text except settled stale claims | Reduces drift; constrains custom formatting behind one model | CLI-ROOT and all command shells | Partially implemented for the root, help, version, and glossary surface; remaining commands deferred |
+| DR-001 | Generate parser registration and help presentation from one command metadata model | `<skout-repo>/cmd/skout/root.go`, CF-002, CF-003 | Preserve current parsing/help text except settled stale claims | Reduces drift; constrains custom formatting behind one model | CLI-ROOT and all command shells | Shared descriptors and Skout-style root help implemented for the current surface; remaining commands and command-specific help deferred |
 | DR-002 | Put browser, keychain, signal, PID, process, and terminal mechanics behind explicit platform boundaries | `<skout-repo>/internal/yahoo/auth.go`, `<skout-repo>/cmd/skout/svc.go`, `<skout-repo>/cmd/skout/tui.go`, `<skout-repo>/internal/advisory/keychain.go` | Preserve current macOS behavior exactly | Adds interfaces/test doubles; enables deterministic tests and later portability | CLI-AUTH, OPS-DAEMON, OPS-CONFIG, ADV-LLM | Recommended for later implementation design; no platform expansion authorized |
 | DR-003 | Separate daemon control, sync triggering, progress following, and sync execution into bounded orchestration seams | `<skout-repo>/cmd/skout/svc.go`, `<skout-repo>/cmd/skout/sync.go` | Preserve commands, timing gates, signals, output, and failure behavior | More boundaries and fixtures; reduces coupling and makes protocol tests possible | OPS-DAEMON, OPS-SYNC | Recommended for a later implementation AC; not authorized here |
 
@@ -231,7 +232,7 @@ No crate, framework, or compatibility change is selected.
 
 | Slice | Prerequisites | Delivered contracts | Required tests | Explicit exclusions |
 |---|---|---|---|---|
-| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Partial: root/help/version/glossary implemented; global flags, OP-ATTR, remaining commands, providers, and daemon deferred |
+| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Partial: shared descriptors and Skout-style root help implemented; global flags, command-specific help parity, OP-ATTR, remaining commands, providers, and daemon deferred |
 | CLI-2 Local operations | CLI-1; providers/storage inventory for shared persistence boundaries | OP-CONFIG, CMD-LOG path/tail core, CMD-RESET filesystem core | Temp-profile permissions, atomic config, log, reset/cancel tests | Real keychain/browser/signals/providers |
 | CLI-3 Platform boundaries | CLI-1; explicit implementation design approval | Browser/keychain/terminal/process/signal interfaces preserving macOS behavior | Adapter contract tests and macOS-focused deterministic doubles | New platform support claims |
 | CLI-4 Daemon protocol | CLI-2 and CLI-3; providers/storage sync contract | CMD-START/STOP/RESTART/DAEMON/SYNC and OP-DAEMON/OP-SIGNALS/OP-LOG/OP-SYNC | State-machine, PID, signal, timing, rotation, progress, error tests | Provider pipeline implementation |

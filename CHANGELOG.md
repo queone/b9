@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.4.0 | AC8: add Skout-style root help |
 | 0.3.0 | AC7: add visible CLI and embedded glossary |
 | 0.2.5 | AC6: add Rust domain model |
 | 0.2.4 | AC5: inventory Skout analysis, display, and advisory |
