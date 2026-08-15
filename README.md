@@ -6,6 +6,14 @@
 
 Develop the successor to `skout` in Rust over multiple releases while keeping parity and replacement-readiness claims tied to verified behavior.
 
+## Current CLI
+
+Run `b9` or `b9 --help` to see the implemented command surface. Run `b9 --version` to print the independently versioned binary contract.
+
+Use `b9 whatis [TERM]` to browse the full glossary or look up one term. The visible `b9 i [TERM]` alias preserves Skout compatibility. The glossary is compiled into the binary and works offline without the repository checkout.
+
+This slice intentionally omits Skout's interactive ambiguity selector and colored output. Ambiguous terms report matching keys and ask for an exact key.
+
 ## Governance
 
 This repo is governed by an explicit session-entry contract for AI coding agents — see [`govna/operator-contract-rationale.md`](govna/operator-contract-rationale.md) for the design reasoning and [`AGENTS.md`](AGENTS.md) for the operational rules.

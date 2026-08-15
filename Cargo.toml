@@ -1,6 +1,6 @@
 [package]
 name = "b9"
-version = "0.2.5"
+version = "0.3.0"
 edition = "2024"
 
 [[bin]]
@@ -8,3 +8,4 @@ name = "b9"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "=4.5.47", features = ["derive"] }
