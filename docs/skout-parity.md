@@ -17,6 +17,14 @@
 5. Treat documented-only, missing, retired, or contradictory behavior as unresolved drift.
 6. Require a Director decision before adding or dropping unresolved behavior from parity scope.
 
+## Detailed Inventories
+
+- Use `docs/skout-cli-operations.md` for CLI and operational contracts.
+- Use `docs/skout-providers-storage.md` for provider, cache, and persistence contracts.
+- Use `docs/skout-analysis-display-advisory.md` for domain, analysis, display, advisory, design, verification, implementation-slice, and replacement-readiness contracts.
+- Preserve this catalog as the authoritative source manifest and capability ownership map.
+- Block Analysis-display-advisory implementation until its detailed inventory is Ratified.
+
 ## Capability Taxonomy
 
 | ID | Name | Summary | Evidence | Disposition | Dependencies | Workstream |
