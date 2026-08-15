@@ -1,0 +1,7 @@
+{
+  "items": [{
+    "provider": {"name": "No Line Book", "priority": 1},
+    "awayTeamOdds": {"moneyLine": 0},
+    "homeTeamOdds": {"moneyLine": 0}
+  }]
+}

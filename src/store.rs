@@ -13,6 +13,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior, params};
 const SCHEMA: &str = include_str!("store/schema.sql");
 
 mod freshness;
+mod odds;
 mod seasons;
 mod snapshots;
 mod sync_runs;
@@ -20,6 +21,7 @@ mod sync_runs;
 pub use freshness::{
     ItemRefreshPolicy, RowRefreshPolicy, SyncItemState, SyncRowState, SyncStateStatus,
 };
+pub use odds::{MoneylineQuote, StoredMoneyline};
 pub use seasons::{SeasonState, SeasonSyncStatus};
 pub use snapshots::CommandSnapshot;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};

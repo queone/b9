@@ -32,7 +32,7 @@ Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not com
 | PROV-SAVANT | Unauthenticated CSV, 20-second client, multiple leaderboards | Merge expected, batted-ball, sprint, arsenal, and pitcher feeds by MLBAM ID | Writes Statcast rows and freshness; successful feeds survive sibling failure | `internal/savant`; CSV/merge/fallback tests | CSV headers |
 | PROV-FANGRAPHS | Unauthenticated JSON/HTML, 20-second client | Leaderboards/projections JSON; Guts and closer HTML; MLBAM crosswalk | Writes player/season fields, Statcast FG columns, projections, closers and freshness; cFIP memory cache 24h | `internal/fangraphs`; client/closer tests; live HTML gap | JSON/HTML shapes |
 | PROV-FANTASYPROS | Unauthenticated HTML, 20-second client | Embedded `__NEXT_DATA__`; Yahoo ID then folded name/team; ambiguity fails closed | Writes ECR and freshness; errors preserve prior values | client and ECR identity tests | Script shape |
-| PROV-ESPN | Unauthenticated scoreboard plus per-game odds, 10-second client | Current UTC day plus next day, dedupe events, top provider, moneylines | Match writes current moneylines to `mlb_odds`; scoreboard failure aborts, per-game odds failure degrades | ESPN tests and `cmd/skout/match.go` | Unofficial APIs |
+| PROV-ESPN | Unauthenticated scoreboard plus per-game odds, 10-second client | Caller-supplied UTC day plus next day, dedupe events, top provider, moneylines | Match writes current moneylines to `mlb_odds`; scoreboard failure aborts, per-game odds failure degrades | ESPN tests and `cmd/skout/match.go` | Unofficial APIs |
 | PROV-ODDS | Unauthenticated OddsShark date endpoint with Referer, 10-second client | Date slate, team aliases, moneylines | Future `sp_odds` snapshot; failed refresh marks prior snapshot stale; no totals/K props | OddsShark and SP tests | Unofficial API |
 | PROV-ROTOWIRE | Unauthenticated HTML, 15-second client | Daily lineup DOM, teams, pitchers, batting order, status aliases | Two-minute disk cache; fetch errors propagate; cache writes best effort | RotoWire HTML/cache tests | DOM shape |
 
@@ -528,7 +528,7 @@ All 85 sources retain their original capability and workstream ownership.
 | DR-PS-004 | Require captured JSON/CSV/HTML/script fixtures | Scrapers, DO-005 | Preserve accepted shapes/failures | Fixtures age | Scraping providers | Recommended |
 | DR-PS-005 | Keep provider-specific auth, headers, batching and errors behind adapters | Yahoo, OddsShark, MLB people | Preserve protocol differences | Less universal sharing | Providers | Recommended |
 
-The b9 persistence and acquisition foundation uses pinned `rusqlite =0.40.1` with bundled SQLite, `serde_json =1.0.151`, `reqwest =0.13.4` with blocking Rustls, `dirs =6.0.0`, and `sha2 =0.11.0`. It retains b9 schema version one and the current twenty-table semantic contract without the predecessor's historical migration mechanics.
+The b9 persistence and acquisition foundation uses pinned `rusqlite =0.40.1` with bundled SQLite, `serde =1.0.229`, `serde_json =1.0.151`, `reqwest =0.13.4` with blocking Rustls, `dirs =6.0.0`, and `sha2 =0.11.0`. It retains b9 schema version one and the current twenty-table semantic contract without the predecessor's historical migration mechanics.
 
 ## Existing-State Compatibility
 
@@ -538,7 +538,7 @@ The b9 persistence and acquisition foundation uses pinned `rusqlite =0.40.1` wit
 | Migrate to b9 database | One-time supported-state transfer | Explicit boundary; migration/rollback burden | Deferred to a separate explicit slice |
 | Isolated storage | Rebuild from providers at `$HOME/.config/b9/b9.db` | Simple; cold history/cache | Selected |
 
-Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. PS-1 owns only isolated open, schema-version-one migration, inspection, and transaction behavior; provider import and PS-2 through PS-6 remain deferred.
+Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-one storage, typed state and snapshots, bounded cache and transport boundaries, ESPN acquisition, and typed moneyline persistence. Yahoo, MLB, scraping providers, reconciliation, and command integration remain deferred.
 
 ## Verification
 
@@ -565,12 +565,14 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | PS-1 Persistence core | Ratified inventory; isolated state selected | Open/schema/migrations/base APIs implemented | Schema/migration/transaction implemented | Providers/snapshots |
 | PS-2 Freshness/snapshots | PS-1 | Typed item/row/season/run state and validated durable snapshots implemented | Injected clock/version/stale/completeness implemented | Transports |
 | PS-3 Cache/transport | Ratified inventory | Bounded atomic disk cache and validating injectable HTTP executor implemented | Filesystem/request/redirect/limit contracts implemented | Parsing/auth adapters |
-| PS-4 JSON providers | PS-2/PS-3 | Yahoo, MLB, ESPN and writes | Fixtures/auth doubles/data flows | Scrapers/live creds |
+| PS-4 JSON providers | PS-2/PS-3 | ESPN acquisition and typed odds persistence implemented; Yahoo and MLB deferred | ESPN fixtures/transport doubles/store rollback implemented | Yahoo/MLB/live checks |
 | PS-5 Scrapers | PS-2/PS-3 | Savant, FG, FP, OddsShark, RotoWire | CSV/HTML/script/degradation | Live shape as gate |
 | PS-6 Integration | PS-4/PS-5 | Reconciliation, snapshots, end-to-end flows | Fixture DB/failure injection | Analysis/display |
 
-PS-1 through PS-3 are implemented after their acceptance tests pass. PS-4 through PS-6 each require their own governed AC.
+PS-1 through PS-3 and the ESPN sub-slice of PS-4 are implemented after their acceptance tests pass. The Yahoo and MLB sub-slices of PS-4, plus PS-5 and PS-6, each require their own governed AC.
 
 PS-2 uses an injected thread-safe clock, explicit source identities, typed statuses, pipeline-version gates, strict stored-state decoding, deterministic run-count JSON, and atomic snapshot replacement. It returns contextual storage and JSON failures instead of silently treating them as missing state. It does not read `sync_log`, infer sources from item names, or carry predecessor database fallback into isolated b9 storage. Provider TTL constants, command payload types, fallback selection, transport, and reconciliation remain deferred.
 
 PS-3 keeps Skout's durable short-lived cache and synchronous request capabilities while replacing arbitrary paths, direct overwrites, process-global locking, silent cache-write failures, implicit clocks, unbounded bodies, and provider-owned clients. b9 uses versioned bounded cache framing, hashed logical keys, atomic last-writer-wins replacement, explicit pruning, strict path handling, a validating `HttpClient`, and an injected executor with no retries, bounded redirects, total timeouts, body limits, and sensitive-header redaction. Provider TTLs, cache keys, authentication, request construction, parsing, and error interpretation remain adapter-owned. Each provider's `docs/api-*.md` file migrates with its PS-4 or PS-5 adapter so it records these improved shared mechanics alongside the owning endpoint contract.
+
+The ESPN PS-4 sub-slice accepts one supplied day, requests that UTC calendar day and the next, preserves first-seen event order, deduplicates identifiers, decodes only the observed scoreboard and first odds-item fields, and retains valid games when individual odds requests fail. The adapter owns endpoints, limits, parsing, and structured partial failures while shared transport owns validation and execution. Typed store APIs atomically replace only affected moneyline rows and preserve unrelated games and markets. ESPN-to-MLB game mapping, the 30-minute freshness gate, stale fallback, snapshots, warnings, and command use remain deferred to PS-6.

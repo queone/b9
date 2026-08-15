@@ -4,6 +4,7 @@ pub mod cache;
 pub mod cli;
 pub mod domain;
 pub mod glossary;
+pub mod providers;
 pub mod store;
 pub mod terminal;
 pub mod transport;

@@ -25,7 +25,8 @@ Analysis, display, and advisory detailed inventory: [`docs/skout-analysis-displa
 - Implement PS-1 isolated persistence ownership and schema migration.
 - Implement PS-2 typed freshness, snapshots, season state, and synchronization runs.
 - Implement PS-3 bounded atomic caching and validating injectable HTTP transport.
-- Defer PS-4 JSON providers, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
+- Implement the ESPN PS-4 sub-slice with typed JSON acquisition and atomic moneyline persistence.
+- Defer the Yahoo and MLB PS-4 sub-slices, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
 
 ## Ideas To Explore
 

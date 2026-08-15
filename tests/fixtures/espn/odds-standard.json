@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "provider": {"name": "Top Book", "priority": 1},
+      "awayTeamOdds": {"moneyLine": 148},
+      "homeTeamOdds": {"moneyLine": -180}
+    },
+    {
+      "provider": {"name": "Second Book", "priority": 2},
+      "awayTeamOdds": {"moneyLine": 150},
+      "homeTeamOdds": {"moneyLine": -185}
+    }
+  ]
+}

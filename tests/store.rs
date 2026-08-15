@@ -80,6 +80,7 @@ fn fresh_store_has_the_exact_schema_and_connection_policy() {
         "CHECK (primary_type IN ('H','P'))",
         "CHECK (market IN ('moneyline','total','pitcher_strikeouts'))",
         "CHECK (side IN ('home','away','over','under'))",
+        "player_mlbam_id INTEGER NOT NULL DEFAULT 0",
         "PRIMARY KEY (player_id, season, stat_group)",
         "PRIMARY KEY (game_date, team_abbr)",
         "PRIMARY KEY (game_pk, market, side, player_mlbam_id, sportsbook)",

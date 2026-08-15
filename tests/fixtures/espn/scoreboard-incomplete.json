@@ -1,0 +1,10 @@
+{
+  "events": [
+    {"id": "no-competition", "competitions": []},
+    {"id": "", "competitions": [{"id": "ignored", "competitors": []}]},
+    {"id": "missing-away", "competitions": [{
+      "id": "competition",
+      "competitors": [{"homeAway": "home", "team": {"displayName": "Home Team"}}]
+    }]}
+  ]
+}

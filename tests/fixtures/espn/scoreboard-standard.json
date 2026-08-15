@@ -1,0 +1,24 @@
+{
+  "events": [
+    {
+      "id": "event-1",
+      "competitions": [{
+        "id": "competition-1",
+        "competitors": [
+          {"homeAway": "home", "team": {"displayName": "Boston Red Sox"}},
+          {"homeAway": "away", "team": {"displayName": "New York Yankees"}}
+        ]
+      }]
+    },
+    {
+      "id": "event-2",
+      "competitions": [{
+        "id": "competition-2",
+        "competitors": [
+          {"homeAway": "away", "team": {"displayName": "Chicago Cubs"}},
+          {"homeAway": "home", "team": {"displayName": "Pittsburgh Pirates"}}
+        ]
+      }]
+    }
+  ]
+}
