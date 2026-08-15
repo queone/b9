@@ -19,6 +19,10 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
 - `src/store/schema.sql`: embedded b9 schema-version-one table definitions
+- `src/store/freshness.rs`: typed item and row freshness policies and lifecycle state
+- `src/store/snapshots.rs`: validated durable command snapshots and stale metadata
+- `src/store/seasons.rs`: typed source-season completeness manifests
+- `src/store/sync_runs.rs`: typed synchronization-run lifecycle and deterministic counts
 - `src/terminal.rs`: deterministic terminal-color policy and CLI presentation styles
 - `src/lib.rs`: reusable Rust library root
 - `src/domain.rs`: provider-neutral fantasy-baseball domain records and invariants
@@ -39,7 +43,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 
 ## Data And Control Flow
 
-Provider adapters and later persistence APIs will construct and store owned domain records through later slices. The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
+Provider adapters and later persistence APIs will construct and store owned domain records through later slices. The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness and lifecycle writes deterministic. Typed item, row, season, run, and snapshot APIs return contextual failures instead of silently interpreting storage errors as missing or stale state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
 
 The executable passes its utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. A terminal presentation boundary enables the contracted 256-color roles only for supported terminal stdout and otherwise renders the byte-equivalent plain layout. The canonical `i` command dispatches into the library, where `docs/glossary.md` is embedded at compile time and parsed without filesystem or network access. Plain-text glossary rendering remains separate from lookup behavior so a later terminal adapter can add interactive selection and presentation.
 
@@ -60,6 +64,11 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep b9 storage isolated from the predecessor database.
 - Keep schema migrations and version updates inside one immediate transaction.
 - Keep the owned SQLite connection behind the storage transaction boundary.
+- Keep provider source identity explicit instead of inferring it from item names.
+- Keep predecessor freshness fallback out of the isolated b9 database.
+- Keep successful timestamps and snapshot payloads unchanged across failed refreshes.
+- Validate durable JSON before replacing the prior successful snapshot.
+- Keep provider TTL values and fallback selection outside the persistence layer.
 
 ## Conventions
 

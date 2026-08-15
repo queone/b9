@@ -528,7 +528,7 @@ All 85 sources retain their original capability and workstream ownership.
 | DR-PS-004 | Require captured JSON/CSV/HTML/script fixtures | Scrapers, DO-005 | Preserve accepted shapes/failures | Fixtures age | Scraping providers | Recommended |
 | DR-PS-005 | Keep provider-specific auth, headers, batching and errors behind adapters | Yahoo, OddsShark, MLB people | Preserve protocol differences | Less universal sharing | Providers | Recommended |
 
-The b9 persistence core uses pinned `rusqlite =0.40.1` with bundled SQLite, b9 schema version one, and the current twenty-table semantic contract without the predecessor's historical migration mechanics.
+The b9 persistence core uses pinned `rusqlite =0.40.1` with bundled SQLite, pinned `serde_json =1.0.151`, b9 schema version one, and the current twenty-table semantic contract without the predecessor's historical migration mechanics.
 
 ## Existing-State Compatibility
 
@@ -563,10 +563,12 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | Slice | Prerequisite | Delivery | Tests | Exclusions |
 |---|---|---|---|---|
 | PS-1 Persistence core | Ratified inventory; isolated state selected | Open/schema/migrations/base APIs implemented | Schema/migration/transaction implemented | Providers/snapshots |
-| PS-2 Freshness/snapshots | PS-1 | Item/row/season/run state, fallback | Clock/version/stale/completeness | Transports |
+| PS-2 Freshness/snapshots | PS-1 | Typed item/row/season/run state and validated durable snapshots implemented | Injected clock/version/stale/completeness implemented | Transports |
 | PS-3 Cache/transport | Ratified inventory | Disk cache and injectable HTTP/auth | Filesystem/request contracts | Parsing |
 | PS-4 JSON providers | PS-2/PS-3 | Yahoo, MLB, ESPN and writes | Fixtures/auth doubles/data flows | Scrapers/live creds |
 | PS-5 Scrapers | PS-2/PS-3 | Savant, FG, FP, OddsShark, RotoWire | CSV/HTML/script/degradation | Live shape as gate |
 | PS-6 Integration | PS-4/PS-5 | Reconciliation, snapshots, end-to-end flows | Fixture DB/failure injection | Analysis/display |
 
-PS-1 is implemented after its acceptance tests pass. PS-2 through PS-6 each require their own governed AC.
+PS-1 and PS-2 are implemented after their acceptance tests pass. PS-3 through PS-6 each require their own governed AC.
+
+PS-2 uses an injected thread-safe clock, explicit source identities, typed statuses, pipeline-version gates, strict stored-state decoding, deterministic run-count JSON, and atomic snapshot replacement. It returns contextual storage and JSON failures instead of silently treating them as missing state. It does not read `sync_log`, infer sources from item names, or carry predecessor database fallback into isolated b9 storage. Provider TTL constants, command payload types, fallback selection, transport, and reconciliation remain deferred.

@@ -5,20 +5,59 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, Transaction, TransactionBehavior, params};
 
 const SCHEMA: &str = include_str!("store/schema.sql");
 
+mod freshness;
+mod seasons;
+mod snapshots;
+mod sync_runs;
+
+pub use freshness::{
+    ItemRefreshPolicy, RowRefreshPolicy, SyncItemState, SyncRowState, SyncStateStatus,
+};
+pub use seasons::{SeasonState, SeasonSyncStatus};
+pub use snapshots::CommandSnapshot;
+pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
+
 /// The current schema version for b9-owned databases.
 pub const CURRENT_SCHEMA_VERSION: i64 = 1;
+
+/// Supplies time to durable store state transitions.
+pub trait Clock: Send + Sync {
+    /// Return the current wall-clock time.
+    fn now(&self) -> SystemTime;
+}
+
+/// Supplies host wall-clock time to production stores.
+#[derive(Debug, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> SystemTime {
+        SystemTime::now()
+    }
+}
 
 /// A contextual failure at the b9 storage boundary.
 #[derive(Debug)]
 pub enum StoreError {
     /// The production database path cannot be resolved.
     HomeUnavailable,
+    /// A caller supplied an invalid storage value.
+    InvalidInput {
+        operation: &'static str,
+        detail: String,
+    },
+    /// A clock or stored timestamp cannot be represented safely.
+    InvalidTime {
+        operation: &'static str,
+        detail: String,
+    },
     /// One storage operation failed.
     Operation {
         operation: &'static str,
@@ -53,6 +92,20 @@ impl StoreError {
             detail: detail.into(),
         }
     }
+
+    fn invalid(operation: &'static str, detail: impl Into<String>) -> Self {
+        Self::InvalidInput {
+            operation,
+            detail: detail.into(),
+        }
+    }
+
+    fn invalid_time(operation: &'static str, detail: impl Into<String>) -> Self {
+        Self::InvalidTime {
+            operation,
+            detail: detail.into(),
+        }
+    }
 }
 
 impl fmt::Display for StoreError {
@@ -61,6 +114,14 @@ impl fmt::Display for StoreError {
             Self::HomeUnavailable => write!(
                 formatter,
                 "resolve database path: HOME is unavailable; set HOME to the user home directory and retry"
+            ),
+            Self::InvalidInput { operation, detail } => write!(
+                formatter,
+                "{operation}: {detail}; correct the value and retry"
+            ),
+            Self::InvalidTime { operation, detail } => write!(
+                formatter,
+                "{operation}: {detail}; correct the clock or stored timestamp and retry"
             ),
             Self::Operation {
                 operation,
@@ -94,7 +155,10 @@ impl Error for StoreError {
             Self::TransactionRollback {
                 operation_error, ..
             } => Some(operation_error.as_ref()),
-            Self::HomeUnavailable | Self::UnsupportedSchema { .. } => None,
+            Self::HomeUnavailable
+            | Self::InvalidInput { .. }
+            | Self::InvalidTime { .. }
+            | Self::UnsupportedSchema { .. } => None,
         }
     }
 }
@@ -103,6 +167,7 @@ impl Error for StoreError {
 pub struct Store {
     connection: Option<Connection>,
     path: PathBuf,
+    clock: Arc<dyn Clock>,
 }
 
 impl Store {
@@ -114,6 +179,14 @@ impl Store {
 
     /// Open an explicit database path and migrate it to the current schema.
     pub fn open_at(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Self::open_at_with_clock(path, Arc::new(SystemClock))
+    }
+
+    /// Open an explicit database path with a controlled clock.
+    pub fn open_at_with_clock(
+        path: impl AsRef<Path>,
+        clock: Arc<dyn Clock>,
+    ) -> Result<Self, StoreError> {
         let path = path.as_ref().to_path_buf();
         prepare_path(&path)?;
         let mut connection = Connection::open(&path)
@@ -128,6 +201,7 @@ impl Store {
         Ok(Self {
             connection: Some(connection),
             path,
+            clock,
         })
     }
 
@@ -198,6 +272,70 @@ impl Store {
     fn connection_mut(&mut self) -> &mut Connection {
         self.connection.as_mut().expect("open store connection")
     }
+
+    fn captured_time(&self, operation: &'static str) -> Result<(SystemTime, i64), StoreError> {
+        let now = self.clock.now();
+        let elapsed = now
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| StoreError::invalid_time(operation, "clock is before the Unix epoch"))?;
+        if elapsed.is_zero() {
+            return Err(StoreError::invalid_time(
+                operation,
+                "clock equals the Unix epoch reserved for missing timestamps",
+            ));
+        }
+        let seconds = i64::try_from(elapsed.as_secs()).map_err(|_| {
+            StoreError::invalid_time(operation, "clock exceeds the SQLite timestamp range")
+        })?;
+        Ok((now, seconds))
+    }
+}
+
+fn validate_identity(
+    operation: &'static str,
+    field: &'static str,
+    value: &str,
+) -> Result<(), StoreError> {
+    if value.trim().is_empty() {
+        return Err(StoreError::invalid(
+            operation,
+            format!("{field} must not be empty"),
+        ));
+    }
+    Ok(())
+}
+
+fn optional_time(
+    operation: &'static str,
+    field: &'static str,
+    value: i64,
+) -> Result<Option<SystemTime>, StoreError> {
+    if value < 0 {
+        return Err(StoreError::invalid_time(
+            operation,
+            format!("{field} must not be negative"),
+        ));
+    }
+    if value == 0 {
+        return Ok(None);
+    }
+    let seconds = u64::try_from(value).map_err(|_| {
+        StoreError::invalid_time(operation, format!("{field} exceeds the timestamp range"))
+    })?;
+    UNIX_EPOCH
+        .checked_add(Duration::from_secs(seconds))
+        .map(Some)
+        .ok_or_else(|| StoreError::invalid_time(operation, format!("{field} overflows SystemTime")))
+}
+
+fn required_time(
+    operation: &'static str,
+    field: &'static str,
+    value: i64,
+) -> Result<SystemTime, StoreError> {
+    optional_time(operation, field, value)?.ok_or_else(|| {
+        StoreError::invalid_time(operation, format!("{field} must be after the Unix epoch"))
+    })
 }
 
 /// Resolve the production database path without opening or creating it.
@@ -401,6 +539,7 @@ mod tests {
         let mut store = Store {
             connection: Some(Connection::open_in_memory().unwrap()),
             path: PathBuf::from("test.db"),
+            clock: Arc::new(SystemClock),
         };
         let error = store
             .transaction(|transaction| {
@@ -423,6 +562,7 @@ mod tests {
         let mut store = Store {
             connection: Some(connection),
             path: PathBuf::from("test.db"),
+            clock: Arc::new(SystemClock),
         };
         let error = store
             .transaction(|transaction| {
