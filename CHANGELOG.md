@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.11.0 | AC15: add Yahoo authenticated transport |
 | 0.10.0 | AC14: add bounded MLB statistics provider |
 | 0.9.0 | AC13: add bounded MLB metadata and live-game provider |
 | 0.8.0 | AC12: add ESPN adapter and typed moneyline persistence |

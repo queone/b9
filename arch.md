@@ -6,7 +6,7 @@ Port `skout` from Go to Rust over multiple releases.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, a reusable domain library, an embedded read-only glossary, an isolated SQLite persistence core, a bounded disk cache, an injectable synchronous HTTP boundary, ESPN and MLB JSON adapters, typed odds persistence, and the build and governance infrastructure for subsequent porting work. Runtime orchestration and the remaining provider integrations remain to be established by later acceptance-criteria cycles.
+The repository contains a metadata-driven Rust CLI, a reusable domain library, an embedded read-only glossary, an isolated SQLite persistence core, a bounded disk cache, an injectable synchronous HTTP boundary, Yahoo authenticated raw acquisition, ESPN and MLB JSON adapters, typed odds persistence, and the build and governance infrastructure for subsequent porting work. Runtime orchestration and the remaining provider integrations remain to be established by later acceptance-criteria cycles.
 
 ## Current Platform
 
@@ -17,6 +17,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 - `src/main.rs`: Rust executable entry point and independently versioned utility declaration
 - `src/providers/espn.rs`: injected ESPN scoreboard and moneyline acquisition with typed decoding and structured partial failures
 - `src/providers/mlb.rs`: injected MLB metadata, live-game, statistics, game-log, and quality-start acquisition with bounded batching and short-lived raw-payload caching
+- `src/providers/yahoo.rs`: injected Yahoo OAuth, secure token refresh, and authenticated bounded raw acquisition
 - `src/providers/mod.rs`: provider boundary exports and contextual acquisition errors
 - `src/cache.rs`: bounded b9-owned provider payload caching, atomic replacement, and explicit pruning
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
@@ -49,7 +50,7 @@ The repository contains a metadata-driven Rust CLI, a reusable domain library, a
 
 ## Data And Control Flow
 
-Provider adapters construct owned acquisition records without performing orchestration or persistence. The ESPN adapter submits provider-owned URLs and limits through `HttpClient`, decodes bounded JSON into typed game lines, aborts on scoreboard failure, and reports per-game odds degradation structurally. The MLB adapter uses the same transport boundary for typed metadata, live-game, statistics, and game-log records; it batches identities deterministically, bounds quality-start fan-out to five concurrent requests, and owns 60-second raw schedule and date-range-stat cache policies. Injected executors keep network I/O deterministic without moving endpoints, parsing, or failure policy into shared transport. The typed odds store validates complete replacements before capturing its injected clock, replaces only affected moneyline rows atomically, and preserves unrelated markets. Later integration maps ESPN records to MLB identifiers and owns normalized provider writes, freshness, stale fallback, snapshots, warnings, and display.
+Provider adapters construct owned acquisition records without performing orchestration or persistence. The Yahoo adapter owns PKCE authorization, operating-system credential storage, single-flight refresh, request construction, bounded 429 retries, terminal access errors, and typed credential-persistence degradation; it returns raw bytes without interpreting fantasy payloads. The ESPN adapter submits provider-owned URLs and limits through `HttpClient`, decodes bounded JSON into typed game lines, aborts on scoreboard failure, and reports per-game odds degradation structurally. The MLB adapter uses the same transport boundary for typed metadata, live-game, statistics, and game-log records; it batches identities deterministically, bounds quality-start fan-out to five concurrent requests, and owns 60-second raw schedule and date-range-stat cache policies. Injected executors keep network I/O deterministic without moving endpoints, parsing, or failure policy into shared transport. The typed odds store validates complete replacements before capturing its injected clock, replaces only affected moneyline rows atomically, and preserves unrelated markets. Later integration maps provider records to normalized identifiers and owns writes, freshness, stale fallback, snapshots, warnings, and display.
 
 The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness, lifecycle, cache, and odds writes deterministic. The disk cache stores bounded opaque payload bytes under hashed logical keys and replaces entries atomically. Typed persistence and transport APIs return contextual failures instead of silently interpreting operational errors as missing state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
 
@@ -85,6 +86,7 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep partial provider degradation typed until an integration layer selects warnings or fallback.
 - Keep odds freshness, team mapping, stale fallback, and snapshots outside the ESPN adapter.
 - Keep MLB display-time status ranking, timezone formatting, doubleheader selection, team mapping, reconciliation, and normalized writes outside the MLB adapter.
+- Keep Yahoo fantasy parsing, normalized writes, cache policy, fallback, circuits, and command presentation outside the Yahoo authentication adapter.
 
 ## Conventions
 

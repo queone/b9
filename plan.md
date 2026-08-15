@@ -28,7 +28,8 @@ Analysis, display, and advisory detailed inventory: [`docs/skout-analysis-displa
 - Implement the ESPN PS-4 sub-slice with typed JSON acquisition and atomic moneyline persistence.
 - Implement the bounded MLB PS-4 metadata and live-game sub-slice with typed acquisition, identity batching, and schedule caching.
 - Implement the bounded MLB PS-4 statistics sub-slice with typed bulk identity, date-range caching, game logs, and deterministic quality-start aggregation.
-- Defer Yahoo, other remaining MLB acquisition, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
+- Implement the Yahoo PS-4 authentication and authenticated raw-request foundation with secure credentials and single-flight refresh.
+- Defer Yahoo fantasy parsing and persistence, other remaining MLB acquisition, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
 
 ## Ideas To Explore
 

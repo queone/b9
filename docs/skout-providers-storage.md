@@ -13,7 +13,7 @@
 | `github.com/olekukonko/tablewriter v1.1.4` | Observable tables | Analysis/display | Defer |
 | `github.com/queone/governa-color v1.4.1` | Observable color | CLI/operations | Defer |
 | `github.com/spf13/cobra v1.10.2` | Command parsing | CLI/operations | Defer |
-| `github.com/zalando/go-keyring v0.2.8` | Credential storage | CLI/operations | Preserve boundary; defer |
+| `github.com/zalando/go-keyring v0.2.8` | Credential storage | CLI/operations | Preserve secure boundary through pinned `keyring =4.1.6` |
 | `golang.org/x/net v0.57.0` | HTML parsing | Providers/storage | Fixture-backed parser boundary |
 | `golang.org/x/oauth2 v0.36.0` | Yahoo OAuth/refresh | Providers/storage | Preserve protocol |
 | `golang.org/x/term v0.45.0` | TTY behavior | CLI/operations | Defer |
@@ -27,7 +27,7 @@ Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not com
 
 | Capability | Authentication/transport | Parsing and normalization | Cache, writes, and degradation | Evidence and verification | Live |
 |---|---|---|---|---|---|
-| PROV-YAHOO | OAuth2 PKCE, `YAHOO_CLIENT_ID`, bearer requests; terminal 401/403 and five failed cycles open persisted circuit | Numeric-key JSON and array/object transaction variants into leagues, teams, players, slots, matchups, categories, transactions | 60-second disk cache for scoreboard/week stats; writes Yahoo tables, players, slots, transactions, freshness and snapshots; failures retain prior state | `internal/yahoo`; auth/parser/cache/circuit tests; pagination/rate gap | OAuth, refresh, formats |
+| PROV-YAHOO | OAuth2 PKCE, `YAHOO_CLIENT_ID`, bearer requests, four bounded 429 retries; terminal 401/403 and five failed cycles open persisted circuit | Numeric-key JSON and array/object transaction variants into leagues, teams, players, slots, matchups, categories, transactions | 60-second disk cache for scoreboard/week stats; writes Yahoo tables, players, slots, transactions, freshness and snapshots; failures retain prior state | `internal/yahoo`; auth/parser/cache/circuit and 429 retry tests; pagination gap | OAuth, refresh, formats |
 | PROV-MLB | Unauthenticated StatsAPI, 10-second client, chunked people IDs | JSON stats, schedules, boxscores, people, standings, rosters, injuries; IP/missing-ratio rules | 60-second disk cache; writes players, stats, schedule, rosters, injuries, identity, freshness and snapshots | `internal/mlb`; client/cache/roster/people/enrichment tests; throttling gap | Endpoint formats |
 | PROV-SAVANT | Unauthenticated CSV, 20-second client, multiple leaderboards | Merge expected, batted-ball, sprint, arsenal, and pitcher feeds by MLBAM ID | Writes Statcast rows and freshness; successful feeds survive sibling failure | `internal/savant`; CSV/merge/fallback tests | CSV headers |
 | PROV-FANGRAPHS | Unauthenticated JSON/HTML, 20-second client | Leaderboards/projections JSON; Guts and closer HTML; MLBAM crosswalk | Writes player/season fields, Statcast FG columns, projections, closers and freshness; cFIP memory cache 24h | `internal/fangraphs`; client/closer tests; live HTML gap | JSON/HTML shapes |
@@ -36,7 +36,7 @@ Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not com
 | PROV-ODDS | Unauthenticated OddsShark date endpoint with Referer, 10-second client | Date slate, team aliases, moneylines | Future `sp_odds` snapshot; failed refresh marks prior snapshot stale; no totals/K props | OddsShark and SP tests | Unofficial API |
 | PROV-ROTOWIRE | Unauthenticated HTML, 15-second client | Daily lineup DOM, teams, pitchers, batting order, status aliases | Two-minute disk cache; fetch errors propagate; cache writes best effort | RotoWire HTML/cache tests | DOM shape |
 
-No provider implements general retries or quota accounting. Authentication is not applicable outside Yahoo. Rate-limit response tests are gaps for all providers.
+No provider implements general retries or quota accounting. Yahoo alone implements provider-local bounded 429 retries with response tests. Authentication is not applicable outside Yahoo. Rate-limit response tests remain gaps for the other providers.
 
 ## Provider Operation Ledger
 
@@ -538,7 +538,7 @@ The b9 persistence and acquisition foundation uses pinned `rusqlite =0.40.1` wit
 | Migrate to b9 database | One-time supported-state transfer | Explicit boundary; migration/rollback burden | Deferred to a separate explicit slice |
 | Isolated storage | Rebuild from providers at `$HOME/.config/b9/b9.db` | Simple; cold history/cache | Selected |
 
-Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-one storage, typed state and snapshots, bounded cache and transport boundaries, ESPN acquisition, typed moneyline persistence, and bounded MLB metadata, live-game, statistics, game-log, and quality-start acquisition. Yahoo, other remaining MLB acquisition, scraping providers, reconciliation, and command integration remain deferred.
+Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-one storage, typed state and snapshots, bounded cache and transport boundaries, Yahoo PKCE authentication and authenticated raw requests, ESPN acquisition, typed moneyline persistence, and bounded MLB metadata, live-game, statistics, game-log, and quality-start acquisition. Yahoo fantasy parsing and persistence, other remaining MLB acquisition, scraping providers, reconciliation, and command integration remain deferred.
 
 ## Verification
 
@@ -565,11 +565,11 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | PS-1 Persistence core | Ratified inventory; isolated state selected | Open/schema/migrations/base APIs implemented | Schema/migration/transaction implemented | Providers/snapshots |
 | PS-2 Freshness/snapshots | PS-1 | Typed item/row/season/run state and validated durable snapshots implemented | Injected clock/version/stale/completeness implemented | Transports |
 | PS-3 Cache/transport | Ratified inventory | Bounded atomic disk cache and validating injectable HTTP executor implemented | Filesystem/request/redirect/limit contracts implemented | Parsing/auth adapters |
-| PS-4 JSON providers | PS-2/PS-3 | ESPN acquisition and typed odds persistence plus bounded MLB metadata/live-game/statistics acquisition implemented; Yahoo and other remaining MLB operations deferred | ESPN and MLB fixtures/transport doubles/cache boundaries/concurrency/store rollback implemented | Yahoo/other MLB/live checks |
+| PS-4 JSON providers | PS-2/PS-3 | Yahoo authentication/raw requests, ESPN acquisition/typed odds persistence, and bounded MLB metadata/live-game/statistics acquisition implemented; Yahoo data and other remaining MLB operations deferred | Yahoo/ESPN/MLB fixtures, transport doubles, secure boundaries, cache boundaries, concurrency, and store rollback implemented | Yahoo data/other MLB/live checks |
 | PS-5 Scrapers | PS-2/PS-3 | Savant, FG, FP, OddsShark, RotoWire | CSV/HTML/script/degradation | Live shape as gate |
 | PS-6 Integration | PS-4/PS-5 | Reconciliation, snapshots, end-to-end flows | Fixture DB/failure injection | Analysis/display |
 
-PS-1 through PS-3, the ESPN sub-slice, and the bounded MLB metadata/live-game/statistics sub-slices of PS-4 are implemented after their acceptance tests pass. Yahoo, other remaining MLB acquisition, PS-5, and PS-6 each require their own governed AC.
+PS-1 through PS-3, the Yahoo authentication/raw-request foundation, the ESPN sub-slice, and the bounded MLB metadata/live-game/statistics sub-slices of PS-4 are implemented after their acceptance tests pass. Yahoo fantasy acquisition, other remaining MLB acquisition, PS-5, and PS-6 each require their own governed AC.
 
 PS-2 uses an injected thread-safe clock, explicit source identities, typed statuses, pipeline-version gates, strict stored-state decoding, deterministic run-count JSON, and atomic snapshot replacement. It returns contextual storage and JSON failures instead of silently treating them as missing state. It does not read `sync_log`, infer sources from item names, or carry predecessor database fallback into isolated b9 storage. Provider TTL constants, command payload types, fallback selection, transport, and reconciliation remain deferred.
 
@@ -578,3 +578,5 @@ PS-3 keeps Skout's durable short-lived cache and synchronous request capabilitie
 The ESPN PS-4 sub-slice accepts one supplied day, requests that UTC calendar day and the next, preserves first-seen event order, deduplicates identifiers, decodes only the observed scoreboard and first odds-item fields, and retains valid games when individual odds requests fail. The adapter owns endpoints, limits, parsing, and structured partial failures while shared transport owns validation and execution. Typed store APIs atomically replace only affected moneyline rows and preserve unrelated games and markets. ESPN-to-MLB game mapping, the 30-minute freshness gate, stale fallback, snapshots, warnings, and command use remain deferred to PS-6.
 
 The MLB PS-4 sub-slices acquire typed season boundaries, hydrated schedules, boxscores, standings, 40-man rosters, people identities, single-player and bulk statistics, and hitter and pitcher game logs. They replace direct HTTP with injected validated transport, chunk deduplicated identities into stable batches of 100, preserve provider collection order and native stat strings, and expose cache disposition and write degradation explicitly. They retain Skout's 60-second schedule and date-range-stat reuse while replacing URL-derived keys, silent corrupt payload use, and hidden write failures with a bounded b9-owned cache contract. Quality-start acquisition uses deterministic five-request batches, retains successful pitcher counts, and replaces Skout's scheduling-dependent last error with ordered typed issues. All-player enumeration, injuries, player search and hands compatibility, team-games-played acquisition, normalized persistence, reconciliation, snapshots, fallback selection, and command integration remain deferred.
+
+The Yahoo PS-4 foundation preserves public-client PKCE, secure operating-system credentials, refresh-token continuity, bearer requests, four 429 retries, and terminal 401/403 behavior. It replaces fixed state, state-less bare-code acceptance, ambiguous credential failures, refresh races, unchecked query concatenation, unbounded token diagnostics, and direct provider clients with random one-use state, strict callback validation, typed credential outcomes, single-flight refresh, safe URL construction, redacted errors, and injected bounded transport. Yahoo fantasy JSON parsing, pagination, cache policy, normalized persistence, snapshots, stale fallback, reconciliation, failure budgets, circuits, and command integration remain deferred.
