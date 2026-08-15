@@ -19,7 +19,7 @@
 | `golang.org/x/term v0.45.0` | TTY behavior | CLI/operations | Defer |
 | `golang.org/x/text v0.40.0` | Identity normalization | Providers/storage | Preserve vectors |
 | `gopkg.in/yaml.v3 v3.0.1` | Strategy config | Analysis/advisory | Defer |
-| `modernc.org/sqlite v1.50.1` | SQLite, WAL, busy timeout | Providers/storage | Preserve semantics; select no crate |
+| `modernc.org/sqlite v1.50.1` | SQLite, WAL, busy timeout | Providers/storage | Preserve semantics through pinned `rusqlite =0.40.1` with bundled SQLite |
 
 Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not compatibility selections.
 
@@ -528,17 +528,17 @@ All 85 sources retain their original capability and workstream ownership.
 | DR-PS-004 | Require captured JSON/CSV/HTML/script fixtures | Scrapers, DO-005 | Preserve accepted shapes/failures | Fixtures age | Scraping providers | Recommended |
 | DR-PS-005 | Keep provider-specific auth, headers, batching and errors behind adapters | Yahoo, OddsShark, MLB people | Preserve protocol differences | Less universal sharing | Providers | Recommended |
 
-No crate, schema, or compatibility deviation is selected.
+The b9 persistence core uses pinned `rusqlite =0.40.1` with bundled SQLite, b9 schema version one, and the current twenty-table semantic contract without the predecessor's historical migration mechanics.
 
 ## Existing-State Compatibility
 
 | Option | Result | Tradeoff | Status |
 |---|---|---|---|
-| Reuse Skout database | Open v36 `~/.config/skout/skout.db` | Immediate continuity; schema/concurrency coupling | Future Director decision |
-| Migrate to b9 database | One-time supported-state transfer | Explicit boundary; migration/rollback burden | Future Director decision |
-| Isolated storage | Rebuild from providers | Simple; cold history/cache | Future Director decision |
+| Reuse Skout database | Open v36 `~/.config/skout/skout.db` | Immediate continuity; schema/concurrency coupling | Rejected for PS-1 |
+| Migrate to b9 database | One-time supported-state transfer | Explicit boundary; migration/rollback burden | Deferred to a separate explicit slice |
+| Isolated storage | Rebuild from providers at `$HOME/.config/b9/b9.db` | Simple; cold history/cache | Selected |
 
-Observable path/state/freshness/data semantics are distinct from exact Go SQL layout. No option is selected.
+Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. PS-1 owns only isolated open, schema-version-one migration, inspection, and transaction behavior; provider import and PS-2 through PS-6 remain deferred.
 
 ## Verification
 
@@ -547,7 +547,7 @@ Observable path/state/freshness/data semantics are distinct from exact Go SQL la
 - Generate adapter tests from operation/path ledgers with mock transports.
 - Assert URLs, headers, auth, timeouts, batching, parsing, normalization and degradation.
 - Reproduce cache hit/miss/expiry/corruption/permissions/pruning in temporary directories.
-- Test fresh v36, missing/stale/unreadable version, WAL, busy timeout and migration failure fixtures.
+- Test fresh b9 version one, versionless/corrupt/future states, WAL, busy timeout, permissions and migration failure fixtures.
 - Assert every store API, transaction, snapshot, freshness and reconciliation contract.
 - Convert each explicit gap to a named test or later-slice exclusion.
 
@@ -562,11 +562,11 @@ Observable path/state/freshness/data semantics are distinct from exact Go SQL la
 
 | Slice | Prerequisite | Delivery | Tests | Exclusions |
 |---|---|---|---|---|
-| PS-1 Persistence core | Ratified inventory; state decision | Open/schema/migrations/base APIs | Schema/migration/transaction | Providers/snapshots |
+| PS-1 Persistence core | Ratified inventory; isolated state selected | Open/schema/migrations/base APIs implemented | Schema/migration/transaction implemented | Providers/snapshots |
 | PS-2 Freshness/snapshots | PS-1 | Item/row/season/run state, fallback | Clock/version/stale/completeness | Transports |
 | PS-3 Cache/transport | Ratified inventory | Disk cache and injectable HTTP/auth | Filesystem/request contracts | Parsing |
 | PS-4 JSON providers | PS-2/PS-3 | Yahoo, MLB, ESPN and writes | Fixtures/auth doubles/data flows | Scrapers/live creds |
 | PS-5 Scrapers | PS-2/PS-3 | Savant, FG, FP, OddsShark, RotoWire | CSV/HTML/script/degradation | Live shape as gate |
 | PS-6 Integration | PS-4/PS-5 | Reconciliation, snapshots, end-to-end flows | Fixture DB/failure injection | Analysis/display |
 
-Implementation remains blocked until Ratify. Each slice needs its own governed AC.
+PS-1 is implemented after its acceptance tests pass. PS-2 through PS-6 each require their own governed AC.

@@ -15,7 +15,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "b9 v0.1.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  whatis [term]                Look up a term in the b9 glossary\n  i [term]                     Alias for whatis\n  help                         Print this help\n\nFLAGS\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
+        "b9 v0.1.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
     for form in [
@@ -42,7 +42,7 @@ fn command_specific_help_remains_the_shipped_clap_error() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             String::from_utf8(output.stderr).unwrap(),
-            "error: unexpected argument '--help' found\n\n  tip: to pass '--help' as a value, use '-- --help'\n\nUsage: b9 whatis [TERM]\n"
+            "error: unexpected argument '--help' found\n\n  tip: to pass '--help' as a value, use '-- --help'\n\nUsage: b9 i [TERM]\n"
         );
     }
 }
@@ -75,25 +75,30 @@ fn glossary_commands_work_without_the_repository_as_working_directory() {
 
 #[test]
 fn full_glossary_is_plain_and_grouped() {
-    let output = b9(&["whatis"]);
+    let output = b9(&["i"]);
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 glossary");
     let baseball = stdout.find("BASEBALL\n").expect("baseball banner");
     let fantasy = stdout.find("FANTASY\n").expect("fantasy banner");
-    let skout = stdout.find("SKOUT\n").expect("skout banner");
+    let b9_group = stdout.find("B9\n").expect("b9 banner");
     let stat = stdout.find("STAT\n").expect("stat banner");
-    assert!(baseball < fantasy && fantasy < skout && skout < stat);
+    assert!(baseball < fantasy && fantasy < b9_group && b9_group < stat);
+    assert!(!stdout.contains(&["SK", "OUT"].concat()));
     assert!(!stdout.contains("\u{1b}["));
 }
 
 #[test]
 fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
     let cases = [
-        (&["whatis", "   "][..], 1, "empty term"),
-        (&["whatis", "definitely-not-a-key"][..], 1, "closest keys:"),
-        (&["whatis", "run"][..], 1, "is ambiguous"),
-        (&["whatis", "pa", "extra"][..], 2, "unexpected value"),
+        (&["i", "   "][..], 1, "i: empty term"),
+        (
+            &["i", "definitely-not-a-key"][..],
+            1,
+            "i: no glossary entry",
+        ),
+        (&["i", "run"][..], 1, "i: term"),
+        (&["i", "pa", "extra"][..], 2, "Usage: b9 i [TERM]"),
         (&["unknown"][..], 2, "unrecognized subcommand"),
     ];
     for (arguments, code, message) in cases {
@@ -102,5 +107,24 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
         assert!(output.stdout.is_empty(), "arguments {arguments:?}");
         let stderr = String::from_utf8(output.stderr).expect("UTF-8 error");
         assert!(stderr.contains(message), "stderr {stderr:?}");
+    }
+}
+
+#[test]
+fn existing_commands_do_not_create_the_production_database() {
+    let home = tempfile::tempdir().expect("temporary HOME");
+    for arguments in [
+        &[][..],
+        &["--help"][..],
+        &["i", "pa"][..],
+        &["whatis", "pa"][..],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+            .args(arguments)
+            .env("HOME", home.path())
+            .output()
+            .expect("run b9 without storage");
+        assert!(output.status.success(), "arguments {arguments:?}");
+        assert!(!home.path().join(".config/b9/b9.db").exists());
     }
 }

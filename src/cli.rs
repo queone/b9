@@ -15,19 +15,12 @@ struct ArgumentDescriptor {
 }
 
 #[derive(Clone, Copy)]
-struct AliasDescriptor {
-    name: &'static str,
-    display_label: &'static str,
-    description: &'static str,
-}
-
-#[derive(Clone, Copy)]
 struct CommandDescriptor {
     name: &'static str,
     display_label: &'static str,
     description: &'static str,
     argument: Option<ArgumentDescriptor>,
-    aliases: &'static [AliasDescriptor],
+    aliases: &'static [&'static str],
     routes_to_root_help: bool,
 }
 
@@ -48,22 +41,16 @@ struct FlagDescriptor {
     routing_aliases: &'static [&'static str],
 }
 
-const WHATIS_ALIASES: &[AliasDescriptor] = &[AliasDescriptor {
-    name: "i",
-    display_label: "i [term]",
-    description: "Alias for whatis",
-}];
-
 const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
-        name: "whatis",
-        display_label: "whatis [term]",
+        name: "i",
+        display_label: "i [term]",
         description: "Look up a term in the b9 glossary",
         argument: Some(ArgumentDescriptor {
             id: "term",
             value_name: "TERM",
         }),
-        aliases: WHATIS_ALIASES,
+        aliases: &["whatis"],
         routes_to_root_help: false,
     },
     CommandDescriptor {
@@ -128,7 +115,7 @@ where
     };
 
     match matches.subcommand() {
-        Some(("whatis", matches)) => run_glossary(matches.get_one::<String>("term")),
+        Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -166,7 +153,7 @@ fn root_command(version: &'static str) -> Command {
     for descriptor in COMMANDS {
         let mut subcommand = Command::new(descriptor.name).about(descriptor.description);
         for alias in descriptor.aliases {
-            subcommand = subcommand.visible_alias(alias.name);
+            subcommand = subcommand.alias(alias);
         }
         if let Some(argument) = descriptor.argument {
             subcommand = subcommand.arg(
@@ -212,9 +199,6 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
             descriptor.display_label,
             descriptor.description,
         );
-        for alias in descriptor.aliases {
-            push_help_row(&mut output, alias.display_label, alias.description);
-        }
     }
     output.push('\n');
     output.push_str(&section("FLAGS", mode));
@@ -237,7 +221,7 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
     let entries = match embedded_entries() {
         Ok(entries) => entries,
         Err(error) => {
-            eprintln!("whatis: load embedded glossary: {error}; reinstall b9");
+            eprintln!("i: load embedded glossary: {error}; reinstall b9");
             return ExitCode::from(1);
         }
     };
@@ -247,7 +231,7 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
     };
     let term = term.trim();
     if term.is_empty() {
-        eprintln!("whatis: empty term; provide a glossary key or omit TERM for the full glossary");
+        eprintln!("i: empty term; provide a glossary key or omit TERM for the full glossary");
         return ExitCode::from(1);
     }
     match lookup(&entries, term) {
@@ -261,14 +245,12 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
                 .map(|entry| entry.key.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
-            eprintln!(
-                "whatis: term {term:?} is ambiguous; matches: {keys}; retry with an exact key"
-            );
+            eprintln!("i: term {term:?} is ambiguous; matches: {keys}; retry with an exact key");
             ExitCode::from(1)
         }
         LookupResult::Miss(suggestions) => {
             eprintln!(
-                "whatis: no glossary entry matches {term:?}; closest keys: {}",
+                "i: no glossary entry matches {term:?}; closest keys: {}",
                 suggestions.join(", ")
             );
             ExitCode::from(1)

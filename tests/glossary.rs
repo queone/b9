@@ -28,6 +28,12 @@ fn embedded_glossary_has_the_exact_baseline_entries() {
     assert_eq!(pa.aliases, ["PA"]);
     assert!(pa.definition.contains("turn at bat — includes"));
     assert!(entries.iter().any(|entry| entry.key == "game-log"));
+    assert!(entries.iter().any(|entry| entry.class == "b9"));
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry.class != ["sk", "out"].concat())
+    );
 }
 
 #[test]

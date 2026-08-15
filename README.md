@@ -8,11 +8,11 @@ Develop the successor to `skout` in Rust over multiple releases while keeping pa
 
 ## Current CLI
 
-Run `b9` or `b9 --help` to see the implemented command surface in Skout's compact Usage format. Supported 256-color terminals receive the Skout-style title and section hierarchy; redirected output, `NO_COLOR`, `TERM=dumb`, and terminals without advertised 256-color support receive the same layout as plain text. Run `b9 --version` to print the independently versioned binary contract.
+Run `b9` or `b9 --help` to see the implemented command surface in b9's compact Usage format. Supported 256-color terminals receive the b9 title and section hierarchy; redirected output, `NO_COLOR`, `TERM=dumb`, and terminals without advertised 256-color support receive the same layout as plain text. Run `b9 --version` to print the independently versioned binary contract.
 
-Use `b9 whatis [TERM]` to browse the full glossary or look up one term. The visible `b9 i [TERM]` alias preserves Skout compatibility. The glossary is compiled into the binary and works offline without the repository checkout.
+Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout.
 
-This slice intentionally omits Skout's interactive ambiguity selector and colored output. Ambiguous terms report matching keys and ask for an exact key.
+The current glossary intentionally omits an interactive ambiguity selector and colored output. Ambiguous terms report matching keys and ask for an exact key.
 
 ## Governance
 

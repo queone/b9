@@ -1,6 +1,6 @@
-# Skout Glossary
+# b9 Glossary
 
-Canonical definitions for baseball, fantasy, and skout-specific terms. This file is the single source of truth — other docs reference it, never redefine terms in their own words. Computation and API docs may add implementation-specific detail; prompts may compress wording; nothing may contradict definitions here.
+Canonical definitions for baseball, fantasy, and b9-specific terms. This file is the single source of truth — other docs reference it, never redefine terms in their own words. Computation and API docs may add implementation-specific detail; prompts may compress wording; nothing may contradict definitions here.
 
 When a change introduces or redefines a domain term, update this file in the same pass.
 
@@ -8,7 +8,7 @@ When a change introduces or redefines a domain term, update this file in the sam
 
 ## Coverage Checklist
 
-Every key below must have a corresponding entry in this glossary. When a new stat or signal is added to skout, add it here.
+Every key below must have a corresponding entry in this glossary. When a new stat or signal is added to b9, add it here.
 
 `ab`, `abandon`, `active`, `age`, `atc`, `avg`, `available`, `babip`, `barrel_pct`, `batters_faced`, `bb`, `bb_pct`, `bench`, `blend_window`, `category_strategy`, `cfip`, `ch_pct`, `close`, `closer`, `confirmed`, `confirmed_sp`, `cs`, `dtd`, `ecr`, `empirical_bayes`, `era`, `exit_velo`, `expected`, `faab`, `fastball_velo`, `fb_pct`, `fip`, `flippable`, `fwar`, `g`, `gb_pct`, `gs`, `h2h`, `hard_hit_pct`, `hbp`, `holds`, `hr`, `hr_fb`, `il`, `injured`, `ip`, `k`, `k_bb_pct`, `k_pct`, `k9`, `last03ip`, `last10ip`, `last20pa`, `last5yrs`, `launch_angle`, `lineup_candidates`, `lineup_status`, `lost`, `na`, `next03ip`, `next10ip`, `next20pa`, `no_game`, `not_scheduled`, `obp`, `ops`, `opportunity_damping`, `out`, `own_pct`, `p_slot`, `pa`, `pitcher_day_state`, `pool`, `pos`, `pp`, `ppd`, `probable`, `probable_sp`, `protect`, `punt`, `push`, `qs`, `r`, `rbi`, `replacement_level`, `roster_moves`, `roster_moves_note`, `roster_slot`, `rp_available`, `rp_slot`, `sb`, `savant`, `slg`, `sp_slot`, `spin_rate`, `sprint_speed`, `stabilization_ramp`, `steamer`, `streaming`, `sv`, `sweet_spot_pct`, `tied`, `pqs`, `w`, `waiver_wire`, `whiff_pct`, `whip`, `wrc_plus`, `xba`, `xera`, `xfip`, `xobp`, `xslg`, `xwoba`, `yp`, `yr`, `z_score`, `zips`
 
@@ -651,7 +651,7 @@ Batter awarded first base after four balls (hitter stat) or pitcher issues a bas
 
 ### WAR (`fwar`) [stat]
 
-Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. Skout displays FanGraphs fWAR.
+Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. b9 displays FanGraphs fWAR.
 
 - **Aliases:** fWAR
 - **Where:** `players.fangraphs_war`
@@ -688,57 +688,57 @@ Weighted Runs Created Plus. FanGraphs metric where 100 = league average. Adjusts
 
 ---
 
-## Skout Signals
+## b9 Signals
 
-### Blend Window (`blend_window`) [skout]
+### Blend Window (`blend_window`) [b9]
 
 Season-phase-based weighting of current-season, prior-season, and spring training data for PQS computation. Transitions from prior-heavy early in the season to current-only once league games played reaches 28.
 
 - **Where:** `internal/analysis/stat_weights.go` — `ComputeStatWeights`
 - **Prompt:** no
 
-### Category Strategy (`category_strategy`) [skout]
+### Category Strategy (`category_strategy`) [b9]
 
 Deterministic classification of each scoring category as push, protect, or abandon. Computed from `CategoryGap` status — not LLM-generated. The LLM echoes this classification verbatim.
 
 - **Where:** `internal/advisory/payload.go` — `ComputeCategoryStrategy`
 - **Prompt:** yes
 
-### Closer (`closer`) [skout]
+### Closer (`closer`) [b9]
 
 The designated closer for each MLB team. Source: FanGraphs RosterResource `data-role="Closer"` / `Co-Closer` tags (primary), with the SV-leader heuristic as fallback when FG tags the team `Closer Committee` or omits it. The override gate enforces active-roster status and SP/RP role rules, so IL'd or starter-shape pitchers are excluded regardless of their FG tag. Receives a 1.5x SV emphasis multiplier on PQS. Displayed as `RP1` (Yel4-wrapped ASCII `1`).
 
 - **Where:** `internal/store/player.go` — `MarkClosers`
 - **Prompt:** no
 
-### Empirical-Bayes Blending (`empirical_bayes`) [skout]
+### Empirical-Bayes Blending (`empirical_bayes`) [b9]
 
 Stabilization method for Statcast metrics: `blended = w * current + (1 - w) * prior`, where `w = sample / (sample + k)`. Each metric has its own k-value. Higher k = more regression to prior. Applied in `BlendStatcast`.
 
 - **Where:** `internal/analysis/statcast_blend.go`
 - **Prompt:** no
 
-### Opportunity Damping (`opportunity_damping`) [skout]
+### Opportunity Damping (`opportunity_damping`) [b9]
 
 Current-season weight in PQS blend is scaled by `min(PA/150, 1)` for hitters and `min(IP/40, 1)` for pitchers. Prevents small-sample current stats from dominating the blend early in the season.
 
 - **Where:** `internal/analysis/stat_weights.go` — `OpportunityDampen`
 - **Prompt:** no
 
-### Pitcher Day State (`pitcher_day_state`) [skout]
+### Pitcher Day State (`pitcher_day_state`) [b9]
 
 Classification of a pitcher's same-day availability: `confirmed_sp` (RotoWire confirmed), `probable_sp` (MLBAM probable), `rp_available` (RP, team has game), `not_scheduled` (SP-eligible, not today's starter), `no_game` (team off). Determines lineup candidate eligibility.
 
 - **Where:** `internal/advisory/lineup.go` — `pitcherDayState`
 - **Prompt:** no
 
-### Pool (`pool`) [skout]
+### Pool (`pool`) [b9]
 
 The set of active MLB players used as the normalization baseline for z-scoring in PQS computation. Defined as the `pqsMap` keys from `ComputePQS` — every player with sufficient signal data.
 
 - **Prompt:** no
 
-### POS Column (`pos`) [skout]
+### POS Column (`pos`) [b9]
 
 Display rendering of a player's Yahoo eligibility positions. Width-5 cell: if the comma-joined literal form fits (≤ 5 visible chars), render it as-is (`SP,RP`, `C,1B`, `OF`, `Util`, `RP*`). Otherwise compress to single-letter codes in defensive-value order: `C, 1B, 2B, 3B, SS, OF, SP, RP, Util` → `C, 1, 2, 3, S, O, P, R, U`. Cap compressed form at 5 letters; the super-rare 6-position monster (C + every hitter position) renders as `All`. Closers carry a trailing `*` (`RP*` literal, `R*` / `PR*` compressed). The MLBAM-only fallback (Yahoo eligibility absent) prepends `*` to the cell — distinct semantic from the closer marker, same glyph.
 
@@ -746,7 +746,7 @@ Display rendering of a player's Yahoo eligibility positions. Width-5 cell: if th
 - **Where:** `internal/display/poscell.go` — `compressPositions`
 - **Prompt:** yes
 
-### Projected Production (`pp`) [skout]
+### Projected Production (`pp`) [b9]
 
 0-100 score derived from blended rest-of-season projections (Steamer 0.40, ZiPS 0.35, ATC 0.25). Represents forecasted fantasy category production, not talent. Hitter PP: z-scored HR, R, RBI, SB with PA-damped AVG. Pitcher PP: z-scored inverted ERA/WHIP (IP-damped) plus K, W, SV.
 
@@ -754,20 +754,20 @@ Display rendering of a player's Yahoo eligibility positions. Width-5 cell: if th
 - **Where:** `internal/advisory/pp.go` — `ComputePP`
 - **Prompt:** yes
 
-### Stabilization Ramp (`stabilization_ramp`) [skout]
+### Stabilization Ramp (`stabilization_ramp`) [b9]
 
 Signal weight scaled by `min(1.0, sample / threshold)` in PQS computation. Signals with insufficient sample size contribute less to the score. EB-blended signals use threshold=1 (already stabilized); raw signals use real thresholds (e.g., 50 PA for K%).
 
 - **Where:** `internal/analysis/pqs.go`
 - **Prompt:** no
 
-### Steamer (`steamer`) [skout]
+### Steamer (`steamer`) [b9]
 
 FanGraphs rest-of-season projection system. Weight 0.40 in PP blend. Provides projected counting and rate stats.
 
 - **Prompt:** no
 
-### Player Quality Score (`pqs`) [skout]
+### Player Quality Score (`pqs`) [b9]
 
 Internal quality-based model using stabilized skill signals. Not displayed to users. Hitter signals: xwOBA (0.30), K% (0.15), BB% (0.10), Sprint Speed (0.20), FB% (0.10), HR/FB (0.15). Pitcher signals: Whiff% (0.30), Chase% (0.20), GB% (0.15), Fastball Velo (0.15), K-BB% (0.20). Each signal z-scored against the player pool, clamped ±2.0, weighted, summed. Category emphasis and context multipliers applied. Stored in `players.pqs`. Feeds waiver ranking and the browse sort tiebreaker.
 
@@ -775,55 +775,55 @@ Internal quality-based model using stabilized skill signals. Not displayed to us
 - **Where:** `internal/analysis/pqs.go` — `ComputePQS`
 - **Prompt:** yes
 
-### Z-Score (`z_score`) [skout]
+### Z-Score (`z_score`) [b9]
 
 `(value - pool_mean) / pool_stddev`. Per-signal z-score clamped to ±2.0 in PQS computation.
 
 - **Prompt:** no
 
-### ZiPS (`zips`) [skout]
+### ZiPS (`zips`) [b9]
 
 Baseball Think Factory rest-of-season projection system. Weight 0.35 in PP blend.
 
 - **Prompt:** no
 
-### ATC (`atc`) [skout]
+### ATC (`atc`) [b9]
 
 Average Total Cost — rest-of-season projection system. Weight 0.25 in PP blend.
 
 - **Aliases:** Air and Time Coach
 - **Prompt:** no
 
-### Yahoo Players (`yp`) [skout]
+### Yahoo Players (`yp`) [b9]
 
-Per-MLB-team count of players whose joined Yahoo `Owner` is non-empty — i.e. they currently occupy a roster slot (active, BN, IL, or NA) on one of the fantasy teams in the user's league. Two-way players count once per MLB team. Displayed as a dark-gray integer column in `skout tt`, between `GB` and `PA`.
+Per-MLB-team count of players whose joined Yahoo `Owner` is non-empty — i.e. they currently occupy a roster slot (active, BN, IL, or NA) on one of the fantasy teams in the user's league. Two-way players count once per MLB team. Displayed as a dark-gray integer column in `b9 tt`, between `GB` and `PA`.
 
 - **Aliases:** YP
 - **Where:** `cmd/skout/teams_totals.go` — `countYahooRosteredOnMLBTeam`
 - **Prompt:** no
 
-### Age (`age`) [skout]
+### Age (`age`) [b9]
 
-Player age in whole years, derived at render time from the MLBAM `birthDate` stored in `players.birth_date`. Reduced by one if the birthday has not yet occurred in the current calendar year. Renders `-` when `birth_date` is NULL (no MLBAM identity yet, or never fetched). Used in the `skout h <name>` and `skout p <name>` detail card identity headers.
+Player age in whole years, derived at render time from the MLBAM `birthDate` stored in `players.birth_date`. Reduced by one if the birthday has not yet occurred in the current calendar year. Renders `-` when `birth_date` is NULL (no MLBAM identity yet, or never fetched). Used in the `b9 h <name>` and `b9 p <name>` detail card identity headers.
 
 - **Where:** `internal/domain/player.go` — `Player.Age(now)`
 - **Prompt:** no
 
-### AVG162G (`avg162g`) [skout]
+### AVG162G (`avg162g`) [b9]
 
 The Baseball-Reference-style 162-game pace row at the top of the SPLIT table on the player detail card (AC137). Aggregates counting stats across the rolling window of completed seasons (current season excluded), then scales them by `162 / sum_games` — i.e. what this player produces per 162 of his own games at his historical play rate, not per 162 calendar games. Rate stats (AVG/OBP/OPS for hitters; ERA/WHIP for pitchers) are recomputed cumulatively from the summed counting fields, unaffected by the scale. With zero completed-season games, every cell renders as `-`.
 
 - **Where:** `internal/display/playercard.go` — `avg162GHitterCells`, `avg162GPitcherCells`
 - **Prompt:** no
 
-### GAME LOG (`game-log`) [skout]
+### GAME LOG (`game-log`) [b9]
 
 The per-day (hitter) or per-appearance (pitcher) section below the SPLIT table on the player detail card (AC137). Hitter rows walk the last 10 calendar days, using the player's MLB team schedule + boxscore lineup to surface non-appearance days; the indicator column shows a green batting-order digit when the player started, a red `X` when the team played but he didn't appear, and a blank when the team had no game. Pitcher rows show the last 10 appearances filtered by `mlb.ParseIP(InningsPitched) > 0` so gaps stay invisible; the indicator is a green `●`.
 
 - **Where:** `cmd/skout/playercard_gamelog.go` — `buildHitterGameLog`, `buildPitcherGameLog`; `internal/display/playercard_gamelog.go` — `printHitterGameLog`, `printPitcherGameLog`, `hitterGameLogCells`, `pitcherGameLogCells`
 - **Prompt:** no
 
-### Savant (`savant`) [skout]
+### Savant (`savant`) [b9]
 
 The literal SOURCE-column label on both hitter and pitcher detail-card Statcast rows. The label is kept for visual consistency with the AC mockup even though some pitcher cells (WHIFF%, CH%, GB%) are FanGraphs-derived rather than strictly Baseball Savant. Treat the label as a display convention, not a strict provenance claim.
 

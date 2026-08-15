@@ -45,17 +45,17 @@ pub fn detected_help_color_mode() -> HelpColorMode {
     })
 }
 
-/// Style the b9 title using Skout's bold bright-white role.
+/// Style the b9 title using its bold bright-white role.
 pub fn title(value: &str, mode: HelpColorMode) -> String {
     style(value, "1;38;5;231", mode)
 }
 
-/// Style the help subtitle using Skout's gray role.
+/// Style the help subtitle using b9's gray role.
 pub fn subtitle(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;245", mode)
 }
 
-/// Style a help section heading using Skout's white role.
+/// Style a help section heading using b9's white role.
 pub fn section(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;255", mode)
 }

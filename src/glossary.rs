@@ -156,7 +156,7 @@ fn flush_entry(
     Ok(())
 }
 
-/// Look up a non-empty query using Skout's tier precedence.
+/// Look up a non-empty query using b9's tier precedence.
 pub fn lookup<'a>(entries: &'a [GlossaryEntry], query: &str) -> LookupResult<'a> {
     let query = query.trim().to_lowercase();
     for entry in entries {
@@ -246,7 +246,7 @@ pub fn render_entry(entry: &GlossaryEntry) -> String {
 
 /// Render the complete glossary in deterministic class and key order.
 pub fn render_full(entries: &[GlossaryEntry]) -> String {
-    let class_rank: HashMap<_, _> = ["baseball", "fantasy", "skout", "stat"]
+    let class_rank: HashMap<_, _> = ["baseball", "fantasy", "b9", "stat"]
         .into_iter()
         .enumerate()
         .map(|(rank, class)| (class, rank))
