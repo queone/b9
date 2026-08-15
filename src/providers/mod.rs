@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt;
 
 pub mod espn;
+pub mod mlb;
 
 /// A contextual provider acquisition failure.
 #[derive(Debug)]

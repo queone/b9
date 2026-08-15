@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.9.0 | AC13: add bounded MLB metadata and live-game provider |
 | 0.8.0 | AC12: add ESPN adapter and typed moneyline persistence |
 | 0.7.0 | AC11: add bounded cache and injectable HTTP transport |
 | 0.6.0 | AC10: add freshness state and durable snapshots |

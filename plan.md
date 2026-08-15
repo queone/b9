@@ -26,7 +26,8 @@ Analysis, display, and advisory detailed inventory: [`docs/skout-analysis-displa
 - Implement PS-2 typed freshness, snapshots, season state, and synchronization runs.
 - Implement PS-3 bounded atomic caching and validating injectable HTTP transport.
 - Implement the ESPN PS-4 sub-slice with typed JSON acquisition and atomic moneyline persistence.
-- Defer the Yahoo and MLB PS-4 sub-slices, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
+- Implement the bounded MLB PS-4 metadata and live-game sub-slice with typed acquisition, identity batching, and schedule caching.
+- Defer Yahoo, remaining MLB acquisition, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
 
 ## Ideas To Explore
 
