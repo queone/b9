@@ -38,7 +38,7 @@ pub use snapshots::CommandSnapshot;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for b9-owned databases.
-pub const CURRENT_SCHEMA_VERSION: i64 = 2;
+pub const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 /// Read-only production status fields used by `b9 st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -46,6 +46,34 @@ pub struct StoreStatus {
     pub latest_sync_status: Option<String>,
     pub latest_sync_at: Option<i64>,
     pub league_synced_at: Option<i64>,
+    pub circuit_open: bool,
+    pub provider_failure_count: i64,
+    pub provider_last_error: Option<String>,
+    pub provider_freshness_at: Option<i64>,
+    pub daemon_started_at: Option<i64>,
+    pub daemon_stopped_at: Option<i64>,
+    pub last_run_at: Option<i64>,
+    pub last_run_status: Option<String>,
+    pub next_run_at: Option<i64>,
+    pub schema_version: Option<i64>,
+    pub database_bytes: Option<u64>,
+    pub mlb_identity_count: i64,
+    pub yahoo_identity_count: i64,
+    pub unmatched_player_count: i64,
+}
+
+/// Durable provider and daemon fields used by the local status dashboard.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DashboardStatus {
+    pub provider_last_success_at: Option<i64>,
+    pub provider_last_failure_at: Option<i64>,
+    pub provider_failure_count: i64,
+    pub circuit_open: bool,
+    pub last_error: Option<String>,
+    pub provider_freshness_at: Option<i64>,
+    pub last_run_at: Option<i64>,
+    pub last_run_status: Option<String>,
+    pub next_run_at: Option<i64>,
 }
 
 /// Inspect an existing database without creating, migrating, or changing it.
@@ -76,10 +104,87 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
             .optional()
             .map_err(|error| StoreError::operation("read league freshness", path, error))?
     };
+    let dashboard_table_exists: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='dashboard_status'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| StoreError::operation("check dashboard status table", path, error))?;
+    let dashboard = if dashboard_table_exists == 0 {
+        // Older, not-yet-migrated databases predate the dashboard_status table.
+        // `inspect_status_at` never migrates, so fall back to defaults instead
+        // of failing a local read on a schema this connection won't upgrade.
+        (0, false, None, None, None, None, None, None, None)
+    } else {
+        connection
+            .query_row(
+                "SELECT provider_failure_count, circuit_open, last_error, provider_freshness_at, daemon_started_at, daemon_stopped_at, last_run_at, last_run_status, next_run_at FROM dashboard_status WHERE id=1",
+                [],
+                |row| {
+                    let error = row.get::<_, String>(2)?;
+                    let status = row.get::<_, Option<String>>(7)?;
+                    Ok((
+                        row.get(0)?,
+                        row.get::<_, i64>(1)? != 0,
+                        (!error.is_empty()).then_some(error),
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        status.filter(|value| !value.is_empty()),
+                        row.get(8)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| StoreError::operation("read dashboard status", path, error))?
+            .unwrap_or((0, false, None, None, None, None, None, None, None))
+    };
+    let schema_version = connection
+        .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+        .optional()
+        .map_err(|error| StoreError::operation("read schema version", path, error))?;
+    let database_bytes = fs::metadata(path).ok().map(|metadata| metadata.len());
+    let mlb_identity_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM players WHERE mlbam_id IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| StoreError::operation("count MLB identities", path, error))?;
+    let yahoo_identity_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM players WHERE yahoo_player_id IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| StoreError::operation("count Yahoo identities", path, error))?;
+    let unmatched_player_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM players WHERE mlbam_id IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| StoreError::operation("count unmatched players", path, error))?;
     Ok(StoreStatus {
         latest_sync_status,
         latest_sync_at,
         league_synced_at,
+        provider_failure_count: dashboard.0,
+        circuit_open: dashboard.1,
+        provider_last_error: dashboard.2,
+        provider_freshness_at: dashboard.3,
+        daemon_started_at: dashboard.4,
+        daemon_stopped_at: dashboard.5,
+        last_run_at: dashboard.6,
+        last_run_status: dashboard.7,
+        next_run_at: dashboard.8,
+        schema_version,
+        database_bytes,
+        mlb_identity_count,
+        yahoo_identity_count,
+        unmatched_player_count,
     })
 }
 
@@ -288,6 +393,110 @@ impl Store {
                 row.get(0)
             })
             .map_err(|error| StoreError::operation("check database emptiness", &self.path, error))
+    }
+
+    /// Read the durable provider dashboard state.
+    pub fn dashboard_status(&self) -> Result<DashboardStatus, StoreError> {
+        self.connection()
+            .query_row(
+                "SELECT provider_last_success_at, provider_last_failure_at, provider_failure_count, circuit_open, last_error, provider_freshness_at, last_run_at, last_run_status, next_run_at FROM dashboard_status WHERE id=1",
+                [],
+                |row| {
+                    let last_run_status = row.get::<_, Option<String>>(7)?;
+                    Ok(DashboardStatus {
+                        provider_last_success_at: row.get(0)?,
+                        provider_last_failure_at: row.get(1)?,
+                        provider_failure_count: row.get(2)?,
+                        circuit_open: row.get::<_, i64>(3)? != 0,
+                        last_error: {
+                            let value = row.get::<_, String>(4)?;
+                            (!value.is_empty()).then_some(value)
+                        },
+                        provider_freshness_at: row.get(5)?,
+                        last_run_at: row.get(6)?,
+                        last_run_status: last_run_status.filter(|value| !value.is_empty()),
+                        next_run_at: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|error| StoreError::operation("read dashboard status", &self.path, error))
+    }
+
+    /// Record a successful authenticated provider cycle and close the circuit.
+    pub fn record_provider_success(&mut self) -> Result<(), StoreError> {
+        let (_, now) = self.captured_time("record provider success")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction
+                .execute(
+                    "UPDATE dashboard_status SET provider_last_success_at=?1, provider_freshness_at=?1, provider_failure_count=0, circuit_open=0, last_error='', last_run_at=?1, last_run_status='success' WHERE id=1",
+                    [now],
+                )
+                .map_err(|error| StoreError::operation("record provider success", &path, error))?;
+            Ok(())
+        })
+    }
+
+    /// Record a bounded provider failure and open the circuit at five failures.
+    pub fn record_provider_failure(&mut self, error_summary: &str) -> Result<(), StoreError> {
+        let (_, now) = self.captured_time("record provider failure")?;
+        let bounded = error_summary.chars().take(240).collect::<String>();
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction
+                .execute(
+                    "UPDATE dashboard_status SET provider_last_failure_at=?1, provider_failure_count=MIN(provider_failure_count + 1, 5), circuit_open=CASE WHEN provider_failure_count + 1 >= 5 THEN 1 ELSE 0 END, last_error=?2, last_run_at=?1, last_run_status='failed' WHERE id=1",
+                    rusqlite::params![now, bounded],
+                )
+                .map_err(|error| StoreError::operation("record provider failure", &path, error))?;
+            Ok(())
+        })
+    }
+
+    /// Record the daemon's next scheduled synchronization cycle.
+    pub fn record_next_run_at(&mut self, next_run_at: i64) -> Result<(), StoreError> {
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction
+                .execute(
+                    "UPDATE dashboard_status SET next_run_at=?1 WHERE id=1",
+                    [next_run_at],
+                )
+                .map_err(|error| {
+                    StoreError::operation("record next scheduled run", &path, error)
+                })?;
+            Ok(())
+        })
+    }
+
+    /// Record daemon publication in the local dashboard state.
+    pub fn record_daemon_started(&mut self) -> Result<(), StoreError> {
+        let (_, now) = self.captured_time("record daemon start")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction
+                .execute(
+                    "UPDATE dashboard_status SET daemon_started_at=?1, daemon_stopped_at=NULL WHERE id=1",
+                    [now],
+                )
+                .map_err(|error| StoreError::operation("record daemon start", &path, error))?;
+            Ok(())
+        })
+    }
+
+    /// Record daemon shutdown in the local dashboard state.
+    pub fn record_daemon_stopped(&mut self) -> Result<(), StoreError> {
+        let (_, now) = self.captured_time("record daemon stop")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction
+                .execute(
+                    "UPDATE dashboard_status SET daemon_stopped_at=?1 WHERE id=1",
+                    [now],
+                )
+                .map_err(|error| StoreError::operation("record daemon stop", &path, error))?;
+            Ok(())
+        })
     }
 
     /// Execute one immediate transaction without exposing the owned connection.
@@ -515,7 +724,11 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
         ));
     }
     if version == 1 {
-        return migrate_v1_to_v2(connection, path);
+        migrate_v1_to_v2(connection, path)?;
+        return migrate_v2_to_v3(connection, path);
+    }
+    if version == 2 {
+        return migrate_v2_to_v3(connection, path);
     }
     Err(StoreError::unsupported(
         path,
@@ -543,6 +756,42 @@ fn migrate_v1_to_v2(connection: &mut Connection, path: &Path) -> Result<(), Stor
         .map_err(|error| StoreError::operation("commit schema migration", path, error))
 }
 
+fn migrate_v2_to_v3(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| StoreError::operation("begin schema migration", path, error))?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE dashboard_status (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                daemon_started_at INTEGER,
+                daemon_stopped_at INTEGER,
+                last_run_at INTEGER,
+                last_run_status TEXT,
+                next_run_at INTEGER,
+                provider_last_success_at INTEGER,
+                provider_last_failure_at INTEGER,
+                provider_failure_count INTEGER NOT NULL DEFAULT 0,
+                circuit_open INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT NOT NULL DEFAULT '',
+                provider_freshness_at INTEGER
+            );
+            INSERT INTO dashboard_status (id) VALUES (1);",
+        )
+        .map_err(|error| {
+            StoreError::operation("apply version-three schema migration", path, error)
+        })?;
+    transaction
+        .execute(
+            "UPDATE schema_version SET version=?1",
+            [CURRENT_SCHEMA_VERSION],
+        )
+        .map_err(|error| StoreError::operation("write schema version", path, error))?;
+    transaction
+        .commit()
+        .map_err(|error| StoreError::operation("commit schema migration", path, error))
+}
+
 fn migrate_empty(connection: &mut Connection, path: &Path, schema: &str) -> Result<(), StoreError> {
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -550,6 +799,9 @@ fn migrate_empty(connection: &mut Connection, path: &Path, schema: &str) -> Resu
     transaction
         .execute_batch(schema)
         .map_err(|error| StoreError::operation("apply schema migration", path, error))?;
+    transaction
+        .execute("INSERT OR IGNORE INTO dashboard_status (id) VALUES (1)", [])
+        .map_err(|error| StoreError::operation("initialize dashboard status", path, error))?;
     transaction
         .execute("DELETE FROM schema_version", [])
         .map_err(|error| StoreError::operation("clear schema version", path, error))?;
@@ -611,6 +863,34 @@ mod tests {
             .unwrap();
         assert_eq!(version, CURRENT_SCHEMA_VERSION);
         assert_eq!(table_count, 1);
+        let dashboard_rows: i64 = connection
+            .query_row("SELECT COUNT(*) FROM dashboard_status", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(dashboard_rows, 1);
+    }
+
+    #[test]
+    fn migration_v2_to_v3_rolls_back_and_preserves_version_on_conflict() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER PRIMARY KEY); INSERT INTO schema_version VALUES (2);
+                 CREATE TABLE dashboard_status (id INTEGER PRIMARY KEY);
+                 CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('kept');",
+            )
+            .unwrap();
+        let error = migrate_v2_to_v3(&mut connection, Path::new("test.db")).unwrap_err();
+        assert!(error.to_string().contains("version-three schema migration"));
+        let version: i64 = connection
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        let sentinel: String = connection
+            .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(sentinel, "kept");
     }
 
     #[test]
@@ -681,5 +961,40 @@ mod tests {
             })
             .unwrap_err();
         assert!(error.to_string().contains("commit transaction"));
+    }
+
+    #[test]
+    fn provider_dashboard_opens_at_five_failures_and_closes_on_success() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.db");
+        let mut store = Store::open_at_with_clock(&path, Arc::new(SystemClock)).unwrap();
+        for _ in 0..4 {
+            store.record_provider_failure("HTTP 403").unwrap();
+        }
+        assert!(!store.dashboard_status().unwrap().circuit_open);
+        store.record_provider_failure("HTTP 403").unwrap();
+        let failed = store.dashboard_status().unwrap();
+        assert!(failed.circuit_open);
+        assert_eq!(failed.provider_failure_count, 5);
+        assert_eq!(failed.last_error.as_deref(), Some("HTTP 403"));
+        assert_eq!(failed.last_run_status.as_deref(), Some("failed"));
+        store.record_provider_success().unwrap();
+        let recovered = store.dashboard_status().unwrap();
+        assert!(!recovered.circuit_open);
+        assert_eq!(recovered.provider_failure_count, 0);
+        assert_eq!(recovered.last_error, None);
+        assert_eq!(recovered.last_run_status.as_deref(), Some("success"));
+    }
+
+    #[test]
+    fn next_run_persists_and_a_later_success_preserves_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.db");
+        let mut store = Store::open_at_with_clock(&path, Arc::new(SystemClock)).unwrap();
+        assert_eq!(store.dashboard_status().unwrap().next_run_at, None);
+        store.record_next_run_at(500).unwrap();
+        assert_eq!(store.dashboard_status().unwrap().next_run_at, Some(500));
+        store.record_provider_success().unwrap();
+        assert_eq!(store.dashboard_status().unwrap().next_run_at, Some(500));
     }
 }

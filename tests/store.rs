@@ -2,12 +2,13 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use b9::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path};
+use b9::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path, inspect_status_at};
 use rusqlite::Connection;
 use tempfile::tempdir;
 
-const TABLES: [&str; 21] = [
+const TABLES: [&str; 22] = [
     "command_snapshots",
+    "dashboard_status",
     "mlb_game_schedule",
     "mlb_odds",
     "mlb_team_active_rosters",
@@ -179,6 +180,37 @@ fn unsupported_schema_states_fail_closed() {
             .unwrap();
         assert_eq!(sentinel, "kept", "{name}");
     }
+}
+
+#[test]
+fn inspect_status_at_reads_a_pre_dashboard_status_database_without_migrating() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("legacy.db");
+    let store = Store::open_at(&path).unwrap();
+    store.close().unwrap();
+
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute("DROP TABLE dashboard_status", [])
+        .unwrap();
+    connection
+        .execute("UPDATE schema_version SET version = 2", [])
+        .unwrap();
+    drop(connection);
+
+    let status = inspect_status_at(&path, "").unwrap();
+    assert_eq!(status.provider_failure_count, 0);
+    assert!(!status.circuit_open);
+    assert_eq!(status.provider_last_error, None);
+    assert_eq!(status.daemon_started_at, None);
+    assert_eq!(status.last_run_status, None);
+    assert_eq!(status.next_run_at, None);
+
+    let connection = Connection::open(&path).unwrap();
+    let version: i64 = connection
+        .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 2, "a read-only status inspection must not migrate");
 }
 
 #[test]

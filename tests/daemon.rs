@@ -63,3 +63,34 @@ fn explicit_daemon_lifecycle_is_exclusive_private_and_clean() {
     let stopped_again = run("stop");
     assert!(stopped_again.status.success(), "{:?}", stopped_again.stderr);
 }
+
+#[test]
+fn status_reports_read_only_uptime_while_the_daemon_runs_and_reverts_after_stop() {
+    let home = tempdir().unwrap();
+    let run = |command: &str| {
+        Command::new(env!("CARGO_BIN_EXE_b9"))
+            .env("HOME", home.path())
+            .arg(command)
+            .output()
+            .unwrap()
+    };
+    let started = run("start");
+    assert!(started.status.success(), "{:?}", started.stderr);
+
+    let status = run("st");
+    assert!(status.status.success(), "{:?}", status.stderr);
+    let stdout = String::from_utf8(status.stdout).unwrap();
+    assert!(stdout.contains("Service: running (uptime "));
+
+    let stopped = run("stop");
+    assert!(stopped.status.success(), "{:?}", stopped.stderr);
+
+    let status_after_stop = run("st");
+    assert!(
+        status_after_stop.status.success(),
+        "{:?}",
+        status_after_stop.stderr
+    );
+    let stdout_after_stop = String::from_utf8(status_after_stop.stdout).unwrap();
+    assert!(stdout_after_stop.contains("Service: stopped"));
+}

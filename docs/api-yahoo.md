@@ -59,7 +59,7 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 - Retry only HTTP 429 for no more than five total attempts.
 - Honor numeric `Retry-After` values up to 30 seconds.
 - Use waits of one, two, four, and eight seconds when `Retry-After` is absent or invalid.
-- Return HTTP 401 and 403 as typed terminal-access failures without response bodies.
+- Return HTTP 401 and 403 as distinct typed terminal-access failures, each with its own recovery guidance, without response bodies.
 - Return successful raw bytes without interpreting Yahoo's fantasy JSON shape.
 
 ## Security
@@ -94,3 +94,7 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 ## Fixture Provenance
 
 The scrubbed synthetic fixtures under `tests/fixtures/yahoo/` cover token, league, settings, standings, roster, matchup, weekly-stat, singleton, empty, and malformed shapes. They contain no credentials or personal data.
+
+## Local status and authorization boundary
+
+`b9 st` does not read the Yahoo credential, refresh OAuth, or make a Yahoo request. It reports local synchronization state and directs the operator to explicit `b9 login` or `b9 sync` when live access is required. On those explicit paths, HTTP 401 is classified as an expired session and HTTP 403 as external Yahoo authorization denial, each with distinct recovery guidance; secure-store denial, missing, and malformed outcomes are classified separately. Cached data is retained when a refresh fails.

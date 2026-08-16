@@ -318,6 +318,7 @@ fn start_sync_worker(
 fn run_loop_with(
     listener: UnixListener,
     synchronize: Arc<dyn Fn(crate::store::SyncOrigin) -> String + Send + Sync>,
+    on_schedule: Arc<dyn Fn(u64) + Send + Sync>,
 ) -> Result<(), DaemonError> {
     listener
         .set_nonblocking(true)
@@ -330,6 +331,7 @@ fn run_loop_with(
         &synchronize,
     );
     let mut next_sync = Instant::now() + SCHEDULE_INTERVAL;
+    on_schedule(timestamp() + SCHEDULE_INTERVAL.as_secs());
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
@@ -371,6 +373,7 @@ fn run_loop_with(
                 &synchronize,
             );
             next_sync = Instant::now() + SCHEDULE_INTERVAL;
+            on_schedule(timestamp() + SCHEDULE_INTERVAL.as_secs());
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -378,7 +381,15 @@ fn run_loop_with(
 
 #[cfg(unix)]
 fn run_loop(listener: UnixListener) -> Result<(), DaemonError> {
-    run_loop_with(listener, Arc::new(run_sync))
+    run_loop_with(
+        listener,
+        Arc::new(run_sync),
+        Arc::new(|next_run_at| {
+            if let Ok(mut store) = crate::store::Store::open() {
+                let _ = store.record_next_run_at(next_run_at as i64);
+            }
+        }),
+    )
 }
 
 /// Run the hidden foreground daemon entry point.
@@ -404,10 +415,16 @@ pub fn run() -> Result<String, DaemonError> {
             fs::set_permissions(&paths.control, fs::Permissions::from_mode(0o600))
                 .map_err(|error| DaemonError::new("protect daemon control", error))?;
         }
+        if let Ok(mut store) = crate::store::Store::open() {
+            let _ = store.record_daemon_started();
+        }
         log("b9 daemon started");
         let result = run_loop(listener);
         drop(owner);
         let _ = fs::remove_file(&paths.control);
+        if let Ok(mut store) = crate::store::Store::open() {
+            let _ = store.record_daemon_stopped();
+        }
         log("b9 daemon stopped");
         result.map(|()| String::new())
     }
@@ -423,7 +440,7 @@ mod tests {
     };
     use std::time::{Duration, Instant};
 
-    use super::{claim, run_loop_with};
+    use super::{claim, run_loop_with, timestamp};
 
     #[test]
     fn held_lock_rejects_overlap_and_stale_file_recovers_after_release() {
@@ -453,6 +470,7 @@ mod tests {
                     worker_completed.store(true, Ordering::Release);
                     "finished".into()
                 }),
+                Arc::new(|_| {}),
             )
             .unwrap();
         });
@@ -471,5 +489,35 @@ mod tests {
         assert_eq!(response, "stopping\n");
         loop_thread.join().unwrap();
         assert!(completed.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn startup_publishes_the_next_scheduled_run_without_touching_the_store() {
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("daemon.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let scheduled = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&scheduled);
+        let before = timestamp();
+        let loop_thread = std::thread::spawn(move || {
+            run_loop_with(
+                listener,
+                Arc::new(|_| "finished".into()),
+                Arc::new(move |next_run_at| recorded.lock().unwrap().push(next_run_at)),
+            )
+            .unwrap();
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while scheduled.lock().unwrap().is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut stop = UnixStream::connect(&socket).unwrap();
+        stop.write_all(b"stop\n").unwrap();
+        let mut response = String::new();
+        stop.read_to_string(&mut response).unwrap();
+        loop_thread.join().unwrap();
+        let recorded = scheduled.lock().unwrap();
+        assert_eq!(recorded.len(), 1);
+        assert!(recorded[0] >= before + super::SCHEDULE_INTERVAL.as_secs());
     }
 }

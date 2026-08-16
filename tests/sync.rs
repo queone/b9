@@ -209,6 +209,63 @@ fn application_boundaries_remain_layered() {
 }
 
 #[test]
+fn circuit_opens_after_five_failures_and_closes_on_recovery() {
+    let directory = tempdir().unwrap();
+    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut identities = |_| Vec::new();
+    for _ in 0..5 {
+        assert!(
+            synchronize_with_origin(
+                &Source { fail_rosters: true },
+                &mut store,
+                "mlb.l.1",
+                SyncOrigin::Manual,
+                &mut identities,
+            )
+            .is_err()
+        );
+    }
+    let opened = store.dashboard_status().unwrap();
+    assert!(opened.circuit_open);
+    assert_eq!(opened.provider_failure_count, 5);
+    synchronize_with_origin(
+        &Source {
+            fail_rosters: false,
+        },
+        &mut store,
+        "mlb.l.1",
+        SyncOrigin::Manual,
+        &mut identities,
+    )
+    .unwrap();
+    let recovered = store.dashboard_status().unwrap();
+    assert!(!recovered.circuit_open);
+    assert_eq!(recovered.provider_failure_count, 0);
+}
+
+#[test]
+fn local_status_reports_real_identities_once_a_league_has_synced() {
+    let directory = tempdir().unwrap();
+    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut identities = |_| Vec::new();
+    let before = inspect_status_at(store.path(), "mlb.l.1").unwrap();
+    assert_eq!(before.yahoo_identity_count, 0);
+    assert_eq!(before.mlb_identity_count, 0);
+    synchronize_with(
+        &Source {
+            fail_rosters: false,
+        },
+        &mut store,
+        "mlb.l.1",
+        &mut identities,
+    )
+    .unwrap();
+    let after = inspect_status_at(store.path(), "mlb.l.1").unwrap();
+    assert_eq!(after.yahoo_identity_count, 2);
+    assert_eq!(after.unmatched_player_count, 2);
+}
+
+#[test]
 fn all_callers_record_the_shared_synchronization_service_origin() {
     let directory = tempdir().unwrap();
     let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();

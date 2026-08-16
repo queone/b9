@@ -28,9 +28,14 @@ pub enum YahooError {
     Configuration(&'static str),
     Authorization(&'static str),
     Credential(&'static str),
+    CredentialDenied,
+    CredentialUnavailable,
+    CredentialMissing,
+    CredentialMalformed,
     NotAuthenticated,
     SessionExpired,
-    TerminalAccess { status: u16 },
+    Unauthorized,
+    Forbidden,
     RateLimited,
     InvalidPath(&'static str),
     Request(&'static str),
@@ -40,7 +45,7 @@ pub enum YahooError {
 impl YahooError {
     /// Report whether this failure must terminate the current Yahoo operation cycle.
     pub fn is_terminal_access(&self) -> bool {
-        matches!(self, Self::TerminalAccess { .. })
+        matches!(self, Self::Unauthorized | Self::Forbidden)
     }
 }
 
@@ -59,11 +64,31 @@ impl fmt::Display for YahooError {
                 formatter,
                 "access Yahoo credential: {detail}; unlock or configure the operating-system credential store and retry"
             ),
+            Self::CredentialDenied => write!(
+                formatter,
+                "access Yahoo credential: Keychain access was denied; allow b9 in Keychain and retry"
+            ),
+            Self::CredentialUnavailable => write!(
+                formatter,
+                "access Yahoo credential: secure credential storage is unavailable; enable the macOS Keychain and retry"
+            ),
+            Self::CredentialMissing => write!(
+                formatter,
+                "access Yahoo credential: no Yahoo credential is stored; run b9 login and retry"
+            ),
+            Self::CredentialMalformed => write!(
+                formatter,
+                "access Yahoo credential: stored credential is malformed; run b9 login and retry"
+            ),
             Self::NotAuthenticated => write!(formatter, "not authenticated — run: b9 login"),
             Self::SessionExpired => write!(formatter, "session expired — run: b9 login"),
-            Self::TerminalAccess { status } => write!(
+            Self::Unauthorized => write!(
                 formatter,
-                "Yahoo API returned HTTP {status}; run b9 login and retry"
+                "Yahoo API returned HTTP 401; session expired — run b9 login and retry"
+            ),
+            Self::Forbidden => write!(
+                formatter,
+                "Yahoo API returned HTTP 403; Yahoo denied authorization for this app — run b9 login to reauthorize, or verify Fantasy API access with Yahoo if the issue persists"
             ),
             Self::RateLimited => write!(
                 formatter,
@@ -260,8 +285,8 @@ impl YahooCredentialStore for KeyringYahooCredentialStore {
     fn load(&self) -> Result<Option<String>, YahooError> {
         match self.entry()?.get_password() {
             Ok(value) => Ok(Some(value)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(YahooError::Credential("read secure credential entry")),
+            Err(keyring::Error::NoEntry) => Err(YahooError::CredentialMissing),
+            Err(_) => Err(YahooError::CredentialDenied),
         }
     }
 
@@ -478,10 +503,11 @@ impl YahooClient {
                 fallback = (fallback * 2).min(Duration::from_secs(30));
                 continue;
             }
-            if matches!(response.status, 401 | 403) {
-                return Err(YahooError::TerminalAccess {
-                    status: response.status,
-                });
+            if response.status == 401 {
+                return Err(YahooError::Unauthorized);
+            }
+            if response.status == 403 {
+                return Err(YahooError::Forbidden);
             }
             if response.status != 200 {
                 return Err(YahooError::Request(
@@ -662,8 +688,8 @@ impl YahooClient {
         state.token = match self.credentials.load()? {
             None => None,
             Some(encoded) => {
-                let token: YahooToken = serde_json::from_str(&encoded)
-                    .map_err(|_| YahooError::Credential("stored credential is malformed"))?;
+                let token: YahooToken =
+                    serde_json::from_str(&encoded).map_err(|_| YahooError::CredentialMalformed)?;
                 validate_stored_token(&token)?;
                 Some(token)
             }
@@ -752,7 +778,7 @@ fn validate_stored_token(token: &YahooToken) -> Result<(), YahooError> {
             .checked_add(Duration::from_secs(token.expires_at))
             .is_none()
     {
-        return Err(YahooError::Credential("stored credential is malformed"));
+        return Err(YahooError::CredentialMalformed);
     }
     Ok(())
 }
@@ -857,9 +883,7 @@ fn require_secure_backend(available: bool) -> Result<(), YahooError> {
     if available {
         Ok(())
     } else {
-        Err(YahooError::Credential(
-            "secure credential backend is unavailable",
-        ))
+        Err(YahooError::CredentialUnavailable)
     }
 }
 
@@ -872,9 +896,7 @@ mod tests {
         assert_eq!(require_secure_backend(true), Ok(()));
         assert_eq!(
             require_secure_backend(false),
-            Err(YahooError::Credential(
-                "secure credential backend is unavailable"
-            ))
+            Err(YahooError::CredentialUnavailable)
         );
     }
 }

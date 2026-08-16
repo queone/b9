@@ -322,7 +322,7 @@ where
         Some(("logout", _)) => run_result(crate::sync::logout(), false),
         Some(("st", _)) => run_result(
             crate::sync::status(matches.get_one::<String>("league").map(String::as_str)),
-            true,
+            false,
         ),
         Some(("sync", subcommand)) => run_result(
             crate::sync::synchronize_with_options(

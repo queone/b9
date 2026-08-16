@@ -285,6 +285,21 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     counts     TEXT                                -- JSON: {"mlbam_hitting": 450, ...}
 );
 
+CREATE TABLE IF NOT EXISTS dashboard_status (
+    id                         INTEGER PRIMARY KEY CHECK (id = 1),
+    daemon_started_at          INTEGER,
+    daemon_stopped_at          INTEGER,
+    last_run_at                INTEGER,
+    last_run_status            TEXT,
+    next_run_at                INTEGER,
+    provider_last_success_at   INTEGER,
+    provider_last_failure_at   INTEGER,
+    provider_failure_count     INTEGER NOT NULL DEFAULT 0,
+    circuit_open               INTEGER NOT NULL DEFAULT 0,
+    last_error                 TEXT NOT NULL DEFAULT '',
+    provider_freshness_at      INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS projection_seasons (
     player_id   INTEGER NOT NULL,
     season      INTEGER NOT NULL,

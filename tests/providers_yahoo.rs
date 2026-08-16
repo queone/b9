@@ -499,7 +499,7 @@ fn credential_status_distinguishes_absent_malformed_and_failure() {
         );
         assert!(matches!(
             malformed.token_status(),
-            Err(YahooError::Credential(_))
+            Err(YahooError::CredentialMalformed)
         ));
     }
     let failed = Arc::new(FakeCredentials::default());
@@ -732,6 +732,14 @@ fn terminal_and_other_statuses_are_typed_and_secret_safe() {
         );
         let error = client.get_raw("/x").unwrap_err();
         assert!(error.is_terminal_access());
+        assert_eq!(
+            error,
+            if status == 401 {
+                YahooError::Unauthorized
+            } else {
+                YahooError::Forbidden
+            }
+        );
         let text = format!("{error:?} {error}");
         assert!(!text.contains("secret response body"));
         assert!(!text.contains("secret-access"));
@@ -757,6 +765,18 @@ fn terminal_and_other_statuses_are_typed_and_secret_safe() {
             .to_string()
             .contains("private provider detail")
     );
+}
+
+#[test]
+fn unauthorized_and_forbidden_carry_distinct_recovery_guidance() {
+    let unauthorized = YahooError::Unauthorized.to_string();
+    let forbidden = YahooError::Forbidden.to_string();
+    assert_ne!(unauthorized, forbidden);
+    assert!(unauthorized.contains("401"));
+    assert!(unauthorized.contains("b9 login"));
+    assert!(forbidden.contains("403"));
+    assert!(forbidden.contains("b9 login"));
+    assert!(forbidden.contains("Yahoo denied authorization"));
 }
 
 #[test]

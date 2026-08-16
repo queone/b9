@@ -115,6 +115,14 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep advisory credentials in environment or keyring boundaries and persist only provider/model selection.
 - Keep rejected automated provider acquisition unreachable from commands, synchronization, transport, and adapters.
 
+### Status dashboard boundary
+
+- Keep status rendering local-first and read-only with respect to Yahoo credentials and provider traffic.
+- Store dashboard lifecycle, provider freshness, bounded failure, and circuit fields in the versioned b9 database.
+- Keep explicit login and synchronization as the only live authorization boundaries.
+- Let the daemon persist its own next-scheduled-run time to the store so status reads never contact the running daemon process.
+- Classify Yahoo HTTP 401 and 403 as distinct typed failures with distinct recovery guidance, since 403 is an external authorization condition b9 does not remediate.
+
 ## Conventions
 
 - update this document when architecture or major workflow changes materially

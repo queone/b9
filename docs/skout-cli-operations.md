@@ -248,6 +248,16 @@ No crate, framework, or compatibility change is selected.
 - Exercise terminal selectors in a supported interactive terminal.
 - Keep live failures from substituting for deterministic pre-release regression coverage.
 
+### b9 status boundary
+
+- Keep `b9 st` local-first: it reads cached configuration and durable status only.
+- Require explicit `b9 login` or `b9 sync` before accessing Yahoo or the macOS Keychain.
+- Render an empty store as unavailable freshness and identity state with `No local snapshot; run b9 sync.` rather than fabricated zero totals.
+- Preserve the last successful snapshot and report bounded provider failures locally.
+- Render the dashboard fields in settled, fixed order: service state and uptime, last/next scheduled run and completion state, database path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit state and bounded last error, unmatched-player count, then selected league and config paths.
+- Persist the daemon's next scheduled synchronization time to the durable store at startup and after every reschedule so `b9 st` can report it without contacting the running daemon process.
+- Read an unmigrated, older-schema database without erroring: report its actual schema version and fall back to default dashboard fields rather than requiring a migration to read status.
+
 ## Proposed Rust Implementation Slices
 
 | Slice | Prerequisites | Delivered contracts | Required tests | Explicit exclusions |

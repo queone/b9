@@ -2,18 +2,20 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::io::{BufRead, IsTerminal, Write};
+use std::io::{BufRead, Write};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config;
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
 use crate::store::{
-    CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, Store, SyncMode,
-    SyncOrigin,
+    CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, Store, StoreStatus,
+    SyncMode, SyncOrigin,
 };
+use crate::terminal::{self, HelpColorMode};
 use crate::transport::HttpClient;
 
 /// One user-facing fantasy workflow failure.
@@ -117,87 +119,242 @@ pub fn logout() -> Result<String, WorkflowError> {
     Ok("Yahoo logout complete.\n".into())
 }
 
-/// Render production status and optionally persist a validated league selection.
+/// Render local-first status without accessing Yahoo or the operating-system credential store.
 pub fn status(requested_league: Option<&str>) -> Result<String, WorkflowError> {
-    let yahoo = production_yahoo()?;
-    let source = YahooFantasyClient::new(yahoo.clone());
-    let token = yahoo
-        .token_status()
-        .map_err(|error| WorkflowError::context("read Yahoo status", error))?;
     let mut config =
         config::read().map_err(|error| WorkflowError::context("read configuration", error))?;
-    let leagues = if token.valid || token.has_refresh {
-        source
-            .user_leagues()
-            .map_err(|error| WorkflowError::context("discover leagues", error))?
-    } else {
-        Vec::new()
-    };
-    let mut input = std::io::BufReader::new(std::io::stdin());
-    let mut prompt = Vec::new();
-    let selected = select_league(
-        &leagues,
-        requested_league,
-        std::io::stdin().is_terminal(),
-        &mut input,
-        &mut prompt,
-    )?;
-    if let Some(selected) = selected
+    if let Some(selected) = requested_league.filter(|value| !value.trim().is_empty())
         && config.current_league != selected
     {
-        config.current_league = selected;
+        config.current_league = selected.to_owned();
         config.current_team_key.clear();
         config::write(&config)
             .map_err(|error| WorkflowError::context("save league selection", error))?;
     }
     let database = crate::store::database_path()
         .map_err(|error| WorkflowError::context("resolve database status", error))?;
-    let database_state = if Path::new(&database).is_file() {
-        "present"
-    } else {
-        "absent"
-    };
+    let config_path = config::config_path()
+        .map_err(|error| WorkflowError::context("resolve configuration path", error))?;
     let store_status = crate::store::inspect_status_at(&database, &config.current_league)
         .map_err(|error| WorkflowError::context("inspect database status", error))?;
-    let mut output = String::from_utf8(prompt)
-        .map_err(|error| WorkflowError::context("render league selection", error))?;
-    output.push_str(&format!(
-        "Yahoo: {}\nDatabase: {}\nSelected league: {}\n",
-        if token.valid {
-            "authenticated"
-        } else if token.has_refresh {
-            "refresh required"
-        } else {
-            "not authenticated"
-        },
-        database_state,
-        if config.current_league.is_empty() {
-            "none"
-        } else {
-            &config.current_league
-        }
-    ));
-    output.push_str(&format!(
-        "League freshness: {}\nLatest sync: {}\n",
-        store_status
-            .league_synced_at
-            .map_or_else(|| "none".into(), |value| format!("unix {value}")),
-        store_status.latest_sync_status.map_or_else(
-            || "none".into(),
-            |status| format!(
-                "{} at unix {}",
-                status,
-                store_status.latest_sync_at.unwrap_or_default()
-            )
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or_default();
+    Ok(render_dashboard(
+        &database,
+        &config_path,
+        &config,
+        &store_status,
+        now,
+        terminal::detected_help_color_mode(),
+    ))
+}
+
+/// Format elapsed seconds as a fixed `HhMmSs` uptime string.
+fn format_duration(seconds: u64) -> String {
+    format!(
+        "{}h {}m {}s",
+        seconds / 3600,
+        (seconds % 3600) / 60,
+        seconds % 60
+    )
+}
+
+/// Render the settled, fixed-order `b9 st` dashboard.
+///
+/// Field order is contracted by AT3/AT8: service state and uptime, last/next
+/// run and completion state, database path/size/schema, MLB/Yahoo identity
+/// counts, provider freshness, circuit state and bounded last error,
+/// unmatched-player count, then selected league/config paths.
+pub fn render_dashboard(
+    database_path: &Path,
+    config_path: &Path,
+    config: &config::Config,
+    status: &StoreStatus,
+    now: i64,
+    mode: HelpColorMode,
+) -> String {
+    let has_snapshot = status.mlb_identity_count > 0 || status.unmatched_player_count > 0;
+    let daemon_running = status.daemon_started_at.is_some() && status.daemon_stopped_at.is_none();
+
+    let service = if daemon_running {
+        let uptime = status
+            .daemon_started_at
+            .map_or(0, |started| (now - started).max(0) as u64);
+        terminal::good(
+            &format!("running (uptime {})", format_duration(uptime)),
+            mode,
         )
-    ));
-    if !leagues.is_empty() {
-        output.push_str("Leagues:\n");
-        for league in leagues {
-            output.push_str(&format!("  {}  {}\n", league.league_key, league.name));
+    } else {
+        terminal::dim("stopped", mode)
+    };
+
+    let last_run = match (&status.last_run_status, status.last_run_at) {
+        (Some(run_status), Some(at)) if run_status == "success" => {
+            terminal::good(&format!("{run_status} at unix {at}"), mode)
         }
+        (Some(run_status), Some(at)) => {
+            terminal::warning(&format!("{run_status} at unix {at}"), mode)
+        }
+        _ => terminal::dim("none", mode),
+    };
+    let next_run = if !daemon_running {
+        terminal::dim("not scheduled (daemon stopped)", mode)
+    } else {
+        status.next_run_at.map_or_else(
+            || terminal::dim("unavailable", mode),
+            |at| format!("unix {at}"),
+        )
+    };
+
+    let database = format!(
+        "{} ({}, schema {})",
+        database_path.display(),
+        status
+            .database_bytes
+            .map_or_else(|| "absent".to_owned(), |bytes| format!("{bytes} bytes")),
+        status
+            .schema_version
+            .map_or_else(|| "unknown".to_owned(), |version| format!("v{version}"))
+    );
+
+    let identities = if has_snapshot {
+        format!(
+            "{} MLB, {} Yahoo",
+            status.mlb_identity_count, status.yahoo_identity_count
+        )
+    } else {
+        terminal::dim("unavailable", mode)
+    };
+
+    let provider_freshness = if !has_snapshot {
+        terminal::dim("unavailable", mode)
+    } else {
+        status
+            .provider_freshness_at
+            .map_or_else(|| terminal::dim("none", mode), |at| format!("unix {at}"))
+    };
+
+    let circuit = format!(
+        "{} ({} failed requests)",
+        if status.circuit_open {
+            terminal::warning("open", mode)
+        } else {
+            terminal::good("closed", mode)
+        },
+        status.provider_failure_count
+    );
+    let last_error = status
+        .provider_last_error
+        .as_deref()
+        .unwrap_or("none")
+        .to_owned();
+
+    let unmatched = if has_snapshot {
+        status.unmatched_player_count.to_string()
+    } else {
+        terminal::dim("unavailable", mode)
+    };
+
+    let selected_league = if config.current_league.is_empty() {
+        "none"
+    } else {
+        &config.current_league
+    };
+
+    let mut output = format!(
+        "Yahoo: not checked (run b9 login or b9 sync)\n\
+         Service: {service}\n\
+         Last run: {last_run}\n\
+         Next run: {next_run}\n\
+         Database: {database}\n\
+         Identities: {identities}\n\
+         Provider freshness: {provider_freshness}\n\
+         Circuit: {circuit}\n\
+         Last provider error: {last_error}\n\
+         Unmatched players: {unmatched}\n\
+         League: {selected_league}\n\
+         Config: {}\n",
+        config_path.display()
+    );
+    if !has_snapshot {
+        output.push_str("No local snapshot; run b9 sync.\n");
     }
-    Ok(output)
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_dashboard;
+    use crate::config::Config;
+    use crate::store::StoreStatus;
+    use crate::terminal::HelpColorMode;
+    use std::path::Path;
+
+    #[test]
+    fn local_status_empty_snapshot_is_explicit_and_nonzero_free() {
+        let output = render_dashboard(
+            Path::new("/absent/b9.db"),
+            Path::new("/absent/config.json"),
+            &Config::default(),
+            &StoreStatus::default(),
+            0,
+            HelpColorMode::Plain,
+        );
+        assert!(output.contains("Yahoo: not checked (run b9 login or b9 sync)"));
+        assert!(output.contains("Service: stopped"));
+        assert!(output.contains("Last run: none"));
+        assert!(output.contains("Next run: not scheduled (daemon stopped)"));
+        assert!(output.contains("Database: /absent/b9.db (absent, schema unknown)"));
+        assert!(output.contains("Identities: unavailable"));
+        assert!(output.contains("Provider freshness: unavailable"));
+        assert!(output.contains("Circuit: closed (0 failed requests)"));
+        assert!(output.contains("Unmatched players: unavailable"));
+        assert!(output.contains("League: none"));
+        assert!(output.contains("Config: /absent/config.json"));
+        assert!(output.contains("No local snapshot; run b9 sync."));
+        assert!(!output.contains("0 MLB"));
+        assert!(!output.contains("Unmatched players: 0"));
+    }
+
+    #[test]
+    fn populated_snapshot_reports_real_counts_without_the_no_snapshot_hint() {
+        let status = StoreStatus {
+            mlb_identity_count: 512,
+            yahoo_identity_count: 480,
+            unmatched_player_count: 6,
+            provider_freshness_at: Some(100),
+            daemon_started_at: Some(40),
+            last_run_status: Some("success".into()),
+            last_run_at: Some(100),
+            next_run_at: Some(200),
+            database_bytes: Some(1024),
+            schema_version: Some(3),
+            ..StoreStatus::default()
+        };
+        let config = Config {
+            current_league: "431.l.12345".into(),
+            ..Config::default()
+        };
+        let output = render_dashboard(
+            Path::new("/srv/b9/.config/b9/b9.db"),
+            Path::new("/srv/b9/.config/b9/config.json"),
+            &config,
+            &status,
+            160,
+            HelpColorMode::Plain,
+        );
+        assert!(output.contains("Service: running (uptime 0h 2m 0s)"));
+        assert!(output.contains("Last run: success at unix 100"));
+        assert!(output.contains("Next run: unix 200"));
+        assert!(output.contains("Database: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)"));
+        assert!(output.contains("Identities: 512 MLB, 480 Yahoo"));
+        assert!(output.contains("Provider freshness: unix 100"));
+        assert!(output.contains("Unmatched players: 6"));
+        assert!(output.contains("League: 431.l.12345"));
+        assert!(!output.contains("No local snapshot"));
+    }
 }
 
 /// Choose a visible league through an injectable terminal boundary.
@@ -366,10 +523,14 @@ pub fn synchronize_with_origin(
         store
             .complete_sync_run(run, &counts)
             .map_err(|error| WorkflowError::context("complete sync run", error))?;
+        store
+            .record_provider_success()
+            .map_err(|error| WorkflowError::context("record provider success", error))?;
         Ok(summary)
     })();
-    if result.is_err() {
+    if let Err(error) = &result {
         let _ = store.fail_sync_run(run);
+        let _ = store.record_provider_failure(&error.to_string());
     }
     result
 }

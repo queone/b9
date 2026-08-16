@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use b9::store::{
-    Clock, ItemRefreshPolicy, RowRefreshPolicy, SeasonSyncStatus, Store, SyncMode, SyncOrigin,
-    SyncRunStatus, SyncStateStatus,
+    Clock, ItemRefreshPolicy, RowRefreshPolicy, SeasonSyncStatus, Store, StoreError, SyncMode,
+    SyncOrigin, SyncRunStatus, SyncStateStatus,
 };
 use rusqlite::Connection;
 use tempfile::tempdir;
@@ -610,4 +610,98 @@ fn corrupt_enum_json_timestamp_and_sqlite_reads_are_errors() {
             .needs_sync_item("mlb", "hitting", "", &item_policy(1, false, "v1"))
             .is_err()
     );
+}
+
+#[test]
+fn dashboard_status_persists_daemon_provider_and_schedule_fields_across_reopen() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("state.db");
+    let clock = AdjustableClock::at(1_000);
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
+    store.record_daemon_started().unwrap();
+    store.record_provider_success().unwrap();
+    store.record_next_run_at(1_500).unwrap();
+    store.close().unwrap();
+
+    let reopened = Store::open_at_with_clock(&path, Arc::new(clock)).unwrap();
+    let dashboard = reopened.dashboard_status().unwrap();
+    assert_eq!(dashboard.provider_last_success_at, Some(1_000));
+    assert_eq!(dashboard.provider_freshness_at, Some(1_000));
+    assert_eq!(dashboard.last_run_status.as_deref(), Some("success"));
+    assert_eq!(dashboard.next_run_at, Some(1_500));
+    assert!(!dashboard.circuit_open);
+}
+
+#[test]
+fn stale_fallback_preserves_last_success_and_freshness_through_a_later_failure() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("state.db");
+    let clock = AdjustableClock::at(2_000);
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
+    store.record_provider_success().unwrap();
+    clock.set(2_600);
+    store.record_provider_failure("HTTP 403").unwrap();
+    let dashboard = store.dashboard_status().unwrap();
+    assert_eq!(dashboard.provider_last_success_at, Some(2_000));
+    assert_eq!(dashboard.provider_freshness_at, Some(2_000));
+    assert_eq!(dashboard.provider_last_failure_at, Some(2_600));
+    assert_eq!(dashboard.last_run_status.as_deref(), Some("failed"));
+}
+
+#[test]
+fn daemon_restart_clears_the_stale_stopped_timestamp() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("state.db");
+    let clock = AdjustableClock::at(1_000);
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
+    store.record_daemon_started().unwrap();
+    clock.set(1_100);
+    store.record_daemon_stopped().unwrap();
+    clock.set(1_200);
+    store.record_daemon_started().unwrap();
+    let raw = Connection::open(&path).unwrap();
+    let (started_at, stopped_at): (i64, Option<i64>) = raw
+        .query_row(
+            "SELECT daemon_started_at, daemon_stopped_at FROM dashboard_status WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(started_at, 1_200);
+    assert_eq!(
+        stopped_at, None,
+        "a restart must clear the prior stop timestamp"
+    );
+}
+
+#[test]
+fn dashboard_status_writes_roll_back_and_preserve_prior_state_on_injected_failure() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("state.db");
+    let clock = AdjustableClock::at(1_000);
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
+    store.record_provider_success().unwrap();
+    store.close().unwrap();
+
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute("ALTER TABLE dashboard_status DROP COLUMN last_error", [])
+        .unwrap();
+    drop(connection);
+
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock)).unwrap();
+    let error = store.record_provider_failure("HTTP 403").unwrap_err();
+    assert!(matches!(error, StoreError::Operation { .. }));
+
+    let connection = Connection::open(&path).unwrap();
+    let (failure_count, circuit_open, failure_at): (i64, i64, Option<i64>) = connection
+        .query_row(
+            "SELECT provider_failure_count, circuit_open, provider_last_failure_at FROM dashboard_status WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(failure_count, 0);
+    assert_eq!(circuit_open, 0);
+    assert_eq!(failure_at, None);
 }

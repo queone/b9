@@ -18,7 +18,7 @@ Run `b9` or `b9 --help` to see the implemented command surface in b9's compact U
 
 Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout. Ambiguous non-interactive lookups report matching keys and ask for an exact key.
 
-Use `b9 login`, `st`, and `sync` for Yahoo setup and foreground refresh; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; `lm` for advisory-provider configuration; and `start`, `stop`, `restart`, `log`, `fetch`, and `reset` for explicit operations. Tables preserve skout's column order, fixed-width hierarchy, semantic 256-color roles, and plain redirected fallback wherever the available Rust data model supports the corresponding cells. Deferred PQS, PQT, and StartHoldScore cells remain explicit gaps rather than fabricated values.
+Use `b9 login`, `st`, and `sync` for Yahoo setup and foreground refresh; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; `lm` for advisory-provider configuration; and `start`, `stop`, `restart`, `log`, `fetch`, and `reset` for explicit operations. `b9 st` is local-first and never prompts for Keychain access or contacts Yahoo; run `b9 login` or `b9 sync` explicitly for live authorization. Tables preserve skout's column order, fixed-width hierarchy, semantic 256-color roles, and plain redirected fallback wherever the available Rust data model supports the corresponding cells. Deferred PQS, PQT, and StartHoldScore cells remain explicit gaps rather than fabricated values.
 
 ## Governance
 
