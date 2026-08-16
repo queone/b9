@@ -29,7 +29,8 @@ Analysis, display, and advisory detailed inventory: [`docs/skout-analysis-displa
 - Implement the bounded MLB PS-4 metadata and live-game sub-slice with typed acquisition, identity batching, and schedule caching.
 - Implement the bounded MLB PS-4 statistics sub-slice with typed bulk identity, date-range caching, game logs, and deterministic quality-start aggregation.
 - Implement the Yahoo PS-4 authentication and authenticated raw-request foundation with secure credentials and single-flight refresh.
-- Defer Yahoo fantasy parsing and persistence, other remaining MLB acquisition, PS-5 scrapers, and PS-6 command integration to separate governed ACs.
+- Implement the first vertical fantasy workflow with `login`, `logout`, `st`, foreground `sync`, baseline `m`, Yahoo normalization, stable persistence, durable weekly fallback, MLB identity reconciliation, and optional ESPN odds context.
+- Defer remaining command integration, deeper matchup modes, background operation, remaining providers, scrapers, analysis, and advisory work to later governed ACs.
 
 ## Ideas To Explore
 

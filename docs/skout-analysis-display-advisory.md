@@ -233,17 +233,17 @@ Require the Director to record rationale and accept residual risk before a waive
 |---|---|---|---|---|---|---|---|---|
 | CORE-DOMAIN | DOM-* | SLICE-DOM | COMPLETE | PASS | NOT REQUIRED | NONE | `src/domain.rs` and `tests/domain.rs`; no migration required for the internal, non-persisted model | READY |
 | AN-SIGNALS | AN-*, FORM-* | analysis slices | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | No conflict | NOT READY |
-| DISP-TABLES | DISP-* | view/display slices | PARTIAL | NOT RUN | PENDING | NONE | Plain glossary rendering implemented; ANSI, visible-width tables, and LIVE-TERM pending | NOT READY |
+| DISP-TABLES | DISP-* | view/display slices | PARTIAL | PASS | PENDING | NONE | Plain glossary and deterministic baseline matchup rendering implemented; full table/card surfaces and LIVE-TERM pending | NOT READY |
 | ADV-LLM | ADV-* | advisory slices | NOT STARTED | NOT RUN | PENDING | RESOLVED | DESIGN-003 resolves DO-006; live gates pending | NOT READY |
 | CLI-PLAYER | CMD-POOL/CARD/H/P | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
-| CLI-MATCH | CMD-MATCH/ADV-CLI | SLICE-PARITY | NOT STARTED | NOT RUN | PENDING | NONE | Prior inventories authoritative | NOT READY |
+| CLI-MATCH | CMD-MATCH/ADV-CLI | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Current and selected-week baseline, category results, roster rows, stale fallback, and optional current odds implemented; extended weekly/day/advisory behavior pending | NOT READY |
 | CLI-ROSTER | CMD-ROSTER | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
 | CLI-TOTALS | CMD-RT/TT | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
 | CLI-SP | CMD-SP | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Provider inventory authoritative | NOT READY |
 | CLI-TEAM | CMD-TEAM | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Prior inventories authoritative | NOT READY |
 | CLI-GLOSSARY | CMD-WHAT/DISP-GLOSS | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Embedded parsing, lookup, suggestions, and plain rendering tested; selector and ANSI deferred | NOT READY |
 
-Deterministic Skout-style root-help layout, ANSI-role, and plain-fallback tests provide CLI-ROOT evidence only. They do not complete TEST-DISP, LIVE-TERM, CLI-GLOSSARY, or DISP-TABLES and do not change the readiness values above.
+Deterministic Skout-style root-help and baseline matchup tests provide CLI-ROOT, partial CLI-MATCH, and partial DISP-TABLES evidence. They do not complete TEST-DISP, LIVE-TERM, CLI-GLOSSARY, extended matchup behavior, or the remaining display surfaces.
 
 Use only the fixed AC status vocabularies. Mark a Required capability READY only after COMPLETE implementation, PASS deterministic tests, PASS live checks or an accepted waiver, resolved decisions, and no executable conflict. Keep aggregate readiness NOT READY while any Required capability is NOT READY.
 

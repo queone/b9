@@ -1,0 +1,1 @@
+{"empty":{"data":[]},"multiple":{"data":[{"league_key":"mlb.l.1","name":"One"},{"league_key":"mlb.l.2","name":"Two"}]},"missing_team":{"data":[{"league_key":"mlb.l.1","name":"One"}]},"playoff":{"data":[]},"malformed":{"data":"not-a-collection"}}

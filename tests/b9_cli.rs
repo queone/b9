@@ -15,7 +15,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "b9 v0.1.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
+        "b9 v0.12.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  m                            Show the baseline weekly matchup\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
     for form in [
@@ -29,9 +29,6 @@ fn root_help_forms_share_the_golden_surface() {
         assert_eq!(output.stdout, help.as_bytes(), "help form {form:?}");
         assert!(output.stderr.is_empty(), "help form {form:?}");
     }
-    for absent in ["league", "debug", "login", "sync"] {
-        assert!(!help.contains(absent));
-    }
 }
 
 #[test]
@@ -42,7 +39,7 @@ fn command_specific_help_remains_the_shipped_clap_error() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             String::from_utf8(output.stderr).unwrap(),
-            "error: unexpected argument '--help' found\n\n  tip: to pass '--help' as a value, use '-- --help'\n\nUsage: b9 i [TERM]\n"
+            "error: unexpected argument '--help' found\n\n  tip: to pass '--help' as a value, use '-- --help'\n\nUsage: b9 i [OPTIONS] [TERM]\n"
         );
     }
 }
@@ -52,7 +49,7 @@ fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
         let output = b9(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.1.0\n");
+        assert_eq!(output.stdout, b"b9 0.12.0\n");
         assert!(output.stderr.is_empty());
     }
 }
@@ -98,7 +95,7 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
             "i: no glossary entry",
         ),
         (&["i", "run"][..], 1, "i: term"),
-        (&["i", "pa", "extra"][..], 2, "Usage: b9 i [TERM]"),
+        (&["i", "pa", "extra"][..], 2, "Usage: b9 i [OPTIONS] [TERM]"),
         (&["unknown"][..], 2, "unrecognized subcommand"),
     ];
     for (arguments, code, message) in cases {
@@ -107,6 +104,16 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
         assert!(output.stdout.is_empty(), "arguments {arguments:?}");
         let stderr = String::from_utf8(output.stderr).expect("UTF-8 error");
         assert!(stderr.contains(message), "stderr {stderr:?}");
+    }
+}
+
+#[test]
+fn fantasy_commands_have_help_without_side_effects() {
+    for command in ["login", "logout", "st", "sync", "m"] {
+        let output = b9(&[command, "--help"]);
+        assert!(output.status.success(), "command {command}");
+        assert!(output.stderr.is_empty());
+        assert!(String::from_utf8(output.stdout).unwrap().contains("Usage:"));
     }
 }
 

@@ -170,10 +170,37 @@ test_prep_no_build_rejection() {
   pass
 }
 
+test_package_version_synchronization() {
+  local fixture output rc
+  fixture=$(new_fixture) || fail 'create version synchronization fixture'
+  mkdir -p "$fixture/src" "$fixture/tests"
+  printf '[package]\nname = "tool"\nversion = "1.2.3"\n[[bin]]\nname = "tool"\npath = "src/main.rs"\n' >"$fixture/Cargo.toml"
+  printf 'const PROGRAM_VERSION: &str = "1.2.3";\nfn main() {}\n' >"$fixture/src/main.rs"
+  printf '#[test]\nfn tool_cli() {}\n' >"$fixture/tests/tool_cli.rs"
+  (
+    cd "$fixture" || exit 1
+    _load_bin_targets
+    _validate_utility_declarations >/dev/null
+    _validate_package_utility_versions
+    _replace_cargo_version Cargo.toml 1.3.0
+    set +e
+    output=$(_validate_package_utility_versions 2>&1)
+    rc=$?
+    set -e
+    assert_equal "$rc" 1
+    assert_contains "$output" 'version mismatch'
+    _replace_utility_version tool src/main.rs 1.3.0
+    _validate_package_utility_versions
+  ) || fail 'package version synchronization failed'
+  rm -rf -- "$fixture"
+  pass
+}
+
 test_utility_declaration_validation
 test_compiled_version_output
 test_manifest_path_mapping
 test_install_reporting
 test_prep_no_build_rejection
+test_package_version_synchronization
 
 printf 'build CLI tests: %d passed\n' "$test_count"

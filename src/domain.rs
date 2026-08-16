@@ -3,8 +3,10 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// A fantasy-league scoring format.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScoringType {
     Rotisserie,
     HeadToHead,
@@ -42,7 +44,7 @@ impl fmt::Display for ScoringType {
 }
 
 /// A fantasy-roster position.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Position {
     Catcher,
     FirstBase,
@@ -104,7 +106,7 @@ impl fmt::Display for Position {
 }
 
 /// Fantasy-league metadata and scoring configuration.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct League {
     pub league_key: String,
     pub name: String,
@@ -117,7 +119,7 @@ pub struct League {
 }
 
 /// A head-to-head matchup for one week.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Matchup {
     pub week: i32,
     pub week_start: String,
@@ -127,7 +129,7 @@ pub struct Matchup {
 }
 
 /// One fantasy team's state within a weekly matchup.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MatchupTeam {
     pub team_key: String,
     pub team_id: i64,
@@ -157,7 +159,7 @@ impl MatchupTeam {
 }
 
 /// One player's weekly statistics and roster state.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerWeekStats {
     pub yahoo_player_id: i64,
     pub name: String,
@@ -181,12 +183,45 @@ pub struct PlayerWeekStats {
 }
 
 /// A fantasy team's roster and weekly player statistics.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RosterWeekStats {
     pub team_key: String,
     pub team_name: String,
     pub week: i32,
     pub players: Vec<PlayerWeekStats>,
+}
+
+/// One Yahoo fantasy team normalized independently from persistence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FantasyTeam {
+    pub team_key: String,
+    pub league_key: String,
+    pub team_id: i64,
+    pub name: String,
+    pub manager_name: String,
+    pub is_owned_by_current_login: bool,
+}
+
+/// One Yahoo fantasy player normalized independently from persistence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FantasyPlayer {
+    pub yahoo_player_id: i64,
+    pub name: String,
+    pub mlb_team: String,
+    pub display_position: String,
+    pub position_type: String,
+    pub eligible_positions: Vec<Position>,
+    pub injury_status: String,
+    pub percent_owned: Option<f64>,
+    pub yahoo_rank: Option<i64>,
+}
+
+/// One Yahoo roster ownership row using provider identities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FantasyRosterSlot {
+    pub team_key: String,
+    pub yahoo_player_id: i64,
+    pub slot_position: Position,
 }
 
 impl RosterWeekStats {

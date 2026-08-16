@@ -45,13 +45,15 @@ Abort the acquisition when either scoreboard request fails transport, HTTP statu
 
 Keep acquisition separate from persistence. The typed odds store replaces only `moneyline` rows for explicitly affected positive MLB game identifiers in one immediate transaction. It writes either two rows for one quoted game or no rows for one unquoted game, preserves unrelated markets and games, and captures one injected store time per replacement.
 
-Keep these later integration policies outside the adapter and typed store:
+Keep these integration policies outside the adapter and typed store:
 
 - Map ESPN team-name pairs to MLB game identifiers.
 - Apply the 30-minute odds freshness decision.
 - Select stale persisted lines after refresh failure.
-- Render warnings and moneyline-derived probability context.
+- Render moneyline-derived probability context in the baseline matchup when MLB team-pair mapping succeeds.
 - Update command snapshots.
+
+The baseline matchup treats ESPN and MLB enrichment as optional. A failure never suppresses valid Yahoo matchup data.
 
 ## Fixture Provenance
 

@@ -28,6 +28,8 @@ struct CommandDescriptor {
 enum FlagAction {
     Help,
     Version,
+    SetTrue,
+    Value,
 }
 
 #[derive(Clone, Copy)]
@@ -42,6 +44,46 @@ struct FlagDescriptor {
 }
 
 const COMMANDS: &[CommandDescriptor] = &[
+    CommandDescriptor {
+        name: "login",
+        display_label: "login",
+        description: "Authenticate with Yahoo",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "logout",
+        display_label: "logout",
+        description: "Remove Yahoo authentication",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "st",
+        display_label: "st",
+        description: "Show status and select a league",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "sync",
+        display_label: "sync",
+        description: "Synchronize the selected league",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "m",
+        display_label: "m",
+        description: "Show the baseline weekly matchup",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
     CommandDescriptor {
         name: "i",
         display_label: "i [term]",
@@ -64,6 +106,24 @@ const COMMANDS: &[CommandDescriptor] = &[
 ];
 
 const FLAGS: &[FlagDescriptor] = &[
+    FlagDescriptor {
+        id: "league",
+        short: 'l',
+        long: "league",
+        display_label: "-l, --league <key>",
+        description: "Yahoo league key",
+        action: FlagAction::Value,
+        routing_aliases: &[],
+    },
+    FlagDescriptor {
+        id: "debug",
+        short: 'd',
+        long: "debug",
+        display_label: "-d, --debug",
+        description: "Print operation diagnostics",
+        action: FlagAction::SetTrue,
+        routing_aliases: &[],
+    },
     FlagDescriptor {
         id: "version",
         short: 'v',
@@ -104,7 +164,12 @@ where
     let command = root_command(version);
     let matches = match command.try_get_matches_from(arguments) {
         Ok(matches) => matches,
-        Err(error) if matches!(error.kind(), ErrorKind::DisplayVersion) => {
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayVersion | ErrorKind::DisplayHelp
+            ) =>
+        {
             print!("{error}");
             return ExitCode::SUCCESS;
         }
@@ -114,8 +179,35 @@ where
         }
     };
 
+    if matches.get_flag("debug") {
+        let command = matches.subcommand_name().unwrap_or("help");
+        let league = if matches.get_one::<String>("league").is_some() {
+            "override"
+        } else {
+            "saved"
+        };
+        eprintln!("b9 debug: command={command} league_source={league}");
+    }
+
     match matches.subcommand() {
         Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
+        Some(("login", _)) => run_result(crate::sync::login().map(|()| String::new()), false),
+        Some(("logout", _)) => run_result(crate::sync::logout(), false),
+        Some(("st", _)) => run_result(
+            crate::sync::status(matches.get_one::<String>("league").map(String::as_str)),
+            true,
+        ),
+        Some(("sync", _)) => run_result(
+            crate::sync::synchronize(matches.get_one::<String>("league").map(String::as_str)),
+            true,
+        ),
+        Some(("m", subcommand)) => run_result(
+            crate::matchup::show(
+                matches.get_one::<String>("league").map(String::as_str),
+                subcommand.get_one::<i32>("week").copied(),
+            ),
+            true,
+        ),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -162,22 +254,65 @@ fn root_command(version: &'static str) -> Command {
                     .num_args(0..=1),
             );
         }
+        if descriptor.name == "m" {
+            subcommand = subcommand.arg(
+                Arg::new("week")
+                    .short('w')
+                    .long("week")
+                    .value_name("WEEK")
+                    .value_parser(clap::value_parser!(i32)),
+            );
+        }
+        if matches!(descriptor.name, "login" | "logout" | "st" | "sync" | "m") {
+            subcommand = subcommand.arg(
+                Arg::new("command_help")
+                    .short('h')
+                    .long("help")
+                    .action(ArgAction::Help),
+            );
+        }
         command = command.subcommand(subcommand);
     }
     for descriptor in FLAGS {
         let action = match descriptor.action {
             FlagAction::Help => ArgAction::Help,
             FlagAction::Version => ArgAction::Version,
+            FlagAction::SetTrue => ArgAction::SetTrue,
+            FlagAction::Value => ArgAction::Set,
         };
-        command = command.arg(
-            Arg::new(descriptor.id)
-                .short(descriptor.short)
-                .long(descriptor.long)
-                .help(descriptor.description)
-                .action(action),
-        );
+        let mut argument = Arg::new(descriptor.id)
+            .short(descriptor.short)
+            .long(descriptor.long)
+            .help(descriptor.description)
+            .action(action);
+        if matches!(descriptor.action, FlagAction::SetTrue | FlagAction::Value) {
+            argument = argument.global(true);
+        }
+        if matches!(descriptor.action, FlagAction::Value) {
+            argument = argument.value_name("KEY");
+        }
+        command = command.arg(argument);
     }
     command
+}
+
+fn run_result<E: std::fmt::Display>(
+    result: Result<String, E>,
+    yahoo_attribution: bool,
+) -> ExitCode {
+    match result {
+        Ok(output) => {
+            print!("{output}");
+            if yahoo_attribution {
+                eprintln!("Data provided by Yahoo Fantasy Sports.");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 /// Render root help from the same descriptors used to build the parser.

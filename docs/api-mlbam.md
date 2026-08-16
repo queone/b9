@@ -93,3 +93,7 @@ The fixtures were derived from the Skout executable contracts, its MLB provider 
 ## Post-Release Verification
 
 Exercise every implemented endpoint live and compare its shape with the committed fixture. Treat any difference as evidence to review, not permission to weaken fixture-backed validation automatically.
+
+## Fantasy Workflow Integration
+
+Foreground synchronization uses regular-season bulk hitting and pitching identities to reconcile uniquely matching Yahoo players by normalized name, team abbreviation, and role. Ambiguous or missing matches leave prior identity state unchanged. The baseline matchup uses the current UTC schedule only for optional game and ESPN moneyline context; MLB failure does not suppress valid Yahoo output.

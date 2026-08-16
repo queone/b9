@@ -6,6 +6,7 @@ use std::fmt;
 pub mod espn;
 pub mod mlb;
 pub mod yahoo;
+pub mod yahoo_fantasy;
 
 /// A contextual provider acquisition failure.
 #[derive(Debug)]

@@ -60,13 +60,23 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 - Keep Yahoo retries outside the shared no-retry transport.
 - Keep live credential and keychain mutation outside pre-release tests.
 
-## Deferred Data Contract
+## Fantasy Data Contract
 
-- Defer numeric-key JSON traversal and array-or-object compatibility.
-- Defer pagination, leagues, teams, rosters, matchups, standings, categories, transactions, and player normalization.
-- Defer normalized storage, 60-second caches, freshness, snapshots, stale fallback, reconciliation, synchronization budgets, and persisted circuits.
-- Defer `login`, `logout`, `fetch`, `sync`, browser launching, terminal input, attribution, and user-facing issue rendering.
+- Acquire authenticated user leagues and team identity.
+- Acquire league settings, scoring categories, roster positions, standings, and complete league rosters for foreground synchronization.
+- Acquire weekly scoreboards and both matchup rosters lazily for `b9 m`.
+- Traverse Yahoo numeric-key collections and accept observed array-or-object variants.
+- Reject incomplete stable snapshots before normalized replacement.
+- Cache weekly command payloads for 60 seconds and retain the last complete snapshot after refresh failure.
+- Store league, team, player, and roster ownership in the existing schema-version-one tables.
+- Keep weekly scoreboards and weekly player statistics in versioned command snapshots.
+- Keep `login`, `logout`, `st`, `sync`, and the baseline `m` surface outside the provider adapter.
+
+## Remaining Yahoo Work
+
+- Defer free agents, transactions, waiver analysis, persisted circuits, background synchronization, and secondary commands.
+- Defer weekly, daily, and advisory matchup modes beyond `m -w <week>`.
 
 ## Fixture Provenance
 
-The scrubbed token fixture under `tests/fixtures/yahoo/` reproduces the predecessor's documented OAuth response fields. It contains synthetic values, no credentials, and no personal data.
+The scrubbed synthetic fixtures under `tests/fixtures/yahoo/` cover token, league, settings, standings, roster, matchup, weekly-stat, singleton, empty, and malformed shapes. They contain no credentials or personal data.

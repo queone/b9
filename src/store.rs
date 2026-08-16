@@ -8,16 +8,22 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Connection, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, params,
+};
 
 const SCHEMA: &str = include_str!("store/schema.sql");
 
+mod fantasy;
 mod freshness;
 mod odds;
 mod seasons;
 mod snapshots;
 mod sync_runs;
 
+pub use fantasy::{
+    CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, StoredFantasyTeam,
+};
 pub use freshness::{
     ItemRefreshPolicy, RowRefreshPolicy, SyncItemState, SyncRowState, SyncStateStatus,
 };
@@ -28,6 +34,49 @@ pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for b9-owned databases.
 pub const CURRENT_SCHEMA_VERSION: i64 = 1;
+
+/// Read-only production status fields used by `b9 st`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct StoreStatus {
+    pub latest_sync_status: Option<String>,
+    pub latest_sync_at: Option<i64>,
+    pub league_synced_at: Option<i64>,
+}
+
+/// Inspect an existing database without creating, migrating, or changing it.
+pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, StoreError> {
+    if !path.is_file() {
+        return Ok(StoreStatus::default());
+    }
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| StoreError::operation("open database status", path, error))?;
+    let (latest_sync_status, latest_sync_at) = connection
+        .query_row(
+            "SELECT status, COALESCE(ended_at, started_at) FROM sync_runs WHERE mode='live' ORDER BY id DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|error| StoreError::operation("read latest sync status", path, error))?
+        .map_or((None, None), |(status, time)| (Some(status), Some(time)));
+    let league_synced_at = if league_key.is_empty() {
+        None
+    } else {
+        connection
+            .query_row(
+                "SELECT synced_at FROM yahoo_leagues WHERE league_key=?1",
+                [league_key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StoreError::operation("read league freshness", path, error))?
+    };
+    Ok(StoreStatus {
+        latest_sync_status,
+        latest_sync_at,
+        league_synced_at,
+    })
+}
 
 /// Supplies time to durable store state transitions.
 pub trait Clock: Send + Sync {

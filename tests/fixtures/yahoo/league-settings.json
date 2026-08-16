@@ -1,0 +1,1 @@
+{"data":[{"league_key":"mlb.l.1","name":"Test League","season":"2026","num_teams":2,"scoring_type":"head-to-head","current_week":7,"stats":[{"stat_id":7,"abbr":"R","name":"Runs","sort_order":1},{"stat_id":50,"abbr":"ERA","name":"Earned Run Average","sort_order":0}],"roster_positions":[{"position":"C","count":1},{"position":"SP","count":2}]}]}

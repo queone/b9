@@ -45,7 +45,11 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 - Embed the pinned glossary at compile time instead of retaining Skout's runtime source-path lookup.
 - Replace ambiguous-match selection with deterministic matching-key guidance until the terminal slice.
 - Retain plain glossary rendering until the ANSI and visible-width display slice.
-- Defer `-l/--league`, `-d/--debug`, startup hooks, Yahoo attribution, unimplemented commands, command-specific help parity, terminal selection, and colored glossary presentation.
+- Implement CMD-LOGIN, CMD-LOGOUT, and CMD-STATUS with b9-owned PKCE, credential, configuration, deterministic league-selection, and status boundaries.
+- Implement CMD-SYNC as a bounded foreground operation without Skout's daemon, signal, PID, log-tail, or automatic-start mechanics.
+- Implement the baseline CMD-MATCH current-week and `-w/--week` surfaces with durable stale fallback and optional current-game odds.
+- Implement `-l/--league`, secret-safe `-d/--debug`, command-specific help for the delivered commands, and Yahoo attribution on stderr.
+- Defer startup hooks, daemon-only commands, the remaining public commands, the extended matchup flags, and colored glossary presentation.
 - Preserve the inherited mismatch between the glossary Coverage Checklist and its 113 defined entries.
 
 ## Operational Contracts
