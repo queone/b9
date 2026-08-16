@@ -41,5 +41,8 @@ fn roster_replacement_preserves_two_way_roles_and_rejects_empty_overwrite() {
     connection.execute("INSERT INTO players (mlbam_id,name,mlb_team,position_type,synced_at) VALUES (17,'Duplicate','LAA','H',10)", []).unwrap();
     assert_eq!(store.mlb_roster("LAA").unwrap().len(), 2);
     assert!(store.replace_mlb_roster("LAA", &[]).is_err());
-    assert_eq!(store.schema_version().unwrap(), 1);
+    assert_eq!(
+        store.schema_version().unwrap(),
+        b9::store::CURRENT_SCHEMA_VERSION
+    );
 }

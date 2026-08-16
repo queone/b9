@@ -79,6 +79,18 @@ pub struct SeasonStatWrite {
     pub pitcher_walks: i64,
 }
 
+/// One active MLB player and the season usage required for waiver gating.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WaiverCandidate {
+    pub mlbam_id: i64,
+    pub role: String,
+    pub positions: String,
+    pub plate_appearances: f64,
+    pub innings_pitched: f64,
+    pub games: i64,
+    pub games_started: i64,
+}
+
 impl Store {
     /// Read durable local pitcher ownership keyed by folded full name.
     pub fn mlb_local_pitcher_ownership(
@@ -216,6 +228,27 @@ impl Store {
             .map_err(|error| StoreError::operation("read MLB roster", &self.path, error))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| StoreError::operation("read MLB roster", &self.path, error))
+    }
+
+    /// Read active 26-man membership and season usage for waiver filtering.
+    pub fn waiver_candidates(&self) -> Result<Vec<WaiverCandidate>, StoreError> {
+        let mut statement = self.connection().prepare("SELECT r.mlbam_id,r.primary_type,COALESCE(MAX(p.eligible_positions),MAX(p.display_position),''),MAX(COALESCE(s.pa,0)),MAX(COALESCE(s.ip,0)),MAX(COALESCE(s.g,0)),MAX(COALESCE(s.gs,0)) FROM mlb_team_active_rosters r LEFT JOIN players p ON p.mlbam_id=r.mlbam_id AND ((r.primary_type='H' AND p.position_type IN ('H','B')) OR (r.primary_type='P' AND p.position_type='P')) LEFT JOIN mlbam_season_stats s ON s.player_id=p.id AND s.season=(SELECT MAX(season) FROM mlbam_season_stats) AND s.stat_group=CASE r.primary_type WHEN 'P' THEN 'pitching' ELSE 'hitting' END WHERE r.status='A' GROUP BY r.mlbam_id,r.primary_type ORDER BY r.primary_type,r.mlbam_id")
+            .map_err(|error| StoreError::operation("prepare waiver candidates", &self.path, error))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(WaiverCandidate {
+                    mlbam_id: row.get(0)?,
+                    role: row.get(1)?,
+                    positions: row.get(2)?,
+                    plate_appearances: row.get(3)?,
+                    innings_pitched: row.get(4)?,
+                    games: row.get(5)?,
+                    games_started: row.get(6)?,
+                })
+            })
+            .map_err(|error| StoreError::operation("query waiver candidates", &self.path, error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StoreError::operation("read waiver candidates", &self.path, error))
     }
 
     /// Replace one season's supplied MLB player-stat roles.

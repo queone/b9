@@ -175,6 +175,13 @@ CREATE TABLE IF NOT EXISTS yahoo_roster_slots (
     PRIMARY KEY (team_key, player_id)
 );
 
+CREATE TABLE IF NOT EXISTS yahoo_free_agents (
+    league_key  TEXT    NOT NULL,
+    player_id   INTEGER NOT NULL,
+    synced_at   INTEGER NOT NULL,
+    PRIMARY KEY (league_key, player_id)
+);
+
 CREATE TABLE IF NOT EXISTS mlbam_season_stats (
     player_id   INTEGER NOT NULL,              -- references players.id
     season      INTEGER NOT NULL,

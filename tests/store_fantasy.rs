@@ -1,5 +1,7 @@
 use b9::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Position, ScoringType};
-use b9::store::{CategoryWrite, FantasySnapshotWrite, PositionWrite, Store};
+use b9::store::{
+    CURRENT_SCHEMA_VERSION, CategoryWrite, FantasySnapshotWrite, PositionWrite, Store,
+};
 use tempfile::tempdir;
 
 fn snapshot() -> FantasySnapshotWrite {
@@ -89,11 +91,55 @@ fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
     let directory = tempdir().unwrap();
     let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
     store.replace_fantasy_snapshot(&snapshot()).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 1);
+    assert_eq!(store.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     assert_eq!(store.fantasy_current_week("mlb.l.1").unwrap(), Some(7));
-    assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+    assert_eq!(store.fantasy_season("mlb.l.1").unwrap(), Some(2026));
+    assert_eq!(
+        store.fantasy_categories("mlb.l.1").unwrap()[0].abbreviation,
+        "R"
+    );
+    let teams = store.fantasy_teams("mlb.l.1").unwrap();
+    assert_eq!(teams.len(), 2);
+    assert_eq!(teams[0].manager_name, "A");
     let mut invalid = snapshot();
     invalid.slots[0].team_key = "other".into();
     assert!(store.replace_fantasy_snapshot(&invalid).is_err());
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+}
+
+#[test]
+fn complete_free_agent_replacement_is_scoped_to_its_league() {
+    let directory = tempdir().unwrap();
+    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut first = snapshot();
+    first.players.push(FantasyPlayer {
+        yahoo_player_id: 103,
+        name: "Charlie FreeAgent".into(),
+        mlb_team: "TB".into(),
+        display_position: "OF".into(),
+        position_type: "B".into(),
+        eligible_positions: vec![Position::Outfield],
+        injury_status: String::new(),
+        percent_owned: Some(10.0),
+        yahoo_rank: Some(3),
+    });
+    store.replace_fantasy_snapshot(&first).unwrap();
+    assert_eq!(store.fantasy_players("mlb.l.1").unwrap().len(), 3);
+    let mut second = first.clone();
+    second.league.league_key = "mlb.l.2".into();
+    for team in &mut second.teams {
+        team.league_key = "mlb.l.2".into();
+        team.team_key = team.team_key.replacen("mlb.l.1", "mlb.l.2", 1);
+    }
+    for slot in &mut second.slots {
+        slot.team_key = slot.team_key.replacen("mlb.l.1", "mlb.l.2", 1);
+    }
+    store.replace_fantasy_snapshot(&second).unwrap();
+    assert_eq!(store.fantasy_players("mlb.l.2").unwrap().len(), 3);
+
+    let mut replacement = first;
+    replacement.players.pop();
+    store.replace_fantasy_snapshot(&replacement).unwrap();
+    assert_eq!(store.fantasy_players("mlb.l.1").unwrap().len(), 2);
+    assert_eq!(store.fantasy_players("mlb.l.2").unwrap().len(), 3);
 }

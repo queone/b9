@@ -8,6 +8,8 @@ pub mod glossary;
 pub mod matchup;
 pub mod mlb_commands;
 pub mod mlb_display;
+pub mod player_commands;
+pub mod player_display;
 pub mod providers;
 pub mod store;
 pub mod sync;

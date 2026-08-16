@@ -15,7 +15,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "b9 v0.13.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  m                            Show the baseline weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
+        "b9 v0.14.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  m                            Show the baseline weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
     for form in [
@@ -49,7 +49,7 @@ fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
         let output = b9(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.13.0\n");
+        assert_eq!(output.stdout, b"b9 0.14.0\n");
         assert!(output.stderr.is_empty());
     }
 }

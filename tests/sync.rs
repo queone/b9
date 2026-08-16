@@ -67,6 +67,10 @@ impl YahooFantasySource for Source {
         })
     }
 
+    fn free_agents(&self, _: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
+        Ok(Vec::new())
+    }
+
     fn scoreboard(&self, _: &str, _: Option<i32>) -> Result<Vec<Matchup>, YahooFantasyError> {
         unreachable!()
     }

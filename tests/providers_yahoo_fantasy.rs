@@ -1,6 +1,6 @@
 use b9::providers::yahoo_fantasy::{
-    bounded_page_starts, parse_league_rosters, parse_league_settings, parse_roster_week_stats,
-    parse_scoreboard, parse_standings, parse_user_leagues,
+    bounded_page_starts, parse_free_agents, parse_league_rosters, parse_league_settings,
+    parse_roster_week_stats, parse_scoreboard, parse_standings, parse_user_leagues,
 };
 
 fn fixture(name: &str) -> serde_json::Value {
@@ -30,6 +30,7 @@ fn selected_fixtures_decode_complete_workflow_records() {
     assert_eq!((rosters.players.len(), rosters.slots.len()), (2, 2));
     let matchup = parse_scoreboard(&fixture("matchup")).unwrap();
     assert_eq!(matchup[0].week, 7);
+    assert_eq!(matchup[0].teams[0].stats["7"], "12");
     let weekly = parse_roster_week_stats("mlb.l.1.t.1", 7, &fixture("weekly")).unwrap();
     assert_eq!(weekly.players[0].home_runs, 1);
 }
@@ -48,4 +49,13 @@ fn pagination_offsets_are_bounded() {
     assert_eq!(bounded_page_starts(51, 25).unwrap(), vec![0, 25, 50]);
     assert!(bounded_page_starts(1, 0).is_err());
     assert!(bounded_page_starts(501, 25).is_err());
+}
+
+#[test]
+fn free_agent_page_retains_ranked_players() {
+    let page = serde_json::from_slice(include_bytes!("fixtures/yahoo/free-agents.json")).unwrap();
+    let players = parse_free_agents(&page).unwrap();
+    assert_eq!(players.len(), 2);
+    assert_eq!(players[0].name, "Ada Available");
+    assert_eq!(players[1].position_type, "P");
 }

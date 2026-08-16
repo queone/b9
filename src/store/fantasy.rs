@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{OptionalExtension, params};
 
-use crate::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League};
+use crate::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, StoredFantasyPlayer};
 
 use super::{Store, StoreError, validate_identity};
 
@@ -43,7 +43,16 @@ pub struct FantasySnapshotWrite {
 pub struct StoredFantasyTeam {
     pub team_key: String,
     pub name: String,
+    pub manager_name: String,
     pub team_id: i64,
+}
+
+/// One persisted Yahoo scoring category used for ordered weekly output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredFantasyCategory {
+    pub stat_id: i64,
+    pub abbreviation: String,
+    pub sequence: i64,
 }
 
 /// One candidate MLB identity for a Yahoo player.
@@ -117,6 +126,32 @@ impl Store {
                     params![slot.team_key,player_id,slot.slot_position.to_string(),captured_at])
                     .map_err(|error| StoreError::operation("insert Yahoo roster slot", &path, error))?;
             }
+            transaction
+                .execute(
+                    "DELETE FROM yahoo_free_agents WHERE league_key=?1",
+                    [&snapshot.league.league_key],
+                )
+                .map_err(|error| StoreError::operation("replace Yahoo free agents", &path, error))?;
+            let rostered = snapshot
+                .slots
+                .iter()
+                .map(|slot| slot.yahoo_player_id)
+                .collect::<BTreeSet<_>>();
+            for player in snapshot
+                .players
+                .iter()
+                .filter(|player| !rostered.contains(&player.yahoo_player_id))
+            {
+                let player_id: i64 = transaction
+                    .query_row(
+                        "SELECT id FROM players WHERE yahoo_player_id=?1",
+                        [player.yahoo_player_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|error| StoreError::operation("resolve Yahoo free agent", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![snapshot.league.league_key,player_id,captured_at])
+                    .map_err(|error| StoreError::operation("insert Yahoo free agent", &path, error))?;
+            }
             Ok(())
         })
     }
@@ -124,14 +159,15 @@ impl Store {
     /// Read teams for one league in stable provider-key order.
     pub fn fantasy_teams(&self, league_key: &str) -> Result<Vec<StoredFantasyTeam>, StoreError> {
         validate_identity("read fantasy teams", "league key", league_key)?;
-        let mut statement = self.connection().prepare("SELECT team_key,name,team_id FROM yahoo_teams WHERE league_key=?1 ORDER BY team_key")
+        let mut statement = self.connection().prepare("SELECT team_key,name,COALESCE(manager_nickname,''),team_id FROM yahoo_teams WHERE league_key=?1 ORDER BY team_key")
             .map_err(|error| StoreError::operation("prepare fantasy teams", &self.path, error))?;
         let rows = statement
             .query_map([league_key], |row| {
                 Ok(StoredFantasyTeam {
                     team_key: row.get(0)?,
                     name: row.get(1)?,
-                    team_id: row.get(2)?,
+                    manager_name: row.get(2)?,
+                    team_id: row.get(3)?,
                 })
             })
             .map_err(|error| StoreError::operation("query fantasy teams", &self.path, error))?;
@@ -151,6 +187,103 @@ impl Store {
             .optional()
             .map(|value| value.flatten())
             .map_err(|error| StoreError::operation("read fantasy current week", &self.path, error))
+    }
+
+    /// Read the persisted season for one league.
+    pub fn fantasy_season(&self, league_key: &str) -> Result<Option<i64>, StoreError> {
+        validate_identity("read fantasy season", "league key", league_key)?;
+        self.connection()
+            .query_row(
+                "SELECT season FROM yahoo_leagues WHERE league_key=?1",
+                [league_key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StoreError::operation("read fantasy season", &self.path, error))
+    }
+
+    /// Read scoring categories in the league-defined display order.
+    pub fn fantasy_categories(
+        &self,
+        league_key: &str,
+    ) -> Result<Vec<StoredFantasyCategory>, StoreError> {
+        validate_identity("read fantasy categories", "league key", league_key)?;
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT stat_id,abbr,seq FROM yahoo_stat_categories WHERE league_key=?1 AND display_only=0 ORDER BY seq,stat_id",
+            )
+            .map_err(|error| StoreError::operation("prepare fantasy categories", &self.path, error))?;
+        let rows = statement
+            .query_map([league_key], |row| {
+                Ok(StoredFantasyCategory {
+                    stat_id: row.get(0)?,
+                    abbreviation: row.get(1)?,
+                    sequence: row.get(2)?,
+                })
+            })
+            .map_err(|error| {
+                StoreError::operation("query fantasy categories", &self.path, error)
+            })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StoreError::operation("read fantasy categories", &self.path, error))
+    }
+
+    /// Read all durable players in one league with optional roster ownership.
+    pub fn fantasy_players(
+        &self,
+        league_key: &str,
+    ) -> Result<Vec<StoredFantasyPlayer>, StoreError> {
+        validate_identity("read fantasy players", "league key", league_key)?;
+        let sql = "SELECT p.yahoo_player_id,p.mlbam_id,p.name,COALESCE(p.mlb_team,''),COALESCE(p.position_type,''),COALESCE(p.eligible_positions,p.display_position,''),COALESCE(p.status,''),p.yahoo_rank,p.percent_owned,t.name,ys.slot_position,
+COALESCE(h.pa,0),COALESCE(h.obp,0),COALESCE(h.r,0),COALESCE(h.hr,0),COALESCE(h.rbi,0),COALESCE(h.sb,0),COALESCE(h.avg,0),
+COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0)
+FROM players p LEFT JOIN yahoo_roster_slots ys ON ys.player_id=p.id AND ys.team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1) LEFT JOIN yahoo_teams t ON t.team_key=ys.team_key
+LEFT JOIN yahoo_free_agents fa ON fa.player_id=p.id AND fa.league_key=?1
+LEFT JOIN mlbam_season_stats h ON h.player_id=p.id AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats q ON q.player_id=p.id AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
+WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id IS NOT NULL) ORDER BY COALESCE(p.yahoo_rank,999999),p.name";
+        let mut statement = self
+            .connection()
+            .prepare(sql)
+            .map_err(|error| StoreError::operation("prepare fantasy players", &self.path, error))?;
+        let rows = statement
+            .query_map([league_key], |row| {
+                Ok(StoredFantasyPlayer {
+                    yahoo_player_id: row.get(0)?,
+                    mlbam_id: row.get(1)?,
+                    name: row.get(2)?,
+                    team: row.get(3)?,
+                    role: row.get(4)?,
+                    positions: row.get(5)?,
+                    status: row.get(6)?,
+                    rank: row.get(7)?,
+                    percent_owned: row.get(8)?,
+                    owner: row.get(9)?,
+                    slot: row.get(10)?,
+                    batting: [
+                        row.get(11)?,
+                        row.get(12)?,
+                        row.get(13)?,
+                        row.get(14)?,
+                        row.get(15)?,
+                        row.get(16)?,
+                        row.get(17)?,
+                    ],
+                    pitching: [
+                        row.get(18)?,
+                        row.get(19)?,
+                        row.get(20)?,
+                        row.get(21)?,
+                        row.get(22)?,
+                        row.get(23)?,
+                        row.get(24)?,
+                    ],
+                })
+            })
+            .map_err(|error| StoreError::operation("query fantasy players", &self.path, error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StoreError::operation("read fantasy players", &self.path, error))
     }
 
     /// Reconcile missing Yahoo player identities against unique MLB candidates.

@@ -292,6 +292,9 @@ pub fn synchronize_with(
         let rosters = source
             .league_rosters(league_key)
             .map_err(|error| WorkflowError::context("sync rosters", error))?;
+        let free_agents = source
+            .free_agents(league_key)
+            .map_err(|error| WorkflowError::context("sync free agents", error))?;
         let team_key = source
             .team_key(league_key)
             .map_err(|error| WorkflowError::context("resolve authenticated team", error))?;
@@ -322,7 +325,7 @@ pub fn synchronize_with(
                 })
                 .collect(),
             teams,
-            players: rosters.players,
+            players: rosters.players.into_iter().chain(free_agents).collect(),
             slots: rosters.slots,
         };
         store

@@ -112,6 +112,47 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
+        name: "r",
+        display_label: "r [name]",
+        description: "Show a fantasy roster",
+        argument: Some(ArgumentDescriptor {
+            id: "team",
+            value_name: "NAME",
+        }),
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "rt",
+        display_label: "rt",
+        description: "Show fantasy roster totals",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "h",
+        display_label: "h [N|name]",
+        description: "Browse hitters or show a player",
+        argument: Some(ArgumentDescriptor {
+            id: "player",
+            value_name: "N|NAME",
+        }),
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "p",
+        display_label: "p [N|name]",
+        description: "Browse pitchers or show a player",
+        argument: Some(ArgumentDescriptor {
+            id: "player",
+            value_name: "N|NAME",
+        }),
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
         name: "i",
         display_label: "i [term]",
         description: "Look up a term in the b9 glossary",
@@ -250,6 +291,38 @@ where
             crate::mlb_commands::show_probables(subcommand.get_flag("force")),
             false,
         ),
+        Some(("r", subcommand)) => run_result(
+            crate::player_commands::show_roster(
+                subcommand.get_one::<String>("team").map(String::as_str),
+            ),
+            false,
+        ),
+        Some(("rt", subcommand)) => run_result(
+            crate::player_commands::show_totals(
+                subcommand.get_one::<String>("weekly").map(String::as_str),
+            ),
+            false,
+        ),
+        Some(("h", subcommand)) => run_result(
+            crate::player_commands::show_pool(
+                "B",
+                subcommand.get_one::<String>("player").map(String::as_str),
+                subcommand.get_one::<String>("sort").map(String::as_str),
+                subcommand.get_one::<String>("position").map(String::as_str),
+                subcommand.get_flag("waiver"),
+            ),
+            false,
+        ),
+        Some(("p", subcommand)) => run_result(
+            crate::player_commands::show_pool(
+                "P",
+                subcommand.get_one::<String>("player").map(String::as_str),
+                subcommand.get_one::<String>("sort").map(String::as_str),
+                subcommand.get_one::<String>("position").map(String::as_str),
+                subcommand.get_flag("waiver"),
+            ),
+            false,
+        ),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -305,6 +378,32 @@ fn root_command(version: &'static str) -> Command {
                     .value_parser(clap::value_parser!(i32)),
             );
         }
+        if descriptor.name == "rt" {
+            subcommand = subcommand.arg(
+                Arg::new("weekly")
+                    .short('w')
+                    .long("weekly")
+                    .value_name("WEEK|DATE")
+                    .num_args(0..=1)
+                    .default_missing_value("true"),
+            );
+        }
+        if matches!(descriptor.name, "h" | "p") {
+            subcommand = subcommand
+                .arg(Arg::new("sort").short('s').long("sort").value_name("FIELD"))
+                .arg(
+                    Arg::new("position")
+                        .short('p')
+                        .long("position")
+                        .value_name("POS"),
+                )
+                .arg(
+                    Arg::new("waiver")
+                        .short('w')
+                        .long("waiver")
+                        .action(ArgAction::SetTrue),
+                );
+        }
         if matches!(descriptor.name, "t" | "tt" | "sp") {
             subcommand = subcommand.arg(
                 Arg::new("force")
@@ -316,7 +415,7 @@ fn root_command(version: &'static str) -> Command {
         }
         if matches!(
             descriptor.name,
-            "login" | "logout" | "st" | "sync" | "m" | "t" | "tt" | "sp"
+            "login" | "logout" | "st" | "sync" | "m" | "t" | "tt" | "sp" | "r" | "rt" | "h" | "p"
         ) {
             subcommand = subcommand.arg(
                 Arg::new("command_help")

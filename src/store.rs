@@ -24,20 +24,21 @@ mod snapshots;
 mod sync_runs;
 
 pub use fantasy::{
-    CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, StoredFantasyTeam,
+    CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, StoredFantasyCategory,
+    StoredFantasyTeam,
 };
 pub use freshness::{
     ItemRefreshPolicy, RowRefreshPolicy, SyncItemState, SyncRowState, SyncStateStatus,
 };
 pub use legacy::LegacyBootstrap;
-pub use mlb::{RosterWrite, SeasonStatWrite, StoredRosterPlayer};
+pub use mlb::{RosterWrite, SeasonStatWrite, StoredRosterPlayer, WaiverCandidate};
 pub use odds::{MoneylineQuote, StoredMoneyline};
 pub use seasons::{SeasonState, SeasonSyncStatus};
 pub use snapshots::CommandSnapshot;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for b9-owned databases.
-pub const CURRENT_SCHEMA_VERSION: i64 = 1;
+pub const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 /// Read-only production status fields used by `b9 st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -513,10 +514,33 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
             ),
         ));
     }
+    if version == 1 {
+        return migrate_v1_to_v2(connection, path);
+    }
     Err(StoreError::unsupported(
         path,
         format!("database schema version {version} is not a supported b9 migration source"),
     ))
+}
+
+fn migrate_v1_to_v2(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| StoreError::operation("begin schema migration", path, error))?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE yahoo_free_agents (league_key TEXT NOT NULL, player_id INTEGER NOT NULL, synced_at INTEGER NOT NULL, PRIMARY KEY (league_key, player_id));",
+        )
+        .map_err(|error| StoreError::operation("apply version-two schema migration", path, error))?;
+    transaction
+        .execute(
+            "UPDATE schema_version SET version=?1",
+            [CURRENT_SCHEMA_VERSION],
+        )
+        .map_err(|error| StoreError::operation("write schema version", path, error))?;
+    transaction
+        .commit()
+        .map_err(|error| StoreError::operation("commit schema migration", path, error))
 }
 
 fn migrate_empty(connection: &mut Connection, path: &Path, schema: &str) -> Result<(), StoreError> {
@@ -566,6 +590,27 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn version_one_store_migrates_to_scoped_free_agents() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("CREATE TABLE schema_version (version INTEGER PRIMARY KEY); INSERT INTO schema_version VALUES (1);")
+            .unwrap();
+        migrate(&mut connection, Path::new("test.db"), SCHEMA).unwrap();
+        let version: i64 = connection
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        let table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='yahoo_free_agents'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(table_count, 1);
     }
 
     #[test]

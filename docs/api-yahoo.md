@@ -12,6 +12,15 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 - Use `https://fantasysports.yahooapis.com/fantasy/v2` as the fantasy API root.
 - Read the public client identifier from `YAHOO_CLIENT_ID` at the production environment boundary.
 
+## Roster And Player Pool
+
+- Fetch every roster through the league roster endpoint with ranks and ownership percentages.
+- Fetch free agents and waiver-eligible unrostered players through paginated league player requests with `status=A` and explicit offsets.
+- Stop free-agent pagination only after an empty page and reject a complete fetch that yields no players.
+- Replace the durable fantasy snapshot only after league, roster, and free-agent records are complete.
+- Preserve the most recent complete normalized snapshot when a later Yahoo acquisition fails.
+- Preserve weekly matchup snapshots by league and week so current, numeric-week, and ISO-date totals can fall back safely.
+
 ## Authorization
 
 - Generate independent 32-byte operating-system-random state and PKCE verifier values for every attempt.

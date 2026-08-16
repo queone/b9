@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "player_id": 301,
+      "full": "Ada Available",
+      "editorial_team_abbr": "NYY",
+      "position_type": "B",
+      "display_position": "OF",
+      "eligible_positions": ["OF"],
+      "percent_owned": {"value": "12"},
+      "rank_value": "31"
+    },
+    {
+      "player_id": 302,
+      "full": "Grace Available",
+      "editorial_team_abbr": "BOS",
+      "position_type": "P",
+      "display_position": "SP",
+      "eligible_positions": ["SP"],
+      "percent_owned": {"value": "8"},
+      "rank_value": "32"
+    }
+  ]
+}

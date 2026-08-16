@@ -214,6 +214,16 @@ All executable capability dispositions remain `Required`. A Director decision is
 
 No crate, framework, or compatibility change is selected.
 
+## Current b9 Roster Surface
+
+- `b9 r [name]` renders the configured roster or one deterministic team or manager-name match.
+- `b9 rt -w/--weekly[=N|DATE]` selects the requested totals period while preserving season totals as the default.
+- `b9 h [N|name]` and `b9 p [N|name]` browse the durable player pool or render a type-agnostic player card.
+- Player cards show Yahoo identity and ownership, durable season statistics, and a recent MLB game log.
+- Free-agent state is fetched as complete pagination and replaces the prior player-pool snapshot atomically.
+- Player-card game logs refresh from MLB when available and render a labeled durable fallback after a refresh failure.
+- Waiver mode admits only free agents on the active 26-man roster that clear the predecessor-compatible 60th-percentile hitter, starter, or reliever usage floor.
+
 ## Verification Strategy
 
 ### Deterministic pre-release tests

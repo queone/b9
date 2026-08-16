@@ -6,7 +6,7 @@ use b9::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path};
 use rusqlite::Connection;
 use tempfile::tempdir;
 
-const TABLES: [&str; 20] = [
+const TABLES: [&str; 21] = [
     "command_snapshots",
     "mlb_game_schedule",
     "mlb_odds",
@@ -21,6 +21,7 @@ const TABLES: [&str; 20] = [
     "sync_log",
     "sync_row_state",
     "sync_runs",
+    "yahoo_free_agents",
     "yahoo_leagues",
     "yahoo_roster_positions",
     "yahoo_roster_slots",

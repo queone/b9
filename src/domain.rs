@@ -325,6 +325,32 @@ pub struct FantasyPlayer {
     pub yahoo_rank: Option<i64>,
 }
 
+/// One player assembled from durable fantasy ownership and MLB season state.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StoredFantasyPlayer {
+    pub yahoo_player_id: Option<i64>,
+    pub mlbam_id: Option<i64>,
+    pub name: String,
+    pub team: String,
+    pub role: String,
+    pub positions: String,
+    pub status: String,
+    pub rank: Option<i64>,
+    pub percent_owned: Option<f64>,
+    pub owner: Option<String>,
+    pub slot: Option<String>,
+    pub batting: [f64; 7],
+    pub pitching: [f64; 7],
+}
+
+/// One rendered player-game-log line retained for an offline player card.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PlayerGameLog {
+    pub date: String,
+    pub opponent: String,
+    pub line: String,
+}
+
 /// One Yahoo roster ownership row using provider identities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FantasyRosterSlot {

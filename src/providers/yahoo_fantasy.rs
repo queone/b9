@@ -103,6 +103,7 @@ pub trait YahooFantasySource {
     fn league_settings(&self, league_key: &str) -> Result<LeagueSettings, YahooFantasyError>;
     fn standings(&self, league_key: &str) -> Result<Vec<FantasyTeam>, YahooFantasyError>;
     fn league_rosters(&self, league_key: &str) -> Result<LeagueRosters, YahooFantasyError>;
+    fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError>;
     fn scoreboard(
         &self,
         league_key: &str,
@@ -174,6 +175,28 @@ impl YahooFantasySource for YahooFantasyClient {
                 "/league/{league_key}/teams/roster/players;out=ranks,percent_owned"
             ))?,
         )
+    }
+
+    fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
+        validate_key(league_key)?;
+        let mut players = BTreeMap::new();
+        for start in 0..MAX_PAGES {
+            let offset = start * 25;
+            let page = parse_free_agents(&self.get(&format!(
+                "/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned"
+            ))?)?;
+            if page.is_empty() {
+                break;
+            }
+            for player in page {
+                players.insert(player.yahoo_player_id, player);
+            }
+        }
+        (!players.is_empty())
+            .then(|| players.into_values().collect())
+            .ok_or(YahooFantasyError::Incomplete(
+                "free-agent pages contain no players",
+            ))
     }
 
     fn scoreboard(
@@ -481,6 +504,42 @@ pub fn parse_league_rosters(
     })
 }
 
+/// Parse one free-agent player page.
+pub fn parse_free_agents(value: &Value) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
+    let mut players = BTreeMap::new();
+    for map in entity_maps(parsed_root(value)?, "player_id") {
+        let player_id = integer(&map, "player_id");
+        if player_id <= 0 {
+            continue;
+        }
+        let eligible = map
+            .get("eligible_positions")
+            .map(flattened)
+            .map(|map| {
+                map.values()
+                    .filter_map(Value::as_str)
+                    .map(Position::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+        players.insert(
+            player_id,
+            FantasyPlayer {
+                yahoo_player_id: player_id,
+                name: text(&map, "full"),
+                mlb_team: text(&map, "editorial_team_abbr"),
+                display_position: text(&map, "display_position"),
+                position_type: text(&map, "position_type"),
+                eligible_positions: eligible,
+                injury_status: text(&map, "status"),
+                percent_owned: decimal(&map, "value"),
+                yahoo_rank: Some(integer(&map, "rank_value")).filter(|value| *value > 0),
+            },
+        );
+    }
+    Ok(players.into_values().collect())
+}
+
 /// Parse one weekly scoreboard response.
 pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError> {
     let root = parsed_root(value)?;
@@ -501,7 +560,7 @@ pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError
                 team_id: integer(&team, "team_id"),
                 name: text(&team, "name"),
                 is_current_login: text(&team, "is_owned_by_current_login") == "1",
-                stats: BTreeMap::new().into_iter().collect(),
+                stats: team_statistics(&team),
                 wins: integer(&team, "wins") as i32,
                 losses: integer(&team, "losses") as i32,
                 ties: integer(&team, "ties") as i32,
@@ -519,6 +578,22 @@ pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError
         });
     }
     Ok(output)
+}
+
+fn team_statistics(team: &Map<String, Value>) -> std::collections::HashMap<String, String> {
+    team.get("team_stats")
+        .or_else(|| team.get("stats"))
+        .map(|value| {
+            entity_maps(value, "stat_id")
+                .into_iter()
+                .filter_map(|stat| {
+                    let id = text(&stat, "stat_id");
+                    let value = text(&stat, "value");
+                    (!id.is_empty() && !value.is_empty()).then_some((id, value))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Parse one team's weekly roster statistics.
