@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.18.1 | AC24: adopt Govna v0.14.0 canon |
 | 0.18.0 | AC22: close parity and align standings totals |
 | 0.17.0 | AC21: Add operational commands, managed sync, and model configuration |
 | 0.16.0 | AC20: Add deterministic roster and waiver evaluation |

@@ -30,6 +30,7 @@ An LLM agent in this repo is automatically the Operator. Do not announce the rol
 - Use objective review language: "Observed", "Expected", "Verify that", "Requirement". Avoid anthropomorphic phrasing.
 - Give findings file and line references; order them by severity.
 - Run `./build.sh` only when reviewing code changes or when build output is itself part of the claim under review. Skip it for AC critique, doc-only review, and design discussion.
+- Skip `./build.sh` in Ratify's auto-correction revalidation only when the correction is documentation-only and not covered by this repo's own build validation; see `AGENTS.md` Approval Boundaries > Four-Phase Workflow.
 
 ### Self-review (mandatory)
 

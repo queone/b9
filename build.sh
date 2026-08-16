@@ -601,7 +601,6 @@ _build_all_phases() {
   local verbose="$1" install="$2" index target path version output
   _load_bin_targets || return 1
   _validate_utility_declarations || return 1
-  _validate_package_utility_versions || return 1
 
   _run_build_cli_tests || return $?
 
@@ -683,7 +682,6 @@ _build_scoped_phases() {
   local cargo_targets=() cargo_tests=() cargo_lib=''
   _load_bin_targets || return 1
   _validate_utility_declarations || return 1
-  _validate_package_utility_versions || return 1
   _run_build_cli_tests || return $?
   [ "$_has_lib" -eq 1 ] && cargo_lib=--lib
   for target in "${targets[@]}"; do
@@ -961,55 +959,6 @@ _replace_cargo_version() {
   rm -f "$tmp"
 }
 
-_replace_utility_version() { # $1=utility $2=declared path $3=version
-  local utility="$1" path="$2" version="$3" tmp
-  _read_utility_version "$utility" "$path" || return 1
-  tmp=$(mktemp "${TMPDIR:-/tmp}/utility-version.XXXXXX") || return 1
-  awk -v version="$version" '
-    !changed && /^[[:space:]]*(pub([[:space:]]*\([^)]*\))?[[:space:]]+)?const[[:space:]]+PROGRAM_VERSION[[:space:]]*:[[:space:]]*&str[[:space:]]*=/ {
-      match($0, /"[0-9]+\.[0-9]+\.[0-9]+"/)
-      print substr($0, 1, RSTART-1) "\"" version "\"" substr($0, RSTART+RLENGTH)
-      changed=1
-      next
-    }
-    { print }
-    END { if (!changed) exit 1 }' "$path" >"$tmp" || {
-      rm -f "$tmp"
-      _failure "prep: update $utility PROGRAM_VERSION: failed"
-      return 1
-    }
-  cat "$tmp" >"$path"
-  rm -f "$tmp"
-}
-
-_replace_cli_golden_versions() { # $1=current $2=replacement
-  local current="$1" replacement="$2" path tmp
-  for path in tests/b9_cli.rs tests/terminal.rs; do
-    [ -f "$path" ] || continue
-    tmp=$(mktemp "${TMPDIR:-/tmp}/cli-golden-version.XXXXXX") || return 1
-    awk -v current="$current" -v replacement="$replacement" '{ gsub("b9 v" current, "b9 v" replacement); gsub("b9 " current, "b9 " replacement); gsub("\"" current "\"", "\"" replacement "\""); print }' "$path" >"$tmp" || {
-      rm -f "$tmp"
-      _failure "prep: update $path CLI golden versions: failed"
-      return 1
-    }
-    cat "$tmp" >"$path"
-    rm -f "$tmp"
-  done
-}
-
-_validate_package_utility_versions() {
-  local package index=0
-  package=$(_cargo_version_info Cargo.toml) || return 1
-  while [ "$index" -lt "${#_bin_targets[@]}" ]; do
-    _read_utility_version "${_bin_targets[$index]}" "${_bin_paths[$index]}" || return 1
-    if [ "$_utility_version_value" != "$package" ]; then
-      _failure "build: version mismatch: Cargo.toml package is $package but ${_bin_targets[$index]} PROGRAM_VERSION is $_utility_version_value; synchronize declarations and retry"
-      return 1
-    fi
-    index=$((index + 1))
-  done
-}
-
 _insert_changelog_row() {
   local file="$1" version="$2" message="$3" tmp
   [ -f "$file" ] || return 0
@@ -1099,14 +1048,7 @@ prep_run() {
     printf '%s\n' "$(yel7 'version bumps:')"
     printf '  Cargo.toml [package].version: %s -> %s\n' \
       "$current" "$(grn3 "$stripped")"
-    _load_bin_targets || return 1
-    while IFS="$(printf '\t')" read -r target path; do
-      [ -n "$target" ] && printf '  %s PROGRAM_VERSION: -> %s\n' "$target" "$(grn3 "$stripped")"
-    done <<EOF
-$(paste <(printf '%s\n' "${_bin_targets[@]}") <(printf '%s\n' "${_bin_paths[@]}"))
-EOF
     [ -f Cargo.lock ] && printf '  %s\n' "$(yel7 'Cargo.lock: refresh with cargo check')"
-    printf '  %s\n' "$(yel7 'CLI golden versions: synchronize')"
     [ -f CHANGELOG.md ] && printf '%s\n  CHANGELOG.md: %s\n' \
       "$(yel7 'changelog rows:')" "$(grn3 "$stripped")"
     while IFS= read -r file; do
@@ -1127,15 +1069,6 @@ EOF
 
   _replace_cargo_version Cargo.toml "$stripped" || return 1
   printf '%s %s\n' "$(yel7 'prep: updated Cargo.toml [package].version to')" "$(grn3 "$stripped")"
-  _load_bin_targets || return 1
-  local index=0
-  while [ "$index" -lt "${#_bin_targets[@]}" ]; do
-    _replace_utility_version "${_bin_targets[$index]}" "${_bin_paths[$index]}" "$stripped" || return 1
-    printf '%s %s %s\n' "$(yel7 'prep: updated')" "${_bin_targets[$index]} PROGRAM_VERSION to" "$(grn3 "$stripped")"
-    index=$((index + 1))
-  done
-  _replace_cli_golden_versions "$current" "$stripped" || return 1
-  printf '%s %s\n' "$(yel7 'prep: synchronized CLI golden versions to')" "$(grn3 "$stripped")"
 
   _require_cargo || return 1
   printf '%s\n' "$(yel7 'prep: refreshing Cargo.lock')"

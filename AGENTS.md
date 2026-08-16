@@ -131,10 +131,16 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - State zero unresolved implementation findings in the Implement completion report before Ratify.
 - Pause after Implement and await Ratify.
 - Treat standalone `Ratify` or `ratify` after successful Implement completion as the Director's acceptance action.
-- Perform the final non-mutating review during the same Ratify turn.
+- Perform the final review during the same Ratify turn.
 - Complete Ratify in that turn when the review finds no issue.
-- Return Ratify feedback to Refine for contract or scope changes without completing Ratify.
-- Return Ratify feedback to Implement for implementation-only corrections without completing Ratify.
+- Apply the Approval Boundaries > General Gates and roles.md `What the Operator Must Defer` boundaries to classify any other Director-owned Ratify finding.
+- Return Ratify feedback to Refine, without completing Ratify, for a contract, scope, product, security, destructive, publication, or release finding.
+- Auto-correct an implementation-only finding inline during Ratify.
+- Rerun applicable validation after an inline Ratify correction.
+- Skip `./build.sh` in that revalidation only when the correction is documentation-only and not covered by this repo's own build validation.
+- Run the applicable document, render, or diff check in place of a skipped `./build.sh`.
+- Repeat the correct-validate-review cycle automatically for at least 3 rounds before treating an implementation-only finding as unresolved.
+- Return Ratify feedback to Implement, without completing Ratify, for an implementation-only finding still unresolved after 3 rounds.
 - Skip requests for a second acceptance signal after a clean Ratify review.
 - Treat `Package` as the separate post-Ratify name for release preparation, not as a fifth AC phase.
 - Start `Package` only after an explicit Director request; do not infer it from Ratify acceptance.
