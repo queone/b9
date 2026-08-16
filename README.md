@@ -6,7 +6,7 @@ Run `b9 t` to show skout-style 40-man roster tables or `b9 t [team]` to select a
 
 Use `-f` or `--force` with any MLB utility command to bypass its freshness gate. These commands use unauthenticated MLB, ESPN, and OddsShark data and never require or refresh Yahoo authorization. When b9 has no Yahoo-linked local state, the first MLB utility command imports compatible identity, ownership, statistics, freshness, and empty selections once from the read-only legacy database at `~/.config/skout/skout.db`. Complete cached snapshots remain available with a stale warning when a provider refresh fails. OddsShark is an unofficial future-game source and may degrade without failing the MLB slate.
 
-`b9` is a Rust port of `skout`, which is written in Go. The port is at an early stage and does not yet claim feature parity or readiness to replace `skout`.
+`b9` is the Rust successor to the Go `skout` binary. Every retained command is present, with fixture-backed deterministic behavior and explicit Rust improvements around state isolation, foreground synchronization, daemon control, transport bounds, and snapshot recovery. Replacement readiness remains conditional on the live Yahoo, terminal, keychain, model, and advisory-provider gates recorded in the parity documents.
 
 ## Why
 
@@ -16,9 +16,9 @@ Develop the successor to `skout` in Rust over multiple releases while keeping pa
 
 Run `b9` or `b9 --help` to see the implemented command surface in b9's compact Usage format. Supported 256-color terminals receive the b9 title and section hierarchy; redirected output, `NO_COLOR`, `TERM=dumb`, and terminals without advertised 256-color support receive the same layout as plain text. Run `b9 --version` to print the independently versioned binary contract.
 
-Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout.
+Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout. Ambiguous non-interactive lookups report matching keys and ask for an exact key.
 
-The current glossary intentionally omits an interactive ambiguity selector and colored output. Ambiguous terms report matching keys and ask for an exact key.
+Use `b9 login`, `st`, and `sync` for Yahoo setup and foreground refresh; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; `lm` for advisory-provider configuration; and `start`, `stop`, `restart`, `log`, `fetch`, and `reset` for explicit operations. Tables preserve skout's column order, fixed-width hierarchy, semantic 256-color roles, and plain redirected fallback wherever the available Rust data model supports the corresponding cells. Deferred PQS, PQT, and StartHoldScore cells remain explicit gaps rather than fabricated values.
 
 ## Governance
 

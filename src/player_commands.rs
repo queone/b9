@@ -7,7 +7,9 @@ use std::time::SystemTime;
 use crate::config;
 use crate::domain::{Matchup, PlayerGameLog, StoredFantasyPlayer};
 use crate::evaluation::sort_by_evaluation;
-use crate::player_display::{render_detail, render_players, render_totals, render_weekly_totals};
+use crate::player_display::{
+    render_detail, render_league_totals, render_players, render_weekly_totals,
+};
 use crate::providers::mlb::MlbClient;
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
@@ -61,9 +63,35 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
         ));
     }
     let mut players = players;
-    sort_by_evaluation(&mut players);
+    sort_roster_players(&mut players);
     let output = render_players(&team.name, &players, detected_help_color_mode());
     yahoo_result_notice(&store, output)
+}
+
+fn sort_roster_players(players: &mut [StoredFantasyPlayer]) {
+    fn slot_order(slot: Option<&str>) -> usize {
+        match slot.unwrap_or("").to_ascii_uppercase().as_str() {
+            "C" => 0,
+            "1B" => 1,
+            "2B" => 2,
+            "3B" => 3,
+            "SS" => 4,
+            "OF" | "LF" | "CF" | "RF" => 5,
+            "UTIL" => 6,
+            "SP" => 7,
+            "RP" => 8,
+            "P" => 9,
+            "BN" => 10,
+            "IL" | "IL10" | "IL15" | "IL60" => 11,
+            _ => 12,
+        }
+    }
+
+    players.sort_by(|left, right| {
+        slot_order(left.slot.as_deref())
+            .cmp(&slot_order(right.slot.as_deref()))
+            .then_with(|| left.name.cmp(&right.name))
+    });
 }
 
 fn select_roster_team<'a>(
@@ -104,19 +132,13 @@ pub fn show_totals(weekly: Option<&str>) -> Result<String, PlayerCommandError> {
     if let Some(requested) = weekly {
         return show_weekly_totals(&mut store, &league, &selected, requested);
     }
-    let team = store
+    let teams = store
         .fantasy_teams(&league)
-        .map_err(|failure| error("rt", failure))?
-        .into_iter()
-        .find(|team| team.team_key == selected)
-        .ok_or_else(|| error("rt", "selected team is unavailable"))?;
+        .map_err(|failure| error("rt", failure))?;
     let players = store
         .fantasy_players(&league)
-        .map_err(|failure| error("rt", failure))?
-        .into_iter()
-        .filter(|player| player.owner.as_deref() == Some(team.name.as_str()))
-        .collect::<Vec<_>>();
-    let output = render_totals(&team.name, &players, None, detected_help_color_mode());
+        .map_err(|failure| error("rt", failure))?;
+    let output = render_league_totals(&teams, &players, detected_help_color_mode());
     yahoo_result_notice(&store, output)
 }
 
@@ -652,12 +674,26 @@ mod tests {
                 name: "North Stars".into(),
                 manager_name: "Ada".into(),
                 team_id: 1,
+                waiver_priority: 1,
+                faab_balance: 50,
+                wins: 10,
+                losses: 5,
+                ties: 1,
+                moves: 12,
+                rank: 1,
             },
             StoredFantasyTeam {
                 team_key: "mlb.l.1.t.2".into(),
                 name: "South Stars".into(),
                 manager_name: "Grace".into(),
                 team_id: 2,
+                waiver_priority: 2,
+                faab_balance: 40,
+                wins: 8,
+                losses: 7,
+                ties: 1,
+                moves: 10,
+                rank: 2,
             },
         ];
         assert_eq!(

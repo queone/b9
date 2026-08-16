@@ -1,7 +1,9 @@
-//! MLB roster and season-stat persistence through schema-version-one tables.
+//! MLB roster and season-stat persistence through normalized durable tables.
 
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
+
+use crate::domain::clean_fantasy_team_name;
 
 use super::{Store, StoreError, validate_identity};
 
@@ -207,7 +209,9 @@ impl Store {
                     bat_side: row.get(9)?,
                     pitch_hand: row.get(10)?,
                     yahoo_rank: row.get(11)?,
-                    owner: row.get(12)?,
+                    owner: row
+                        .get::<_, Option<String>>(12)?
+                        .map(|name| clean_fantasy_team_name(&name)),
                     in_yahoo_pool: row.get(13)?,
                     plate_appearances: row.get(14)?,
                     on_base_percentage: row.get(15)?,
@@ -267,6 +271,21 @@ impl Store {
         let (_, now) = self.captured_time(OP)?;
         let path = self.path.clone();
         self.transaction(|tx| {
+            let retained_quality_starts = rows
+                .iter()
+                .filter(|row| row.stat_group == "pitching" && row.quality_starts == 0)
+                .filter_map(|row| {
+                    tx.query_row(
+                        "SELECT MAX(s.qs) FROM mlbam_season_stats s JOIN players p ON p.id=s.player_id WHERE p.mlbam_id=?1 AND s.season=?2 AND s.stat_group='pitching'",
+                        params![row.mlbam_id, season],
+                        |result| result.get::<_, Option<i64>>(0),
+                    )
+                    .ok()
+                    .flatten()
+                    .filter(|quality_starts| *quality_starts > 0)
+                    .map(|quality_starts| (row.mlbam_id, quality_starts))
+                })
+                .collect::<std::collections::BTreeMap<_, _>>();
             let groups = rows.iter().map(|row| row.stat_group.as_str()).collect::<std::collections::BTreeSet<_>>();
             for group in groups {
                 tx.execute("DELETE FROM mlbam_season_stats WHERE season=?1 AND stat_group=?2", params![season, group]).map_err(|error| StoreError::operation(OP, &path, error))?;
@@ -279,10 +298,12 @@ impl Store {
                     tx.execute("INSERT INTO players (mlbam_id,name,mlb_team,position_type,mlbam_match_source,mlbam_matched_at,synced_at) VALUES (?1,?2,?3,?4,'seed',?5,?5)", params![row.mlbam_id,row.name,row.team_abbreviation,role,now]).map_err(|error| StoreError::operation(OP, &path, error))?;
                     tx.last_insert_rowid()
                 };
-                let ip = row.innings_outs as f64 / 3.0;
-                let era = ratio(9.0 * row.earned_runs as f64, ip);
-                let whip = ratio((row.pitcher_walks + row.hits_allowed) as f64, ip);
-                tx.execute("INSERT INTO mlbam_season_stats (player_id,season,stat_group,g,pa,ab,h,hr,rbi,r,sb,avg,obp,bb,hbp,tb,slg,ops,w,sv,hld,k,era,whip,ip,gs,qs,h_pit,er,bb_pit,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31)", params![player_id,season,row.stat_group,row.games,row.plate_appearances,row.at_bats,row.hits,row.home_runs,row.runs_batted_in,row.runs,row.stolen_bases,ratio(row.hits as f64,row.at_bats as f64),ratio((row.hits+row.walks+row.hit_by_pitch) as f64,(row.at_bats+row.walks+row.hit_by_pitch) as f64),row.walks,row.hit_by_pitch,row.total_bases,ratio(row.total_bases as f64,row.at_bats as f64),ratio((row.hits+row.walks+row.hit_by_pitch) as f64,(row.at_bats+row.walks+row.hit_by_pitch) as f64)+ratio(row.total_bases as f64,row.at_bats as f64),row.wins,row.saves,row.holds,row.strikeouts,era,whip,ip,row.games_started,row.quality_starts,row.hits_allowed,row.earned_runs,row.pitcher_walks,now]).map_err(|error| StoreError::operation(OP, &path, error))?;
+                let actual_ip = row.innings_outs as f64 / 3.0;
+                let ip = display_innings(row.innings_outs);
+                let era = ratio(9.0 * row.earned_runs as f64, actual_ip);
+                let whip = ratio((row.pitcher_walks + row.hits_allowed) as f64, actual_ip);
+                let quality_starts = retained_quality_starts.get(&row.mlbam_id).copied().unwrap_or(row.quality_starts);
+                tx.execute("INSERT INTO mlbam_season_stats (player_id,season,stat_group,g,pa,ab,h,hr,rbi,r,sb,avg,obp,bb,hbp,tb,slg,ops,w,sv,hld,k,era,whip,ip,gs,qs,h_pit,er,bb_pit,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31)", params![player_id,season,row.stat_group,row.games,row.plate_appearances,row.at_bats,row.hits,row.home_runs,row.runs_batted_in,row.runs,row.stolen_bases,ratio(row.hits as f64,row.at_bats as f64),ratio((row.hits+row.walks+row.hit_by_pitch) as f64,(row.at_bats+row.walks+row.hit_by_pitch) as f64),row.walks,row.hit_by_pitch,row.total_bases,ratio(row.total_bases as f64,row.at_bats as f64),ratio((row.hits+row.walks+row.hit_by_pitch) as f64,(row.at_bats+row.walks+row.hit_by_pitch) as f64)+ratio(row.total_bases as f64,row.at_bats as f64),row.wins,row.saves,row.holds,row.strikeouts,era,whip,ip,row.games_started,quality_starts,row.hits_allowed,row.earned_runs,row.pitcher_walks,now]).map_err(|error| StoreError::operation(OP, &path, error))?;
             }
             Ok(())
         })
@@ -298,4 +319,10 @@ fn ratio(numerator: f64, denominator: f64) -> f64 {
     } else {
         numerator / denominator
     }
+}
+
+fn display_innings(outs: i64) -> f64 {
+    let whole = outs.div_euclid(3);
+    let remainder = outs.rem_euclid(3);
+    whole as f64 + remainder as f64 / 10.0
 }

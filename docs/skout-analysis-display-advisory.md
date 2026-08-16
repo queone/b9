@@ -235,17 +235,17 @@ Require the Director to record rationale and accept residual risk before a waive
 |---|---|---|---|---|---|---|---|---|
 | CORE-DOMAIN | DOM-* | SLICE-DOM | COMPLETE | PASS | NOT REQUIRED | NONE | `src/domain.rs` and `tests/domain.rs`; no migration required for the internal, non-persisted model | READY |
 | AN-SIGNALS | AN-*, FORM-* | analysis slices | PARTIAL | PASS | NOT REQUIRED | NONE | Deterministic durable-season roster and waiver ranking is implemented; Statcast-dependent PQS, undefined PQT, and SHS remain deferred | PARTIAL |
-| DISP-TABLES | DISP-* | view/display slices | PARTIAL | PASS | PENDING | NONE | Plain glossary and deterministic baseline matchup rendering implemented; full table/card surfaces and LIVE-TERM pending | NOT READY |
+| DISP-TABLES | DISP-* | view/display slices | PARTIAL | PASS | PENDING | NONE | Fixed roster, player, matchup, MLB team, totals, slate, glossary, and card surfaces use skout column order and semantic 256-color roles with plain fallback; deferred analytical cells and LIVE-TERM remain pending | PARTIAL |
 | ADV-LLM | ADV-* | advisory slices | COMPLETE | PASS | PENDING | RESOLVED | Five bounded provider adapters, provider-specific request shapes, environment-before-keyring credentials, interactive provider/model selection, validated key writes, and bounded OpenAI model discovery are implemented; live provider verification remains pending | PARTIAL |
-| CLI-PLAYER | CMD-POOL/CARD/H/P | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
+| CLI-PLAYER | CMD-POOL/CARD/H/P | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | `h` and `p` browse, filter, sort, waiver, and detail paths are implemented; live Yahoo and TTY ambiguity checks remain pending | PARTIAL |
 | CLI-MATCH | CMD-MATCH/ADV-CLI | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Daily MLB overlays, selected/current weekly modes, durable stale and local-only fallback, and opt-in grounded advisory are implemented; live Yahoo and display-parity verification remain pending | PARTIAL |
-| CLI-ROSTER | CMD-ROSTER | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
-| CLI-TOTALS | CMD-RT/TT | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
-| CLI-SP | CMD-SP | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Provider inventory authoritative | NOT READY |
-| CLI-TEAM | CMD-TEAM | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Prior inventories authoritative | NOT READY |
-| CLI-GLOSSARY | CMD-WHAT/DISP-GLOSS | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Embedded parsing, lookup, suggestions, and plain rendering tested; selector and ANSI deferred | NOT READY |
+| CLI-ROSTER | CMD-ROSTER | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | Default and queried roster selection plus hitter/pitcher table rendering are implemented; live Yahoo and TTY ambiguity checks remain pending | PARTIAL |
+| CLI-TOTALS | CMD-RT/TT | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | Season, weekly/date fantasy totals and division-grouped MLB totals are implemented; live Yahoo and terminal checks remain pending | PARTIAL |
+| CLI-SP | CMD-SP | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | Three-day MLB/ESPN/OddsShark slate with ownership and optional-odds degradation is implemented; live unofficial-provider check remains pending | PARTIAL |
+| CLI-TEAM | CMD-TEAM | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | 40-man roster selection, stats, Yahoo context, status tiers, and stale fallback are implemented; live terminal check remains pending | PARTIAL |
+| CLI-GLOSSARY | CMD-WHAT/DISP-GLOSS | SLICE-PARITY | COMPLETE | PASS | PENDING | NONE | Embedded parsing, lookup, suggestions, full rendering, `i --help`, and `whatis` compatibility are tested; TTY ambiguity selection remains pending | PARTIAL |
 
-Deterministic Skout-style root-help and baseline matchup tests provide CLI-ROOT, partial CLI-MATCH, and partial DISP-TABLES evidence. They do not complete TEST-DISP, LIVE-TERM, CLI-GLOSSARY, extended matchup behavior, or the remaining display surfaces.
+Deterministic command, provider, store, analysis, and display tests provide pre-release evidence for the complete retained shell. LIVE-TERM, live Yahoo, keychain, model-list, and advisory-protocol gates remain pending, so aggregate replacement readiness remains `NOT READY`.
 
 Use only the fixed AC status vocabularies. Mark a Required capability READY only after COMPLETE implementation, PASS deterministic tests, PASS live checks or an accepted waiver, resolved decisions, and no executable conflict. Keep aggregate readiness NOT READY while any Required capability is NOT READY.
 

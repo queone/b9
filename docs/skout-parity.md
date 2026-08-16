@@ -25,6 +25,39 @@
 - Preserve this catalog as the authoritative source manifest and capability ownership map.
 - Block Analysis-display-advisory implementation until its detailed inventory is Ratified.
 
+## b9 Closure Dispositions
+
+Use the pinned source manifest below as historical evidence and the detailed inventories as the final implementation ledger. The retained shell is deterministic and complete; replacement readiness remains `NOT READY` until required live gates pass or receive Director-approved waivers.
+
+| b9 surface | Disposition | Deterministic evidence | Live or residual gap |
+|---|---|---|---|
+| `login` | Required live verification | OAuth, PKCE, secure-store, and CLI tests | Live Yahoo OAuth pending |
+| `logout` | Tested Rust improvement | Credential deletion and idempotence tests | Keychain observation pending |
+| `st` | Required live verification | League selection, status, and CLI tests | Live Yahoo league formats pending |
+| `sync` | Tested Rust improvement | Shared synchronization, execution-lock, atomic snapshot, and failure-retention tests | Live Yahoo pending |
+| `start` | Tested Rust improvement | Explicit daemon startup and exclusive-ownership tests | Supported-host lifecycle check pending |
+| `stop` | Tested Rust improvement | Private control and clean-shutdown tests | Supported-host lifecycle check pending |
+| `restart` | Tested Rust improvement | Private control and lifecycle tests | Supported-host lifecycle check pending |
+| `log` | Exact parity | Bounded tail/follow and truncation tests | Final terminal comparison pending |
+| `reset` | Tested Rust improvement | Scoped, confirmed, idempotent deletion tests | Reset-safe-cancel live path pending |
+| `fetch` | Required live verification | Bounded raw-response and stream-routing tests | Live Yahoo fetch pending |
+| `lm` | Required live verification | Model configuration, credential, model-list, and fake-transport tests | Keychain, model list, and provider protocols pending |
+| `i` | Tested Rust improvement | Embedded glossary, lookup, suggestion, help, and no-checkout tests | TTY ambiguity selector pending |
+| `m` | Unsupported gap | Daily/weekly/day flags, stale/local fallback, advisory, column, and color tests | Live providers plus richer source-baseline status/totals details pending |
+| `r` | Unsupported gap | Team selection, stale handling, slot order, fixed columns, and semantic color tests | PQS/PQT/StartHoldScore columns and live Yahoo pending |
+| `rt` | Required live verification | League-wide season/weekly totals, shared-identity MLBAM joins, source-compatible innings notation, quality-start retention, and stale-snapshot tests | Live Yahoo and last-week record pending |
+| `t` | Required live verification | MLB fixtures, snapshots, fixed columns, and semantic color tests | Live MLB and final terminal comparison pending |
+| `tt` | Required live verification | MLB standings/aggregation and rendering tests | Live MLB pending |
+| `sp` | Required live verification | MLB/ESPN/OddsShark fixtures, fallback, and rendering tests | Live unofficial endpoints pending |
+| `h` | Unsupported gap | Browse/detail, filters, sorts, waiver gates, columns, and color tests | Deferred analytical columns, live Yahoo, and TTY ambiguity pending |
+| `p` | Unsupported gap | Browse/detail, filters, sorts, waiver gates, columns, and color tests | Deferred analytical columns, live Yahoo, and TTY ambiguity pending |
+| `_daemon` | Tested Rust improvement | Hidden entry, private control, and lifecycle tests | Supported-host lifecycle check pending |
+| `whatis` | Exact parity | Compatibility-alias and help tests | None |
+
+Intentional Rust improvements are direct foreground synchronization, explicit daemon startup, private control without PID signaling, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML/RotoWire acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells.
+
+Roster totals follow the predecessor's shared-MLBAM aggregation for Yahoo split identities, including two-way players such as Shohei Ohtani. MLB innings retain the source's display notation (`6.1`/`6.2`) for aggregate parity; rate calculations still use true thirds internally.
+
 ## Capability Taxonomy
 
 | ID | Name | Summary | Evidence | Disposition | Dependencies | Workstream |

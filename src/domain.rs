@@ -5,6 +5,29 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+/// Remove emoji presentation runes from a fantasy team name while preserving text.
+pub fn clean_fantasy_team_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| {
+            let code = *character as u32;
+            !matches!(
+                code,
+                0x2600..=0x27bf
+                    | 0x1f000..=0x1f02f
+                    | 0x1f0a0..=0x1f1ff
+                    | 0x1f200..=0x1f2ff
+                    | 0x1f300..=0x1f9ff
+                    | 0x1fa00..=0x1faff
+                    | 0xfe0f
+                    | 0x200d
+            )
+        })
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
 /// One current MLB club used by command selection and league grouping.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MlbTeam {
@@ -309,6 +332,13 @@ pub struct FantasyTeam {
     pub name: String,
     pub manager_name: String,
     pub is_owned_by_current_login: bool,
+    pub waiver_priority: i64,
+    pub faab_balance: i64,
+    pub wins: i64,
+    pub losses: i64,
+    pub ties: i64,
+    pub moves: i64,
+    pub rank: i64,
 }
 
 /// One Yahoo fantasy player normalized independently from persistence.

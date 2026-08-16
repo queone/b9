@@ -75,17 +75,21 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 - Acquire league settings, scoring categories, roster positions, standings, and complete league rosters for foreground synchronization.
 - Acquire weekly scoreboards and both matchup rosters lazily for `b9 m`.
 - Traverse Yahoo numeric-key collections and accept observed array-or-object variants.
+- Remove emoji presentation runes from fantasy team names before persistence or display while preserving textual Unicode.
 - Reject incomplete stable snapshots before normalized replacement.
 - Cache weekly command payloads for 60 seconds and retain the last complete snapshot after refresh failure.
-- Store league, team, player, and roster ownership in the existing schema-version-one tables.
+- Store league, team, player, free-agent, and roster ownership in the existing schema-version-two tables.
 - Keep weekly scoreboards and weekly player statistics in versioned command snapshots.
 - Keep `login`, `logout`, `st`, `sync`, and the baseline `m` surface outside the provider adapter.
 
-## Remaining Yahoo Work
+## Delivered Integration And Gaps
 
-- Defer free agents, transactions, waiver analysis, persisted circuits, background synchronization, and secondary commands.
-- Resolve Yahoo week selection for current, explicit-week, and ISO-day matchup views.
+- Fetch and atomically replace complete free-agent snapshots for roster and waiver evaluation.
+- Resolve current, explicit-week, and ISO-day matchup views with durable stale fallback.
+- Share foreground, startup, and scheduled synchronization through one application service and execution lock.
 - Keep daily player-stat enrichment in the MLB adapter because Yahoo supplies the matchup scoreboard and weekly roster baseline.
+- Defer Yahoo transaction-history acquisition and reconciliation until a later approved provider contract.
+- Keep live OAuth and fantasy-format verification pending while Yahoo application access is unavailable.
 
 ## Fixture Provenance
 

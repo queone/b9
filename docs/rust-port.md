@@ -8,25 +8,17 @@ Parity is an evidence-backed outcome, not a promise that every predecessor imple
 
 ## Current State
 
-b9 has a working Rust CLI, private configuration, isolated SQLite state, versioned snapshots, typed freshness, bounded disk caching, validating HTTP transport, and provider boundaries for Yahoo, MLB, ESPN, and OddsShark.
+b9 has a complete retained command shell, private configuration, isolated SQLite state, versioned snapshots, typed freshness, bounded disk caching, validating HTTP transport, and provider boundaries for Yahoo, MLB, ESPN, OddsShark, and five advisory backends.
 
-Available workflows include authentication, league selection, foreground synchronization, a baseline matchup view, glossary lookup, MLB team rosters and totals, and probable-pitcher odds context. The MLB workflow can use a guarded one-time import of compatible local skout state when authenticated Yahoo data is unavailable.
+Available workflows include authentication, league selection, foreground and explicitly managed background synchronization, daily and weekly matchup views, roster and player-pool inspection, roster totals, glossary lookup, MLB team rosters and totals, probable-pitcher odds context, raw Yahoo fetch, bounded log inspection, safe local reset, and advisory provider/model configuration. Player and MLB displays use skout-compatible column ordering and semantic color roles with deterministic plain fallback. The MLB workflow can use a guarded one-time import of compatible local skout state when authenticated Yahoo data is unavailable.
 
 Yahoo's current app-access delay prevents live verification of some fantasy refresh paths. It does not block fixture-backed implementation or non-Yahoo MLB workflows.
 
-## Remaining Port Work
+## Replacement Boundary
 
-The active delivery order lives in [`../plan.md`](../plan.md). Each idea pointer links to its scoped draft contract.
+The retained command surface is implemented and deterministic closure is tracked in the four parity documents below. Full replacement readiness remains `NOT READY` while live Yahoo access is unavailable and while required terminal, keychain, model, or advisory-protocol checks remain pending.
 
-The remaining work is organized as product-sized verticals:
-
-- Roster and player-pool workflows.
-- Complete matchup modes and contextual advice.
-- Transaction and roster evaluation workflows.
-- Operational commands and retained provider integrations.
-- Final behavioral, display, documentation, and architecture closure.
-
-The temporary local Yahoo snapshot-import idea is deferred until a future decision.
+Automated Savant, FanGraphs, FantasyPros HTML, and RotoWire acquisition is rejected under the recorded provider-policy decisions. Yahoo transaction-history acquisition, Statcast-dependent PQS, the undefined PQT formula, StartHoldScore, and their dependent columns remain explicit gaps. The temporary local Yahoo snapshot-import idea remains deferred.
 
 ## Design Boundaries
 

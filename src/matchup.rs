@@ -15,14 +15,16 @@ use crate::advisory_credentials::{load_credential, selected_provider};
 use crate::config;
 use crate::domain::{
     Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats, StoredFantasyPlayer,
-    is_valid_iso_date,
+    clean_fantasy_team_name, is_valid_iso_date,
 };
 use crate::providers::advisory::{AdvisoryClient, AdvisoryProvider};
 use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, MlbClient};
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
 use crate::store::Store;
-use crate::terminal::{HelpColorMode, detected_help_color_mode, section, title};
+use crate::terminal::{
+    HelpColorMode, detected_help_color_mode, dim, table_heading, title, warning,
+};
 use crate::transport::HttpClient;
 
 const MATCHUP_TTL: Duration = Duration::from_secs(60);
@@ -433,7 +435,7 @@ pub fn render_advisory_response(
     mode: HelpColorMode,
 ) {
     output.push('\n');
-    output.push_str(&section("ADVICE", mode));
+    output.push_str(&table_heading("ADVICE", mode));
     output.push('\n');
     for confirmation in &response.confirmations {
         output.push_str(&format!("  {confirmation}\n"));
@@ -534,11 +536,11 @@ pub fn render_matchup(view: &MatchupView, mode: HelpColorMode) -> String {
     output.push('\n');
     output.push_str(&format!(
         "{}  {}–{}–{}    {}  {}–{}–{}\n",
-        mine.name,
+        clean_fantasy_team_name(&mine.name),
         mine.wins,
         mine.losses,
         mine.ties,
-        opponent.name,
+        clean_fantasy_team_name(&opponent.name),
         opponent.wins,
         opponent.losses,
         opponent.ties
@@ -557,7 +559,7 @@ pub fn render_matchup(view: &MatchupView, mode: HelpColorMode) -> String {
     );
     if !view.odds.is_empty() {
         output.push('\n');
-        output.push_str(&section("ODDS", mode));
+        output.push_str(&table_heading("ODDS", mode));
         output.push('\n');
         for line in &view.odds {
             output.push_str("  ");
@@ -586,7 +588,7 @@ pub fn render_matchup(view: &MatchupView, mode: HelpColorMode) -> String {
 pub fn render_local_matchup(view: &LocalMatchupView, mode: HelpColorMode) -> String {
     let mut output = format!(
         "{}\nLOCAL ROSTER — Yahoo matchup data is unavailable.\n",
-        title(&view.team_name, mode)
+        title(&clean_fantasy_team_name(&view.team_name), mode)
     );
     render_local_players(&mut output, "HITTERS", &view.players, "B", mode);
     render_local_players(&mut output, "PITCHERS", &view.players, "P", mode);
@@ -660,7 +662,7 @@ fn render_local_players(
     mode: HelpColorMode,
 ) {
     output.push('\n');
-    output.push_str(&section(heading, mode));
+    output.push_str(&table_heading(heading, mode));
     output.push('\n');
     for player in players.iter().filter(|player| player.position_type == role) {
         output.push_str(&format!(
@@ -753,7 +755,7 @@ fn render_categories(
     mode: HelpColorMode,
 ) {
     output.push('\n');
-    output.push_str(&section("CATEGORIES", mode));
+    output.push_str(&table_heading("CATEGORIES", mode));
     output.push('\n');
     let mut keys = mine
         .stats
@@ -777,14 +779,12 @@ fn render_categories(
 
 fn render_players(
     output: &mut String,
-    heading: &str,
+    _heading: &str,
     mine: &[PlayerWeekStats],
     opponent: &[PlayerWeekStats],
     role: &str,
     mode: HelpColorMode,
 ) {
-    output.push('\n');
-    output.push_str(&section(heading, mode));
     output.push('\n');
     let left = mine
         .iter()
@@ -794,23 +794,113 @@ fn render_players(
         .iter()
         .filter(|player| player.position_type == role)
         .collect::<Vec<_>>();
+    let header = if role == "B" {
+        format!(
+            "{}{}{}{}{}{}{}{}",
+            table_heading(&format!("{:<20}", "HITTER"), mode),
+            table_heading(&format!("{:<17}", "STATUS"), mode),
+            dim(&format!("{:>6}", "H/AB"), mode),
+            table_heading(&format!("{:>4}", "R"), mode),
+            table_heading(&format!("{:>4}", "HR"), mode),
+            table_heading(&format!("{:>4}", "RBI"), mode),
+            table_heading(&format!("{:>5}", "SB"), mode),
+            table_heading(&format!("{:>7}", "AVG"), mode),
+        )
+    } else {
+        format!(
+            "{}{}{}{}{}{}{}{}",
+            table_heading(&format!("{:<20}", "PITCHER"), mode),
+            table_heading(&format!("{:<17}", "STATUS"), mode),
+            dim(&format!("{:>6}", "IP"), mode),
+            table_heading(&format!("{:>4}", "W"), mode),
+            table_heading(&format!("{:>4}", "SV"), mode),
+            table_heading(&format!("{:>4}", "K"), mode),
+            table_heading(&format!("{:>6}", "ERA"), mode),
+            table_heading(&format!("{:>6}", "WHIP"), mode),
+        )
+    };
+    output.push_str(&format!(
+        "{header}    {}   {header}\n",
+        dim(&format!("{:<4}", "SLOT"), mode)
+    ));
     let rows = left.len().max(right.len());
     for index in 0..rows {
-        let left = left
-            .get(index)
-            .map(|player| {
-                format!(
-                    "{:<3} {:<22}",
-                    player.slot_position.to_string(),
-                    player.name
-                )
-            })
-            .unwrap_or_else(|| " ".repeat(25));
-        let right = right
-            .get(index)
-            .map(|player| format!("{:<3} {}", player.slot_position.to_string(), player.name))
+        let left_player = left.get(index).copied();
+        let right_player = right.get(index).copied();
+        let left = left_player
+            .map(|player| matchup_player_cell(player, role, mode))
+            .unwrap_or_else(|| " ".repeat(67));
+        let right = right_player
+            .map(|player| matchup_player_cell(player, role, mode))
             .unwrap_or_default();
-        output.push_str(&format!("  {left} | {right}\n"));
+        let slot = left_player
+            .map(|player| player.slot_position.to_string())
+            .unwrap_or_default();
+        let row = format!("{left}    {}   {right}\n", dim(&format!("{slot:<4}"), mode));
+        output.push_str(row.trim_end());
+        output.push('\n');
+    }
+}
+
+fn matchup_player_cell(player: &PlayerWeekStats, role: &str, mode: HelpColorMode) -> String {
+    let name = format!("{} {}", player.name, player.team);
+    let name = format!("{:<20}", name.chars().take(20).collect::<String>());
+    let status = if player.injury_status.is_empty() {
+        "NoGame"
+    } else {
+        &player.injury_status
+    };
+    let stats = if role == "B" {
+        format!(
+            "{:>6}{:>4}{:>4}{:>4}{:>5}{:>7}",
+            if player.hab.is_empty() {
+                "—"
+            } else {
+                &player.hab
+            },
+            player.runs,
+            player.home_runs,
+            player.runs_batted_in,
+            player.stolen_bases,
+            if player.batting_average.is_empty() {
+                "—"
+            } else {
+                &player.batting_average
+            },
+        )
+    } else {
+        format!(
+            "{:>6}{:>4}{:>4}{:>4}{:>6}{:>6}",
+            if player.innings_pitched.is_empty() {
+                "—"
+            } else {
+                &player.innings_pitched
+            },
+            player.wins,
+            player.saves,
+            player.strikeouts,
+            if player.earned_run_average.is_empty() {
+                "—"
+            } else {
+                &player.earned_run_average
+            },
+            if player.whip.is_empty() {
+                "—"
+            } else {
+                &player.whip
+            },
+        )
+    };
+    let row = format!(
+        "{name}{:<17}{stats}",
+        status.chars().take(17).collect::<String>()
+    );
+    if player.slot_position == Position::InjuredList || player.injury_status.starts_with("IL") {
+        warning(&row, mode)
+    } else if player.slot_position == Position::Bench {
+        dim(&row, mode)
+    } else {
+        row
     }
 }
 

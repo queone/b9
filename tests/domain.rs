@@ -2,8 +2,17 @@ use std::collections::HashMap;
 
 use b9::domain::{
     BattingStats, GameLogRow, League, Matchup, MatchupTeam, PitchingStats, Player, PlayerWeekStats,
-    Position, Roster, RosterWeekStats, ScoringType, StatcastData,
+    Position, Roster, RosterWeekStats, ScoringType, StatcastData, clean_fantasy_team_name,
 };
+
+#[test]
+fn fantasy_team_names_drop_emoji_without_damaging_text() {
+    assert_eq!(
+        clean_fantasy_team_name("💎 Jeff’s Finest Team"),
+        "Jeff’s Finest Team"
+    );
+    assert_eq!(clean_fantasy_team_name("Los Niños ⚾"), "Los Niños");
+}
 
 #[test]
 fn mlb_utility_records_round_trip_without_provider_fields() {

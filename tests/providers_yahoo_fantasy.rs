@@ -26,6 +26,8 @@ fn selected_fixtures_decode_complete_workflow_records() {
     assert_eq!(settings.roster_positions.len(), 2);
     let teams = parse_standings("mlb.l.1", &fixture("standings")).unwrap();
     assert_eq!(teams.len(), 2);
+    assert_eq!((teams[0].rank, teams[0].wins, teams[0].moves), (1, 107, 29));
+    assert_eq!(teams[1].name, "Opponents");
     let rosters = parse_league_rosters("mlb.l.1", &fixture("rosters")).unwrap();
     assert_eq!((rosters.players.len(), rosters.slots.len()), (2, 2));
     let matchup = parse_scoreboard(&fixture("matchup")).unwrap();

@@ -2,6 +2,10 @@
 
 Canonical definitions for baseball, fantasy, and b9-specific terms. This file is the single source of truth — other docs reference it, never redefine terms in their own words. Computation and API docs may add implementation-specific detail; prompts may compress wording; nothing may contradict definitions here.
 
+Historical `internal/...` entries in **Where** fields identify the pinned Go source evidence from which the definition was ported; they are not claims about Rust module paths. Delivered and deferred Rust ownership is recorded in the parity documents.
+
+Definitions describe the shared baseball vocabulary, including source-baseline signals that remain deferred in Rust. A definition is not an implementation-readiness claim; `docs/skout-analysis-display-advisory.md` records delivered displays and residual gaps.
+
 When a change introduces or redefines a domain term, update this file in the same pass.
 
 ---
@@ -651,7 +655,7 @@ Batter awarded first base after four balls (hitter stat) or pitcher issues a bas
 
 ### WAR (`fwar`) [stat]
 
-Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. b9 displays FanGraphs fWAR.
+Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. The pinned Go baseline displayed FanGraphs fWAR; b9 does not acquire or display it while automated FanGraphs access remains rejected.
 
 - **Aliases:** fWAR
 - **Where:** `players.fangraphs_war`
@@ -706,7 +710,7 @@ Deterministic classification of each scoring category as push, protect, or aband
 
 ### Closer (`closer`) [b9]
 
-The designated closer for each MLB team. Source: FanGraphs RosterResource `data-role="Closer"` / `Co-Closer` tags (primary), with the SV-leader heuristic as fallback when FG tags the team `Closer Committee` or omits it. The override gate enforces active-roster status and SP/RP role rules, so IL'd or starter-shape pitchers are excluded regardless of their FG tag. Receives a 1.5x SV emphasis multiplier on PQS. Displayed as `RP1` (Yel4-wrapped ASCII `1`).
+The designated closer for each MLB team. The pinned Go baseline used FanGraphs RosterResource tags with an SV-leader fallback and displayed `RP1`. b9 retains only deterministic data available from approved providers; FanGraphs enrichment and the PQS multiplier remain deferred.
 
 - **Where:** `internal/store/player.go` — `MarkClosers`
 - **Prompt:** no

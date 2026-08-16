@@ -37,23 +37,16 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 | CMD-HITTERS | CLI-PLAYER | Public; `h [N\|name]` | Zero or one nonnegative N/name | `-s/--sort`, `-p/--position`, `-w/--waiver` | Top 20 by Yahoo rank; name detail/TUI; waiver filters | Auto-start enabled; Yahoo attribution stdout on success | Browse/detail/TUI/attribution stdout; debug/errors stderr; 0/1 | May trigger sync; reads/writes store/snapshots | `<skout-repo>/cmd/skout/hitters.go:7-34`, `<skout-repo>/cmd/skout/playerpool.go:128-552` | `hitters_test.go:TestHCmd_help`, `TestHPCanonicals`, `TestRemovedCommands`, `TestHPFlagDefaultsEmpty`; gaps: default count/output/exits | Live: providers/TUI; store/analysis/display internals deferred |
 | CMD-PITCHERS | CLI-PLAYER | Public; `p [N\|name]` | Zero or one nonnegative N/name | `-s/--sort`, `-p/--position`, `-w/--waiver` | Top 20 by Yahoo rank; name detail/TUI; waiver filters | Auto-start enabled; Yahoo attribution stdout on success | Browse/detail/TUI/attribution stdout; debug/errors stderr; 0/1 | May trigger sync; reads/writes store/snapshots | `<skout-repo>/cmd/skout/pitchers.go:7-34`, `<skout-repo>/cmd/skout/playerpool.go:128-552` | `pitchers_test.go:TestPCmd_help`, shared `hitters_test.go` canonical/default assertions; gaps: default count/output/exits | Live: providers/TUI; store/analysis/display internals deferred |
 
-## Implemented b9 Subset
+## Implemented b9 Surface
 
-The Rust command layer now implements the Yahoo-network-independent `t`, `tt`, and `sp` utility subset with skout-compatible terminal structure. `t` renders rich hitter and pitcher rows with optional durable local Yahoo context; `tt` renders one wide division-grouped table per league; `sp` renders paired probable pitchers and a normalized odds bar on one row per game. Each command accepts `-f` and `--force`, remains foreground-owned, and never initiates a Yahoo request.
+The Rust command layer implements every retained public command plus hidden `_daemon` and compatibility alias `whatis`. Shared metadata owns registration and root help; every public command exposes command-specific help. The command-specific comparison rows below remain authoritative for exact parity, tested Rust improvements, live checks, and explicit gaps.
 
-- Implement CLI-1 shared descriptors, root parsing, Skout-style root help, utility version, stream routing, and exit classification for the current command surface.
-- Implement Skout's compact title, uppercase sections, aligned rows, 256-color roles, and automatic plain fallback for root help.
-- Implement CMD-GLOSSARY deterministic parsing, full display, exact and substring lookup, Unicode-scalar suggestions, and both `whatis` and visible `i` routing.
-- Embed the pinned glossary at compile time instead of retaining Skout's runtime source-path lookup.
-- Replace ambiguous-match selection with deterministic matching-key guidance until the terminal slice.
-- Retain plain glossary rendering until the ANSI and visible-width display slice.
-- Implement CMD-LOGIN, CMD-LOGOUT, and CMD-STATUS with b9-owned PKCE, credential, configuration, deterministic league-selection, and status boundaries.
-- Implement CMD-SYNC as a bounded foreground operation without Skout's daemon, signal, PID, log-tail, or automatic-start mechanics.
-- Implement CMD-MATCH daily default and ISO-day overlays, explicit and current weekly modes, durable stale fallback, optional current-game odds, and opt-in grounded advisory.
-- Implement deterministic season-stat evaluation for `r` and existing `h -w` / `p -w` waiver ordering without new provider calls.
-- Implement `-l/--league`, secret-safe `-d/--debug`, command-specific help for the delivered commands, and Yahoo attribution on stderr.
-- Defer startup hooks, daemon-only commands, the remaining public commands, the extended matchup flags, and colored glossary presentation.
-- Preserve the inherited mismatch between the glossary Coverage Checklist and its 113 defined entries.
+- Preserve `login`, `logout`, `st`, `m`, `r`, `rt`, `t`, `tt`, `sp`, `h`, `p`, `i`, `lm`, `fetch`, `log`, `reset`, `start`, `stop`, and `restart` as public commands.
+- Preserve direct foreground `sync`, explicit daemon startup, private socket control, b9-owned state, and embedded glossary data as tested Rust improvements.
+- Preserve skout's compact title, uppercase hierarchy, fixed player and MLB columns, semantic 256-color roles, and automatic plain fallback.
+- Preserve current, explicit-week, weekly, and ISO-day matchup selection with durable stale and local-only fallbacks.
+- Preserve deterministic roster and waiver ordering while leaving PQS, PQT, StartHoldScore, and dependent columns as explicit gaps.
+- Keep interactive selector and live-provider behavior pending their manual gates.
 
 ## Operational Contracts
 
@@ -209,7 +202,7 @@ All executable capability dispositions remain `Required`. A Director decision is
 
 | ID | Recommendation | Evidence | Compatibility impact | Tradeoffs | Affected capabilities | Decision status |
 |---|---|---|---|---|---|---|
-| DR-001 | Generate parser registration and help presentation from one command metadata model | `<skout-repo>/cmd/skout/root.go`, CF-002, CF-003 | Preserve current parsing/help text except settled stale claims | Reduces drift; constrains custom formatting behind one model | CLI-ROOT and all command shells | Shared descriptors and Skout-style root help implemented for the current surface; remaining commands and command-specific help deferred |
+| DR-001 | Generate parser registration and help presentation from one command metadata model | `<skout-repo>/cmd/skout/root.go`, CF-002, CF-003 | Preserve current parsing/help text except settled stale claims | Reduces drift; constrains custom formatting behind one model | CLI-ROOT and all command shells | Shared descriptors, Skout-style root help, and command-specific help are implemented for every retained command |
 | DR-002 | Put browser, keychain, signal, PID, process, and terminal mechanics behind explicit platform boundaries | `<skout-repo>/internal/yahoo/auth.go`, `<skout-repo>/cmd/skout/svc.go`, `<skout-repo>/cmd/skout/tui.go`, `<skout-repo>/internal/advisory/keychain.go` | Preserve current macOS behavior exactly | Adds interfaces/test doubles; enables deterministic tests and later portability | CLI-AUTH, OPS-DAEMON, OPS-CONFIG, ADV-LLM | Recommended for later implementation design; no platform expansion authorized |
 | DR-003 | Separate daemon control, sync triggering, progress following, and sync execution into bounded orchestration seams | `<skout-repo>/cmd/skout/svc.go`, `<skout-repo>/cmd/skout/sync.go` | Preserve commands, timing gates, signals, output, and failure behavior | More boundaries and fixtures; reduces coupling and makes protocol tests possible | OPS-DAEMON, OPS-SYNC | Recommended for a later implementation AC; not authorized here |
 
@@ -259,7 +252,7 @@ No crate, framework, or compatibility change is selected.
 
 | Slice | Prerequisites | Delivered contracts | Required tests | Explicit exclusions |
 |---|---|---|---|---|
-| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Partial: shared descriptors and Skout-style root help implemented; global flags, command-specific help parity, OP-ATTR, remaining commands, providers, and daemon deferred |
+| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Complete deterministic shell: shared descriptors, global flags, command help, compatibility alias, hidden daemon, streams, and classified exits implemented; live provider outcomes remain separately gated |
 | CLI-2 Local operations | CLI-1; providers/storage inventory for shared persistence boundaries | OP-CONFIG, CMD-LOG path/tail core, CMD-RESET filesystem core | Temp-profile permissions, atomic config, log, reset/cancel tests | Real keychain/browser/signals/providers |
 | CLI-3 Platform boundaries | CLI-1; explicit implementation design approval | Browser/keychain/terminal/process/signal interfaces preserving macOS behavior | Adapter contract tests and macOS-focused deterministic doubles | New platform support claims |
 | CLI-4 Daemon protocol | CLI-2 and CLI-3; providers/storage sync contract | CMD-START/STOP/RESTART/DAEMON/SYNC and OP-DAEMON/OP-SIGNALS/OP-LOG/OP-SYNC | State-machine, PID, signal, timing, rotation, progress, error tests | Provider pipeline implementation |

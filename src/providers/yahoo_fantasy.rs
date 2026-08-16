@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 use crate::domain::{
     FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, MatchupTeam, PlayerWeekStats,
-    Position, RosterWeekStats, ScoringType,
+    Position, RosterWeekStats, ScoringType, clean_fantasy_team_name,
 };
 
 use super::yahoo::{YahooClient, YahooError};
@@ -328,7 +328,7 @@ pub fn parse_user_leagues(value: &Value) -> Result<Vec<UserLeague>, YahooFantasy
             name: text(&map, "name"),
             season: integer(&map, "season") as i32,
             team_key: text(&map, "team_key"),
-            team_name: text(&map, "team_name"),
+            team_name: clean_fantasy_team_name(&text(&map, "team_name")),
         });
     }
     Ok(unique.into_values().collect())
@@ -430,9 +430,16 @@ pub fn parse_standings(
             team_key,
             league_key: league_key.to_owned(),
             team_id: integer(&map, "team_id"),
-            name: text(&map, "name"),
+            name: clean_fantasy_team_name(&text(&map, "name")),
             manager_name: text(&map, "nickname"),
             is_owned_by_current_login: text(&map, "is_owned_by_current_login") == "1",
+            waiver_priority: integer(&map, "waiver_priority"),
+            faab_balance: integer(&map, "faab_balance"),
+            wins: integer(&map, "wins"),
+            losses: integer(&map, "losses"),
+            ties: integer(&map, "ties"),
+            moves: integer(&map, "number_of_moves").max(integer(&map, "moves")),
+            rank: integer(&map, "rank"),
         });
     }
     if teams.is_empty() {
@@ -558,7 +565,7 @@ pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError
             .map(|team| MatchupTeam {
                 team_key: text(&team, "team_key"),
                 team_id: integer(&team, "team_id"),
-                name: text(&team, "name"),
+                name: clean_fantasy_team_name(&text(&team, "name")),
                 is_current_login: text(&team, "is_owned_by_current_login") == "1",
                 stats: team_statistics(&team),
                 wins: integer(&team, "wins") as i32,
@@ -641,7 +648,7 @@ pub fn parse_roster_week_stats(
     }
     Ok(RosterWeekStats {
         team_key: team_key.to_owned(),
-        team_name: text(&team, "name"),
+        team_name: clean_fantasy_team_name(&text(&team, "name")),
         week,
         players,
     })

@@ -4,9 +4,9 @@ Operators  5–4–1    Opponents  4–5–1
 CATEGORIES
   Category totals unavailable
 
-HITTERS
-  OF  Ada Hitter             | 
+HITTER              STATUS             H/AB   R  HR RBI   SB    AVG    SLOT   HITTER              STATUS             H/AB   R  HR RBI   SB    AVG
+Ada Hitter          NoGame                —   0   0   0    0      —    OF
 
-PITCHERS
-                            | SP  Grace Pitcher
+PITCHER             STATUS               IP   W  SV   K   ERA  WHIP    SLOT   PITCHER             STATUS               IP   W  SV   K   ERA  WHIP
+                                                                              Grace Pitcher       NoGame                —   0   0   0     —     —
 Games: 8 complete / 2 live / 10 remaining

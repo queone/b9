@@ -128,6 +128,51 @@ fn baseline_matchup_is_deterministic_and_marks_stale_data() {
         HelpColorMode::Color,
     );
     assert!(colored.contains("\u{1b}[1;38;5;231mMATCHUP WEEK 7\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;33mHITTER"));
+    assert!(colored.contains("\u{1b}[38;5;245m  H/AB\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;245mSLOT\u{1b}[0m"));
+}
+
+#[test]
+fn matchup_surfaces_strip_team_name_emoji_from_cached_views() {
+    let matchup = Matchup {
+        week: 7,
+        week_start: String::new(),
+        week_end: String::new(),
+        status: "midevent".into(),
+        teams: [
+            team("one", "💎 Operators", true, 5, 4),
+            team("two", "⚾ Opponents", false, 4, 5),
+        ],
+    };
+    let roster = |key: &str, name: &str| RosterWeekStats {
+        team_key: key.into(),
+        team_name: name.into(),
+        week: 7,
+        players: vec![],
+    };
+    let output = render_matchup(
+        &MatchupView {
+            matchup,
+            mine: roster("one", "💎 Operators"),
+            opponent: roster("two", "⚾ Opponents"),
+            stale: true,
+            odds: vec![],
+        },
+        HelpColorMode::Plain,
+    );
+    assert!(output.contains("Operators  5–4–1    Opponents  4–5–1"));
+    assert!(!output.contains('💎'));
+    assert!(!output.contains('⚾'));
+
+    let local = render_local_matchup(
+        &LocalMatchupView {
+            team_name: "💎 Operators".into(),
+            players: vec![],
+        },
+        HelpColorMode::Plain,
+    );
+    assert!(local.starts_with("Operators\n"));
 }
 
 #[test]

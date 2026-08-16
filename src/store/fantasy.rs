@@ -4,7 +4,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{OptionalExtension, params};
 
-use crate::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, StoredFantasyPlayer};
+use crate::domain::{
+    FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, StoredFantasyPlayer,
+    clean_fantasy_team_name,
+};
 
 use super::{Store, StoreError, validate_identity};
 
@@ -45,6 +48,13 @@ pub struct StoredFantasyTeam {
     pub name: String,
     pub manager_name: String,
     pub team_id: i64,
+    pub waiver_priority: i64,
+    pub faab_balance: i64,
+    pub wins: i64,
+    pub losses: i64,
+    pub ties: i64,
+    pub moves: i64,
+    pub rank: i64,
 }
 
 /// One persisted Yahoo scoring category used for ordered weekly output.
@@ -94,8 +104,8 @@ impl Store {
                     .map_err(|error| StoreError::operation("insert Yahoo position", &path, error))?;
             }
             for team in &snapshot.teams {
-                transaction.execute("INSERT INTO yahoo_teams (team_key,league_key,team_id,name,manager_nickname,synced_at) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(team_key) DO UPDATE SET league_key=excluded.league_key,team_id=excluded.team_id,name=excluded.name,manager_nickname=excluded.manager_nickname,synced_at=excluded.synced_at",
-                    params![team.team_key,team.league_key,team.team_id,team.name,team.manager_name,captured_at])
+                transaction.execute("INSERT INTO yahoo_teams (team_key,league_key,team_id,name,manager_nickname,waiver_priority,faab_balance,wins,losses,ties,moves,rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(team_key) DO UPDATE SET league_key=excluded.league_key,team_id=excluded.team_id,name=excluded.name,manager_nickname=excluded.manager_nickname,waiver_priority=excluded.waiver_priority,faab_balance=excluded.faab_balance,wins=excluded.wins,losses=excluded.losses,ties=excluded.ties,moves=excluded.moves,rank=excluded.rank,synced_at=excluded.synced_at",
+                    params![team.team_key,team.league_key,team.team_id,team.name,team.manager_name,team.waiver_priority,team.faab_balance,team.wins,team.losses,team.ties,team.moves,team.rank,captured_at])
                     .map_err(|error| StoreError::operation("upsert Yahoo team", &path, error))?;
             }
             for player in &snapshot.players {
@@ -159,15 +169,22 @@ impl Store {
     /// Read teams for one league in stable provider-key order.
     pub fn fantasy_teams(&self, league_key: &str) -> Result<Vec<StoredFantasyTeam>, StoreError> {
         validate_identity("read fantasy teams", "league key", league_key)?;
-        let mut statement = self.connection().prepare("SELECT team_key,name,COALESCE(manager_nickname,''),team_id FROM yahoo_teams WHERE league_key=?1 ORDER BY team_key")
+        let mut statement = self.connection().prepare("SELECT team_key,name,COALESCE(manager_nickname,''),team_id,COALESCE(waiver_priority,0),COALESCE(faab_balance,0),COALESCE(wins,0),COALESCE(losses,0),COALESCE(ties,0),COALESCE(moves,0),COALESCE(rank,0) FROM yahoo_teams WHERE league_key=?1 ORDER BY CASE WHEN COALESCE(rank,0)>0 THEN rank ELSE 999999 END,team_key")
             .map_err(|error| StoreError::operation("prepare fantasy teams", &self.path, error))?;
         let rows = statement
             .query_map([league_key], |row| {
                 Ok(StoredFantasyTeam {
                     team_key: row.get(0)?,
-                    name: row.get(1)?,
+                    name: clean_fantasy_team_name(&row.get::<_, String>(1)?),
                     manager_name: row.get(2)?,
                     team_id: row.get(3)?,
+                    waiver_priority: row.get(4)?,
+                    faab_balance: row.get(5)?,
+                    wins: row.get(6)?,
+                    losses: row.get(7)?,
+                    ties: row.get(8)?,
+                    moves: row.get(9)?,
+                    rank: row.get(10)?,
                 })
             })
             .map_err(|error| StoreError::operation("query fantasy teams", &self.path, error))?;
@@ -257,8 +274,8 @@ COALESCE(h.pa,0),COALESCE(h.obp,0),COALESCE(h.r,0),COALESCE(h.hr,0),COALESCE(h.r
 COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0)
 FROM players p LEFT JOIN yahoo_roster_slots ys ON ys.player_id=p.id AND ys.team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1) LEFT JOIN yahoo_teams t ON t.team_key=ys.team_key
 LEFT JOIN yahoo_free_agents fa ON fa.player_id=p.id AND fa.league_key=?1
-LEFT JOIN mlbam_season_stats h ON h.player_id=p.id AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
-LEFT JOIN mlbam_season_stats q ON q.player_id=p.id AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats h ON h.player_id=(SELECT hs.player_id FROM mlbam_season_stats hs JOIN players hp ON hp.id=hs.player_id WHERE hp.mlbam_id=p.mlbam_id AND hs.stat_group='hitting' AND hs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY hs.synced_at DESC,hs.player_id LIMIT 1) AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats q ON q.player_id=(SELECT qs.player_id FROM mlbam_season_stats qs JOIN players qp ON qp.id=qs.player_id WHERE qp.mlbam_id=p.mlbam_id AND qs.stat_group='pitching' AND qs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY qs.synced_at DESC,qs.player_id LIMIT 1) AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
 WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id IS NOT NULL) ORDER BY COALESCE(p.yahoo_rank,999999),p.name";
         let mut statement = self
             .connection()
@@ -276,7 +293,9 @@ WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id 
                     status: row.get(6)?,
                     rank: row.get(7)?,
                     percent_owned: row.get(8)?,
-                    owner: row.get(9)?,
+                    owner: row
+                        .get::<_, Option<String>>(9)?
+                        .map(|name| clean_fantasy_team_name(&name)),
                     slot: row.get(10)?,
                     batting: [
                         row.get(11)?,

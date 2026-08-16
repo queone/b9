@@ -2,6 +2,7 @@ use b9::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Position
 use b9::store::{
     CURRENT_SCHEMA_VERSION, CategoryWrite, FantasySnapshotWrite, PositionWrite, Store,
 };
+use rusqlite::Connection;
 use tempfile::tempdir;
 
 fn snapshot() -> FantasySnapshotWrite {
@@ -37,14 +38,28 @@ fn snapshot() -> FantasySnapshotWrite {
                 name: "One".into(),
                 manager_name: "A".into(),
                 is_owned_by_current_login: true,
+                waiver_priority: 1,
+                faab_balance: 65,
+                wins: 10,
+                losses: 4,
+                ties: 1,
+                moves: 12,
+                rank: 1,
             },
             FantasyTeam {
                 team_key: "mlb.l.1.t.2".into(),
                 league_key: "mlb.l.1".into(),
                 team_id: 2,
-                name: "Two".into(),
+                name: "💎 Two".into(),
                 manager_name: "B".into(),
                 is_owned_by_current_login: false,
+                waiver_priority: 2,
+                faab_balance: 50,
+                wins: 8,
+                losses: 6,
+                ties: 1,
+                moves: 10,
+                rank: 2,
             },
         ],
         players: vec![
@@ -101,6 +116,18 @@ fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
     let teams = store.fantasy_teams("mlb.l.1").unwrap();
     assert_eq!(teams.len(), 2);
     assert_eq!(teams[0].manager_name, "A");
+    assert_eq!(teams[1].name, "Two");
+    assert_eq!(
+        store
+            .fantasy_players("mlb.l.1")
+            .unwrap()
+            .into_iter()
+            .find(|player| player.yahoo_player_id == Some(102))
+            .unwrap()
+            .owner
+            .as_deref(),
+        Some("Two")
+    );
     let mut invalid = snapshot();
     invalid.slots[0].team_key = "other".into();
     assert!(store.replace_fantasy_snapshot(&invalid).is_err());
@@ -142,4 +169,47 @@ fn complete_free_agent_replacement_is_scoped_to_its_league() {
     store.replace_fantasy_snapshot(&replacement).unwrap();
     assert_eq!(store.fantasy_players("mlb.l.1").unwrap().len(), 2);
     assert_eq!(store.fantasy_players("mlb.l.2").unwrap().len(), 3);
+}
+
+#[test]
+fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("b9.db");
+    let mut store = Store::open_at(&path).unwrap();
+    store.replace_fantasy_snapshot(&snapshot()).unwrap();
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "UPDATE players SET mlbam_id=700001,mlbam_match_source='seed' WHERE yahoo_player_id=101",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO players (mlbam_id,name,position_type,mlbam_match_source,synced_at) VALUES (700001,'Ada Hitter','H','bulk',20)",
+            [],
+        )
+        .unwrap();
+    let stats_player = connection.last_insert_rowid();
+    connection
+        .execute(
+            "INSERT INTO mlbam_season_stats (player_id,season,stat_group,pa,r,avg,synced_at) VALUES (?1,2026,'hitting',500,75,.250,20)",
+            [stats_player],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO mlbam_season_stats (player_id,season,stat_group,pa,r,avg,synced_at) VALUES (?1,2025,'hitting',400,60,.240,10)",
+            [stats_player],
+        )
+        .unwrap();
+
+    let ada = store
+        .fantasy_players("mlb.l.1")
+        .unwrap()
+        .into_iter()
+        .find(|player| player.yahoo_player_id == Some(101))
+        .unwrap();
+    assert_eq!(ada.batting[0], 500.0);
+    assert_eq!(ada.batting[2], 75.0);
 }

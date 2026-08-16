@@ -138,7 +138,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "m",
         display_label: "m",
-        description: "Show the baseline weekly matchup",
+        description: "Show a daily or weekly matchup",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -621,6 +621,7 @@ fn root_command(version: &'static str) -> Command {
                 | "rt"
                 | "h"
                 | "p"
+                | "i"
         ) {
             subcommand = subcommand.arg(
                 Arg::new("command_help")

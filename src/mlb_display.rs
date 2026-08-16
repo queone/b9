@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{MlbRosterPlayer, MlbSlateRow, MlbStanding, MlbTeamTotals};
-use crate::terminal::{HelpColorMode, dim, good, roster_row, section, warning};
+use crate::terminal::{HelpColorMode, dim, good, roster_row, table_heading, warning};
 
 /// Render grouped 40-man rosters in the established skout information shape.
 pub fn render_rosters(
@@ -25,7 +25,7 @@ pub fn render_rosters(
         if group_index > 0 {
             output.push('\n');
         }
-        output.push_str(&section(team, mode));
+        output.push_str(&table_heading(team, mode));
         output.push('\n');
         let two_way = two_way_ids(players);
         for (role, heading, headers) in [
@@ -47,7 +47,7 @@ pub fn render_rosters(
             if rows.is_empty() && role == "P" {
                 continue;
             }
-            output.push_str(&section(&format!("{heading:<26}  {headers}"), mode));
+            output.push_str(&table_heading(&format!("{heading:<26}  {headers}"), mode));
             output.push('\n');
             for player in rows {
                 let qualifier = if two_way.contains(&player.mlbam_id) {
@@ -166,9 +166,9 @@ pub fn render_totals(
         if !output.is_empty() {
             output.push('\n');
         }
-        output.push_str(&section(label, mode));
+        output.push_str(&table_heading(label, mode));
         output.push('\n');
-        output.push_str(&section("TEAM    W    L    PCT     GB   YP     PA    OBP    R   HR  RBI   SB    AVG      IP   QS    W   SV     K    ERA   WHIP", mode));
+        output.push_str(&table_heading("TEAM    W    L    PCT     GB   YP     PA    OBP    R   HR  RBI   SB    AVG      IP   QS    W   SV     K    ERA   WHIP", mode));
         output.push('\n');
         for division in ["East", "Central", "West"] {
             let mut rows = league_rows
@@ -186,7 +186,7 @@ pub fn render_totals(
             if rows.is_empty() {
                 continue;
             }
-            output.push_str(&section(division, mode));
+            output.push_str(&table_heading(division, mode));
             output.push('\n');
             for row in rows {
                 let total = totals.iter().find(|total| total.team.id == row.team.id);
@@ -260,7 +260,7 @@ pub fn render_slate(rows: &[MlbSlateRow], warnings: &[String], mode: HelpColorMo
                 output.push('\n');
             }
             date = &row.date;
-            output.push_str(&section(date, mode));
+            output.push_str(&table_heading(date, mode));
             output.push('\n');
         }
         let pct = row

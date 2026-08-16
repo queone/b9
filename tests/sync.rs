@@ -107,6 +107,13 @@ fn team(id: i64) -> FantasyTeam {
         name: format!("Team {id}"),
         manager_name: format!("Manager {id}"),
         is_owned_by_current_login: id == 1,
+        waiver_priority: id,
+        faab_balance: 100 - id,
+        wins: 10 - id,
+        losses: id,
+        ties: 1,
+        moves: id * 2,
+        rank: id,
     }
 }
 

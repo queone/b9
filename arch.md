@@ -2,9 +2,9 @@
 
 ## MLB utility workflow
 
-The CLI routes `t`, `tt`, and `sp` into `mlb_commands`, which owns foreground freshness, bounded provider composition, complete snapshot selection, and recovery guidance. MLB, ESPN, and OddsShark adapters own request and decoding details; CLI and rendering modules import no transport payloads or SQLite APIs. A guarded compatibility adapter opens `~/.config/skout/skout.db` read-only only when b9 lacks Yahoo-linked state, transactionally maps compatible rows into b9's schema-version-one store, preserves distinct Yahoo and MLB seed identities, and records completion in `sync_log` so the source is not reopened.
+The CLI routes `t`, `tt`, and `sp` into `mlb_commands`, which owns foreground freshness, bounded provider composition, complete snapshot selection, and recovery guidance. MLB, ESPN, and OddsShark adapters own request and decoding details; CLI and rendering modules import no transport payloads or SQLite APIs. A guarded compatibility adapter opens `~/.config/skout/skout.db` read-only only when b9 lacks Yahoo-linked state, transactionally maps compatible rows into b9's schema-version-two store, preserves distinct Yahoo and MLB seed identities, and records completion in `sync_log` so the source is not reopened.
 
-The store reuses schema version one for MLB identities, role-distinct 40-man roster rows, and season statistics. Standings, team directories, rendered-command inputs, and future odds use versioned command snapshots where no normalized table exists. Roster replacement and stale fallback are team-scoped so one failed club does not discard other refreshed clubs.
+The store uses schema version two for MLB identities, role-distinct 40-man roster rows, season statistics, and league-scoped free agents. Standings, team directories, rendered-command inputs, and future odds use versioned command snapshots where no normalized table exists. Roster replacement and stale fallback are team-scoped so one failed club does not discard other refreshed clubs.
 
 `mlb_display` consumes provider-neutral roster, standings, totals, and one-row-per-game slate records while preserving skout's terminal information hierarchy. The store projects durable season statistics and optional local Yahoo rank, eligibility, ownership, and current-team context into those records; the command layer performs no Yahoo request. Shared terminal roles provide ANSI-safe active, injured, off-active, available, and current-roster styling with plain output. The probable-pitcher workflow uses MLB schedules, ESPN only for the current host-local day, and OddsShark only for future days; optional odds never own command success.
 
@@ -40,13 +40,13 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
-- `src/store/schema.sql`: embedded b9 schema-version-one table definitions
+- `src/store/schema.sql`: embedded b9 schema-version-two table definitions
 - `src/store/freshness.rs`: typed item and row freshness policies and lifecycle state
 - `src/store/odds.rs`: validated atomic moneyline replacement and typed game-scoped reads
 - `src/store/snapshots.rs`: validated durable command snapshots and stale metadata
 - `src/store/seasons.rs`: typed source-season completeness manifests
 - `src/store/sync_runs.rs`: typed synchronization-run lifecycle and deterministic counts
-- `src/terminal.rs`: deterministic terminal-color policy and CLI presentation styles
+- `src/terminal.rs`: deterministic terminal-color policy, skout-compatible 256-color roles, ANSI-safe visible widths, and plain fallback
 - `src/transport.rs`: validating synchronous HTTP client, injectable executor, and blocking Rustls implementation
 - `src/lib.rs`: reusable Rust library root
 - `src/domain.rs`: provider-neutral fantasy-baseball domain records and invariants
@@ -69,7 +69,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 
 Provider adapters construct owned acquisition records without performing orchestration or persistence. The Yahoo authentication adapter owns PKCE, credentials, refresh, request construction, retries, and terminal access errors. The Yahoo fantasy adapter interprets numeric-key and array-or-object payloads into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground synchronization validates a complete stable Yahoo snapshot before one normalized replacement, then reconciles unique Yahoo-to-MLB identities without overwriting prior mappings. The matchup application owns 60-second lazy Yahoo refreshes, ISO-date-to-week resolution, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, advisory grounding, warnings, and rendering. Advisory credentials remain in the operating-system keyring; provider requests use bounded shared transport and only run from a fresh complete matchup.
 
-The roster and player-pool commands read normalized Yahoo teams, ownership, free agents, and MLB season statistics from the isolated store. Synchronization fetches free agents as a bounded paginated complete set before atomic replacement. Player cards use the MLB game-log adapter as a foreground refresh path and retain a versioned per-player snapshot so a labeled compatible fallback remains available during provider failure.
+The roster and player-pool commands read normalized Yahoo teams, ownership, free agents, and MLB season statistics from the isolated store. Fantasy roster totals join statistics through MLBAM identity, preserving the predecessor's shared-identity aggregation for split two-way players. MLB totals refreshes supplement the bulk pitching feed with per-starter quality starts, and zero-valued bulk omissions cannot erase a previously acquired nonzero total. MLB innings retain source display notation for aggregate parity while rate calculations use true thirds internally. Synchronization fetches free agents as a bounded paginated complete set before atomic replacement. Player cards use the MLB game-log adapter as a foreground refresh path and retain a versioned per-player snapshot so a labeled compatible fallback remains available during provider failure. Primary player, roster, matchup, team, totals, and slate tables use fixed source-compatible column geometry where the Rust model owns the corresponding data; deferred analytical and rich-status cells remain documented gaps. Headers use blue 33, secondary values gray 245, available players green 34, and inactive or injured rows use the established gray and dark-yellow tiers before falling back to identical plain text.
 
 Weekly roster totals use Yahoo matchup category values in the stored league order and retain weekly snapshots for stale fallback. Waiver filtering uses the durable active-26-man membership plus the predecessor-compatible 60th-percentile usage floors, keeping active-roster interpretation in the store and selection policy in the command layer.
 

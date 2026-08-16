@@ -84,6 +84,16 @@ pub fn section(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;255", mode)
 }
 
+/// Style table and display headings with skout's established blue role.
+pub fn table_heading(value: &str, mode: HelpColorMode) -> String {
+    style(value, "38;5;33", mode)
+}
+
+/// Style primary available-player context with skout's green role.
+pub fn available(value: &str, mode: HelpColorMode) -> String {
+    style(value, "38;5;34", mode)
+}
+
 /// Return the visible width of a string containing ANSI SGR sequences.
 pub fn visible_width(value: &str) -> usize {
     let mut escape = false;
@@ -108,9 +118,9 @@ pub fn visible_width(value: &str) -> usize {
 /// Style an MLB roster status with a shared semantic role.
 pub fn roster_status(value: &str, mode: HelpColorMode) -> String {
     let code = if value.starts_with('D') {
-        "38;5;178"
+        "38;5;100"
     } else if matches!(value, "MIN" | "RM") {
-        "38;5;240"
+        "38;5;245"
     } else {
         "38;5;255"
     };
@@ -119,17 +129,17 @@ pub fn roster_status(value: &str, mode: HelpColorMode) -> String {
 
 /// Style secondary MLB context using the shared dark-gray role.
 pub fn dim(value: &str, mode: HelpColorMode) -> String {
-    style(value, "38;5;240", mode)
+    style(value, "38;5;245", mode)
 }
 
 /// Style favorable or available MLB context using the shared dark-green role.
 pub fn good(value: &str, mode: HelpColorMode) -> String {
-    style(value, "38;5;28", mode)
+    style(value, "38;5;34", mode)
 }
 
 /// Style warnings or current-roster context using the shared yellow role.
 pub fn warning(value: &str, mode: HelpColorMode) -> String {
-    style(value, "38;5;178", mode)
+    style(value, "38;5;100", mode)
 }
 
 /// Apply the active, injured-list, or off-active semantic tier to a complete row.
