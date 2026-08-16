@@ -236,9 +236,9 @@ Require the Director to record rationale and accept residual risk before a waive
 | CORE-DOMAIN | DOM-* | SLICE-DOM | COMPLETE | PASS | NOT REQUIRED | NONE | `src/domain.rs` and `tests/domain.rs`; no migration required for the internal, non-persisted model | READY |
 | AN-SIGNALS | AN-*, FORM-* | analysis slices | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | No conflict | NOT READY |
 | DISP-TABLES | DISP-* | view/display slices | PARTIAL | PASS | PENDING | NONE | Plain glossary and deterministic baseline matchup rendering implemented; full table/card surfaces and LIVE-TERM pending | NOT READY |
-| ADV-LLM | ADV-* | advisory slices | NOT STARTED | NOT RUN | PENDING | RESOLVED | DESIGN-003 resolves DO-006; live gates pending | NOT READY |
+| ADV-LLM | ADV-* | advisory slices | PARTIAL | PASS | PENDING | RESOLVED | Five bounded provider adapters, keyring boundary, deterministic grounding, and partial-response filtering are implemented; live protocol and model-selection UI remain pending | PARTIAL |
 | CLI-PLAYER | CMD-POOL/CARD/H/P | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
-| CLI-MATCH | CMD-MATCH/ADV-CLI | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Current and selected-week baseline, category results, roster rows, stale fallback, and optional current odds implemented; extended weekly/day/advisory behavior pending | NOT READY |
+| CLI-MATCH | CMD-MATCH/ADV-CLI | SLICE-PARITY | PARTIAL | PASS | PENDING | NONE | Daily MLB overlays, selected/current weekly modes, durable stale and local-only fallback, and opt-in grounded advisory are implemented; live Yahoo and display-parity verification remain pending | PARTIAL |
 | CLI-ROSTER | CMD-ROSTER | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
 | CLI-TOTALS | CMD-RT/TT | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |
 | CLI-SP | CMD-SP | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | Provider inventory authoritative | NOT READY |

@@ -14,7 +14,7 @@ Port `skout` from Go to Rust over multiple releases.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, and MLB adapters, foreground fantasy synchronization, and a baseline weekly matchup surface. Remaining commands, background operation, deeper matchup modes, scrapers, and advisory analysis remain later parity work.
+The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, MLB, and advisory adapters, foreground fantasy synchronization, and daily or weekly matchup surfaces. Remaining commands, background operation, scrapers, and deeper advisory analysis remain later parity work.
 
 ## Current Platform
 
@@ -25,6 +25,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/main.rs`: Rust executable entry point and independently versioned utility declaration
 - `src/providers/espn.rs`: injected ESPN scoreboard and moneyline acquisition with typed decoding and structured partial failures
 - `src/providers/mlb.rs`: injected MLB metadata, live-game, statistics, game-log, and quality-start acquisition with bounded batching and short-lived raw-payload caching
+- `src/providers/advisory.rs`: bounded provider-neutral Gemini, Groq, Mistral, Claude, and OpenAI completion adapters
 - `src/providers/yahoo.rs`: injected Yahoo OAuth, secure token refresh, and authenticated bounded raw acquisition
 - `src/providers/yahoo_fantasy.rs`: typed Yahoo league, team, roster, scoreboard, and weekly-stat acquisition
 - `src/providers/mod.rs`: provider boundary exports and contextual acquisition errors
@@ -32,7 +33,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
 - `src/config.rs`: private atomic selected-league and authenticated-team preferences
 - `src/sync.rs`: login, logout, status, and foreground stable-data synchronization application services
-- `src/matchup.rs`: lazy weekly acquisition, snapshot fallback, baseline view models, and terminal rendering
+- `src/matchup.rs`: selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
 - `src/store/schema.sql`: embedded b9 schema-version-one table definitions
@@ -62,7 +63,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 
 ## Data And Control Flow
 
-Provider adapters construct owned acquisition records without performing orchestration or persistence. The Yahoo authentication adapter owns PKCE, credentials, refresh, request construction, retries, and terminal access errors. The Yahoo fantasy adapter interprets numeric-key and array-or-object payloads into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground synchronization validates a complete stable Yahoo snapshot before one normalized replacement, then reconciles unique Yahoo-to-MLB identities without overwriting prior mappings. The matchup application owns 60-second lazy Yahoo refreshes, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, view assembly, warnings, and rendering.
+Provider adapters construct owned acquisition records without performing orchestration or persistence. The Yahoo authentication adapter owns PKCE, credentials, refresh, request construction, retries, and terminal access errors. The Yahoo fantasy adapter interprets numeric-key and array-or-object payloads into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground synchronization validates a complete stable Yahoo snapshot before one normalized replacement, then reconciles unique Yahoo-to-MLB identities without overwriting prior mappings. The matchup application owns 60-second lazy Yahoo refreshes, ISO-date-to-week resolution, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, advisory grounding, warnings, and rendering. Advisory credentials remain in the operating-system keyring; provider requests use bounded shared transport and only run from a fresh complete matchup.
 
 The roster and player-pool commands read normalized Yahoo teams, ownership, free agents, and MLB season statistics from the isolated store. Synchronization fetches free agents as a bounded paginated complete set before atomic replacement. Player cards use the MLB game-log adapter as a foreground refresh path and retain a versioned per-player snapshot so a labeled compatible fallback remains available during provider failure.
 

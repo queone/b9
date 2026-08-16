@@ -84,7 +84,8 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 ## Remaining Yahoo Work
 
 - Defer free agents, transactions, waiver analysis, persisted circuits, background synchronization, and secondary commands.
-- Defer weekly, daily, and advisory matchup modes beyond `m -w <week>`.
+- Resolve Yahoo week selection for current, explicit-week, and ISO-day matchup views.
+- Keep daily player-stat enrichment in the MLB adapter because Yahoo supplies the matchup scoreboard and weekly roster baseline.
 
 ## Fixture Provenance
 

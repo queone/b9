@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
+use b9::advisory::{AdvisoryAction, AdvisoryResponse};
 use b9::domain::{Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats};
 use std::time::{Duration, SystemTime};
 
-use b9::matchup::{MatchupView, cached_or_fetch_at, render_matchup};
+use b9::matchup::{
+    LocalMatchupView, MatchupOptions, MatchupView, cached_or_fetch_at, render_advisory_response,
+    render_local_matchup, render_matchup,
+};
 use b9::store::Store;
 use b9::terminal::HelpColorMode;
 use tempfile::tempdir;
@@ -157,4 +161,70 @@ fn matchup_snapshot_honors_sixty_seconds_and_falls_back_stale() {
     .unwrap();
     assert_eq!(fallback, vec![1, 2]);
     assert!(stale);
+}
+
+#[test]
+fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
+    assert!(
+        MatchupOptions {
+            day: Some("2026-04-01".into()),
+            ..MatchupOptions::default()
+        }
+        .validate()
+        .is_ok()
+    );
+    assert!(
+        MatchupOptions {
+            week: Some(2),
+            day: Some("2026-04-01".into()),
+            ..MatchupOptions::default()
+        }
+        .validate()
+        .is_err()
+    );
+    assert!(
+        MatchupOptions {
+            day: Some("2026-13-40".into()),
+            ..MatchupOptions::default()
+        }
+        .validate()
+        .is_err()
+    );
+}
+
+#[test]
+fn local_fallback_omits_opponent_categories_and_advisory() {
+    let output = render_local_matchup(
+        &LocalMatchupView {
+            team_name: "Operators".into(),
+            players: vec![player(1, "Ada Hitter", "B", Position::Outfield)],
+        },
+        HelpColorMode::Plain,
+    );
+    assert!(output.contains("LOCAL ROSTER"));
+    assert!(!output.contains("CATEGORIES"));
+    assert!(!output.contains("ADVIS"));
+    assert!(!output.contains("|"));
+}
+
+#[test]
+fn advisory_surface_renders_only_grounded_response_fields() {
+    let mut output = String::new();
+    render_advisory_response(
+        &mut output,
+        &AdvisoryResponse {
+            confirmations: vec!["Leading HR".into()],
+            urgent: vec![AdvisoryAction {
+                id: "lineup-0".into(),
+                summary: "Start Ada".into(),
+            }],
+            overnight: Vec::new(),
+            risks: vec!["Ben is injured".into()],
+        },
+        HelpColorMode::Plain,
+    );
+    assert!(output.contains("ADVICE"));
+    assert!(output.contains("Leading HR"));
+    assert!(output.contains("Urgent: Start Ada"));
+    assert!(output.contains("Risk: Ben is injured"));
 }

@@ -229,6 +229,23 @@ impl Store {
             .map_err(|error| StoreError::operation("read fantasy categories", &self.path, error))
     }
 
+    /// Read required roster positions in stable league display order.
+    pub fn fantasy_positions(&self, league_key: &str) -> Result<Vec<PositionWrite>, StoreError> {
+        validate_identity("read fantasy positions", "league key", league_key)?;
+        let mut statement = self.connection().prepare("SELECT position,count FROM yahoo_roster_positions WHERE league_key=?1 ORDER BY position")
+            .map_err(|error| StoreError::operation("prepare fantasy positions", &self.path, error))?;
+        let rows = statement
+            .query_map([league_key], |row| {
+                Ok(PositionWrite {
+                    position: row.get(0)?,
+                    count: row.get(1)?,
+                })
+            })
+            .map_err(|error| StoreError::operation("query fantasy positions", &self.path, error))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| StoreError::operation("read fantasy positions", &self.path, error))
+    }
+
     /// Read all durable players in one league with optional roster ownership.
     pub fn fantasy_players(
         &self,

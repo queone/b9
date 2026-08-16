@@ -15,6 +15,12 @@ pub struct Config {
     pub current_league: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub current_team_key: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub advisory_provider: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub advisory_model: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub strategy_punts: Vec<String>,
 }
 
 /// One contextual configuration failure.

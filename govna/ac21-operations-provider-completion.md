@@ -2,7 +2,7 @@
 
 ## Summary
 
-Complete the Rust operational surface and remaining provider integrations required by observable skout behavior. Deliver foreground utilities, managed background operation, logging and recovery commands, model configuration, and the remaining evidence-backed enrichment sources.
+Complete the Rust operational surface and remaining provider integrations required by observable skout behavior. Deliver foreground utilities, managed background operation, logging and recovery commands, model configuration, and only enrichment sources whose terms, permitted automation, reliability, and fallback behavior survive Audit.
 
 ## In Scope
 
@@ -47,12 +47,14 @@ Complete the Rust operational surface and remaining provider integrations requir
 ## Out Of Scope
 
 - Exclude providers or scrapers that Audit proves have no observable or required replacement behavior.
+- Exclude providers or scrapers that lack permitted automation, acceptable terms, durable response shapes, or safe fallback behavior.
 - Defer final cross-command visual parity and documentation closure to the [parity closure pointer](../plan.md).
 - Exclude release publication and external service provisioning.
 
 ## Migration findings
 
 - Inventory every remaining provider, credential, state-file, process, and model-setting migration during Audit.
+- Record each provider's terms, automation permission, rate limits, response stability, attribution, and fallback disposition during Audit.
 
 ## Acceptance Tests
 
@@ -60,7 +62,7 @@ Complete the Rust operational surface and remaining provider integrations requir
 
 **AT2** [Automated] [Pre-release gate] — Verify daemon exclusivity, clean shutdown, foreground equivalence, logging, and failure recovery.
 
-**AT3** [Automated] [Pre-release gate] — Verify each retained provider uses typed acquisition, bounded transport, atomic persistence, freshness gates, and durable fallback.
+**AT3** [Automated] [Pre-release gate] — Verify each retained provider has an Audit-recorded permission and reliability disposition and uses typed acquisition, bounded transport, atomic persistence, freshness gates, and durable fallback.
 
 **AT4** [Automated] [Pre-release gate] — Verify model configuration persists safely and never exposes credentials.
 

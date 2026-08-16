@@ -11,6 +11,9 @@ fn private_atomic_configuration_round_trips_and_rejects_malformed_state() {
     let expected = Config {
         current_league: "mlb.l.1".into(),
         current_team_key: "mlb.l.1.t.1".into(),
+        advisory_provider: "openai".into(),
+        advisory_model: "gpt-4.1-mini".into(),
+        strategy_punts: vec!["ERA".into()],
     };
     write_at(&path, &expected).unwrap();
     assert_eq!(read_at(&path).unwrap(), expected);
@@ -41,6 +44,7 @@ fn legacy_selections_fill_only_empty_b9_fields() {
         &Config {
             current_league: "legacy.l.1".into(),
             current_team_key: "legacy.l.1.t.2".into(),
+            ..Config::default()
         },
     )
     .unwrap();
@@ -49,6 +53,7 @@ fn legacy_selections_fill_only_empty_b9_fields() {
         &Config {
             current_league: "b9.l.1".into(),
             current_team_key: String::new(),
+            ..Config::default()
         },
     )
     .unwrap();

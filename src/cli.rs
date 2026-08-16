@@ -270,9 +270,14 @@ where
             true,
         ),
         Some(("m", subcommand)) => run_result(
-            crate::matchup::show(
+            crate::matchup::show_with_options(
                 matches.get_one::<String>("league").map(String::as_str),
-                subcommand.get_one::<i32>("week").copied(),
+                crate::matchup::MatchupOptions {
+                    week: subcommand.get_one::<i32>("week").copied(),
+                    weekly: subcommand.get_flag("weekly"),
+                    day: subcommand.get_one::<String>("day").cloned(),
+                    advise: subcommand.get_flag("advise"),
+                },
             ),
             true,
         ),
@@ -370,13 +375,35 @@ fn root_command(version: &'static str) -> Command {
             );
         }
         if descriptor.name == "m" {
-            subcommand = subcommand.arg(
-                Arg::new("week")
-                    .short('w')
-                    .long("week")
-                    .value_name("WEEK")
-                    .value_parser(clap::value_parser!(i32)),
-            );
+            subcommand = subcommand
+                .arg(
+                    Arg::new("week")
+                        .short('w')
+                        .long("week")
+                        .value_name("WEEK")
+                        .value_parser(clap::value_parser!(i32))
+                        .conflicts_with_all(["weekly", "day"]),
+                )
+                .arg(
+                    Arg::new("weekly")
+                        .short('W')
+                        .long("weekly")
+                        .action(ArgAction::SetTrue)
+                        .conflicts_with("day"),
+                )
+                .arg(
+                    Arg::new("day")
+                        .short('D')
+                        .long("day")
+                        .value_name("YYYY-MM-DD")
+                        .conflicts_with_all(["week", "weekly"]),
+                )
+                .arg(
+                    Arg::new("advise")
+                        .short('a')
+                        .long("advise")
+                        .action(ArgAction::SetTrue),
+                );
         }
         if descriptor.name == "rt" {
             subcommand = subcommand.arg(

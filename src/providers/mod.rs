@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::fmt;
 
+pub mod advisory;
 pub mod espn;
 pub mod mlb;
 pub mod oddsshark;
