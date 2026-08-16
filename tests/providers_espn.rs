@@ -180,6 +180,18 @@ fn zero_moneyline_is_successfully_unquoted() {
 }
 
 #[test]
+fn team_mapping_ignores_spacing_and_punctuation_only() {
+    assert!(b9::providers::espn::matches_team(
+        "N.Y. Yankees",
+        "NY Yankees"
+    ));
+    assert!(!b9::providers::espn::matches_team(
+        "New York Mets",
+        "New York Yankees"
+    ));
+}
+
+#[test]
 fn provider_identifiers_are_path_encoded() {
     let scoreboard = br#"{
         "events": [{

@@ -982,6 +982,21 @@ _replace_utility_version() { # $1=utility $2=declared path $3=version
   rm -f "$tmp"
 }
 
+_replace_cli_golden_versions() { # $1=current $2=replacement
+  local current="$1" replacement="$2" path tmp
+  for path in tests/b9_cli.rs tests/terminal.rs; do
+    [ -f "$path" ] || continue
+    tmp=$(mktemp "${TMPDIR:-/tmp}/cli-golden-version.XXXXXX") || return 1
+    awk -v current="$current" -v replacement="$replacement" '{ gsub("b9 v" current, "b9 v" replacement); gsub("b9 " current, "b9 " replacement); gsub("\"" current "\"", "\"" replacement "\""); print }' "$path" >"$tmp" || {
+      rm -f "$tmp"
+      _failure "prep: update $path CLI golden versions: failed"
+      return 1
+    }
+    cat "$tmp" >"$path"
+    rm -f "$tmp"
+  done
+}
+
 _validate_package_utility_versions() {
   local package index=0
   package=$(_cargo_version_info Cargo.toml) || return 1
@@ -1091,6 +1106,7 @@ prep_run() {
 $(paste <(printf '%s\n' "${_bin_targets[@]}") <(printf '%s\n' "${_bin_paths[@]}"))
 EOF
     [ -f Cargo.lock ] && printf '  %s\n' "$(yel7 'Cargo.lock: refresh with cargo check')"
+    printf '  %s\n' "$(yel7 'CLI golden versions: synchronize')"
     [ -f CHANGELOG.md ] && printf '%s\n  CHANGELOG.md: %s\n' \
       "$(yel7 'changelog rows:')" "$(grn3 "$stripped")"
     while IFS= read -r file; do
@@ -1118,6 +1134,8 @@ EOF
     printf '%s %s %s\n' "$(yel7 'prep: updated')" "${_bin_targets[$index]} PROGRAM_VERSION to" "$(grn3 "$stripped")"
     index=$((index + 1))
   done
+  _replace_cli_golden_versions "$current" "$stripped" || return 1
+  printf '%s %s\n' "$(yel7 'prep: synchronized CLI golden versions to')" "$(grn3 "$stripped")"
 
   _require_cargo || return 1
   printf '%s\n' "$(yel7 'prep: refreshing Cargo.lock')"

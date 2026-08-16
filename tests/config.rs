@@ -1,6 +1,6 @@
 use std::fs;
 
-use b9::config::{Config, read_at, write_at};
+use b9::config::{Config, adopt_legacy_at, read_at, write_at};
 use tempfile::tempdir;
 
 #[test]
@@ -29,4 +29,31 @@ fn private_atomic_configuration_round_trips_and_rejects_malformed_state() {
             .to_string()
             .contains("malformed")
     );
+}
+
+#[test]
+fn legacy_selections_fill_only_empty_b9_fields() {
+    let directory = tempdir().unwrap();
+    let target = directory.path().join("b9.json");
+    let legacy = directory.path().join("skout.json");
+    write_at(
+        &legacy,
+        &Config {
+            current_league: "legacy.l.1".into(),
+            current_team_key: "legacy.l.1.t.2".into(),
+        },
+    )
+    .unwrap();
+    write_at(
+        &target,
+        &Config {
+            current_league: "b9.l.1".into(),
+            current_team_key: String::new(),
+        },
+    )
+    .unwrap();
+    let adopted = adopt_legacy_at(&target, &legacy).unwrap();
+    assert_eq!(adopted.current_league, "b9.l.1");
+    assert_eq!(adopted.current_team_key, "legacy.l.1.t.2");
+    assert_eq!(read_at(&target).unwrap(), adopted);
 }

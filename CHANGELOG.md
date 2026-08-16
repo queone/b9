@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.13.0 | AC17: deliver MLB utility workflow |
 | 0.12.0 | AC16: deliver first usable fantasy workflow |
 | 0.11.0 | AC15: add Yahoo authenticated transport |
 | 0.10.0 | AC14: add bounded MLB statistics provider |

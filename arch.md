@@ -1,5 +1,13 @@
 # b9 Architecture
 
+## MLB utility workflow
+
+The CLI routes `t`, `tt`, and `sp` into `mlb_commands`, which owns foreground freshness, bounded provider composition, complete snapshot selection, and recovery guidance. MLB, ESPN, and OddsShark adapters own request and decoding details; CLI and rendering modules import no transport payloads or SQLite APIs. A guarded compatibility adapter opens `~/.config/skout/skout.db` read-only only when b9 lacks Yahoo-linked state, transactionally maps compatible rows into b9's schema-version-one store, preserves distinct Yahoo and MLB seed identities, and records completion in `sync_log` so the source is not reopened.
+
+The store reuses schema version one for MLB identities, role-distinct 40-man roster rows, and season statistics. Standings, team directories, rendered-command inputs, and future odds use versioned command snapshots where no normalized table exists. Roster replacement and stale fallback are team-scoped so one failed club does not discard other refreshed clubs.
+
+`mlb_display` consumes provider-neutral roster, standings, totals, and one-row-per-game slate records while preserving skout's terminal information hierarchy. The store projects durable season statistics and optional local Yahoo rank, eligibility, ownership, and current-team context into those records; the command layer performs no Yahoo request. Shared terminal roles provide ANSI-safe active, injured, off-active, available, and current-roster styling with plain output. The probable-pitcher workflow uses MLB schedules, ESPN only for the current host-local day, and OddsShark only for future days; optional odds never own command success.
+
 ## Purpose
 
 Port `skout` from Go to Rust over multiple releases.

@@ -131,6 +131,8 @@ Classify every named function in these files under its row. Treat command declar
 
 ## Display Candidate Ledger
 
+The Rust display layer now implements skout-compatible team-roster, division-grouped MLB standings and team-total, and paired probable-pitcher slate surfaces through provider-neutral view models. It recomputes aggregate AVG, OBP, SLG, OPS, ERA, and WHIP from counting inputs, converts baseball innings to outs before aggregation, preserves two-way role rows and one-row-per-game doubleheaders, and shares ANSI-safe semantic status, ownership, and current-roster roles with plain fallbacks.
+
 | ID | Source | Surface entries | Output-affecting helpers | Observable contract and assertion |
 |---|---|---|---|---|
 | DISP-ADV | `display/advisory.go` | breakdown, summary | labels, wrap, paragraphs, W/T/L, flippable | Ordered sections and 80-column prose; tests |

@@ -5,6 +5,7 @@ use std::fmt;
 
 pub mod espn;
 pub mod mlb;
+pub mod oddsshark;
 pub mod yahoo;
 pub mod yahoo_fantasy;
 

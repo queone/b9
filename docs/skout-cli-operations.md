@@ -39,6 +39,8 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 
 ## Implemented b9 Subset
 
+The Rust command layer now implements the Yahoo-network-independent `t`, `tt`, and `sp` utility subset with skout-compatible terminal structure. `t` renders rich hitter and pitcher rows with optional durable local Yahoo context; `tt` renders one wide division-grouped table per league; `sp` renders paired probable pitchers and a normalized odds bar on one row per game. Each command accepts `-f` and `--force`, remains foreground-owned, and never initiates a Yahoo request.
+
 - Implement CLI-1 shared descriptors, root parsing, Skout-style root help, utility version, stream routing, and exit classification for the current command surface.
 - Implement Skout's compact title, uppercase sections, aligned rows, 256-color roles, and automatic plain fallback for root help.
 - Implement CMD-GLOSSARY deterministic parsing, full display, exact and substring lookup, Unicode-scalar suggestions, and both `whatis` and visible `i` routing.

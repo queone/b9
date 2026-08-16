@@ -19,6 +19,7 @@ const SEASON: &[u8] = include_bytes!("fixtures/mlb/season.json");
 const SCHEDULE: &[u8] = include_bytes!("fixtures/mlb/schedule.json");
 const BOXSCORE: &[u8] = include_bytes!("fixtures/mlb/boxscore.json");
 const STANDINGS: &[u8] = include_bytes!("fixtures/mlb/standings.json");
+const TEAM_DIRECTORY: &[u8] = include_bytes!("fixtures/mlb/team-directory.json");
 const ROSTER: &[u8] = include_bytes!("fixtures/mlb/roster.json");
 const PEOPLE: &[u8] = include_bytes!("fixtures/mlb/people.json");
 const PLAYER_HITTING: &[u8] = include_bytes!("fixtures/mlb/player-hitting.json");
@@ -335,6 +336,27 @@ fn selected_fixtures_decode_every_typed_contract() {
     assert!(requests[3].url().contains("leagueId=103%2C104&season=2026"));
     assert!(requests[4].url().contains("rosterType=40Man"));
     assert!(requests[5].url().contains("personIds=699009%2C699008"));
+}
+
+#[test]
+fn team_directory_preserves_club_names_abbreviations_and_leagues() {
+    let executor = Arc::new(QueueExecutor::new(vec![response(TEAM_DIRECTORY)]));
+    let client = make_client(executor.clone());
+    let teams = client.fetch_team_directory(2026).unwrap();
+    assert_eq!(teams.len(), 30);
+    assert_eq!(teams[0].abbreviation, "ATH");
+    let yankees = teams
+        .iter()
+        .find(|team| team.abbreviation == "NYY")
+        .unwrap();
+    assert_eq!(yankees.location_name, "New York");
+    assert_eq!(yankees.club_name, "Yankees");
+    assert_eq!(yankees.league_id, 103);
+    assert!(
+        executor.requests.lock().unwrap()[0]
+            .url()
+            .ends_with("teams?sportId=1&season=2026")
+    );
 }
 
 #[test]

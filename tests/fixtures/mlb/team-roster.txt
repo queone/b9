@@ -1,0 +1,9 @@
+LAA - Los Angeles Angels (70-50)
+HITTER                      POS    STATUS             B    YR     PA    OBP    R   HR  RBI   SB    AVG  OWNER
+Active Hitter LAA           OF     Final @ TEX        R    25    200   .350   30    8   25    4   .275  Sluggers
+Two Way LAA (Hitter) †      TWP    Active             —     —      0   .000    0    0    0    0   .000  <not yet in Yahoo>
+PITCHER                     POS    STATUS             T    YR     IP     QS    W   SV    K    ERA   WHIP  OWNER
+Injured Pitcher LAA         SP     IL10               L     —   65.1     12    5    0    70   3.20   1.10  <available>
+Two Way LAA (Pitcher) †     TWP    Active             —     —    0.0      0    0    0     0   0.00   0.00  <not yet in Yahoo>
+
+Fantasy data provided by Yahoo Fantasy — https://sports.yahoo.com/fantasy/

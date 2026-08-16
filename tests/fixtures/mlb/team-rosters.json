@@ -1,0 +1,6 @@
+[
+  {"team_abbreviation":"LAA","mlbam_id":1,"name":"Active Hitter","position":"OF","primary_type":"H","status":"A","game_status":"Final @ TEX","jersey_number":"9","eligible_positions":"OF","bat_side":"R","yahoo_rank":25,"owner":"Sluggers","in_yahoo_pool":true,"plate_appearances":200,"on_base_percentage":0.350,"runs":30,"home_runs":8,"runs_batted_in":25,"stolen_bases":4,"batting_average":0.275},
+  {"team_abbreviation":"LAA","mlbam_id":2,"name":"Injured Pitcher","position":"P","primary_type":"P","status":"D10","injury_status":"IL10","game_status":"Final @ TEX","jersey_number":"40","eligible_positions":"SP","pitch_hand":"L","in_yahoo_pool":true,"innings_pitched":65.1,"quality_starts":12,"wins":5,"saves":0,"strikeouts":70,"earned_run_average":3.20,"whip":1.10},
+  {"team_abbreviation":"LAA","mlbam_id":3,"name":"Two Way","position":"TWP","primary_type":"H","status":"A","jersey_number":"17"},
+  {"team_abbreviation":"LAA","mlbam_id":3,"name":"Two Way","position":"TWP","primary_type":"P","status":"A","jersey_number":"17"}
+]

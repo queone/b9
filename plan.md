@@ -1,5 +1,7 @@
 # b9 Plan
 
+- Deliver the Yahoo-network-independent MLB utility workflow through `t`, `tt`, and `sp`, including guarded one-time legacy local-context import, typed roster/stat persistence, durable fallback, current ESPN moneylines, future OddsShark moneylines, and shared terminal rendering.
+
 ## Product Direction
 
 Port `skout` from Go to Rust across multiple releases. Treat feature parity and readiness to supplant `skout` as verification outcomes rather than schedule assumptions.

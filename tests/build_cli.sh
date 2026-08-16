@@ -177,6 +177,8 @@ test_package_version_synchronization() {
   printf '[package]\nname = "tool"\nversion = "1.2.3"\n[[bin]]\nname = "tool"\npath = "src/main.rs"\n' >"$fixture/Cargo.toml"
   printf 'const PROGRAM_VERSION: &str = "1.2.3";\nfn main() {}\n' >"$fixture/src/main.rs"
   printf '#[test]\nfn tool_cli() {}\n' >"$fixture/tests/tool_cli.rs"
+  printf '#[test]\nfn b9_cli() { assert_eq!("b9 v1.2.3", "b9 v1.2.3"); }\n' >"$fixture/tests/b9_cli.rs"
+  printf 'const HELP: &str = "b9 1.2.3";\nfn help() { render_root_help("1.2.3"); }\n' >"$fixture/tests/terminal.rs"
   (
     cd "$fixture" || exit 1
     _load_bin_targets
@@ -190,7 +192,11 @@ test_package_version_synchronization() {
     assert_equal "$rc" 1
     assert_contains "$output" 'version mismatch'
     _replace_utility_version tool src/main.rs 1.3.0
+    _replace_cli_golden_versions 1.2.3 1.3.0
     _validate_package_utility_versions
+    assert_contains "$(cat tests/b9_cli.rs)" 'b9 v1.3.0'
+    assert_contains "$(cat tests/terminal.rs)" 'b9 1.3.0'
+    assert_contains "$(cat tests/terminal.rs)" 'render_root_help("1.3.0")'
   ) || fail 'package version synchronization failed'
   rm -rf -- "$fixture"
   pass

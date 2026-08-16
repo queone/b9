@@ -5,6 +5,115 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+/// One current MLB club used by command selection and league grouping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MlbTeam {
+    pub id: i64,
+    pub name: String,
+    pub location: String,
+    pub club_name: String,
+    pub abbreviation: String,
+    pub league_id: i64,
+}
+
+/// One normalized member of an MLB 40-man roster.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MlbRosterPlayer {
+    pub team_abbreviation: String,
+    pub mlbam_id: i64,
+    pub name: String,
+    pub position: String,
+    pub primary_type: String,
+    pub status: String,
+    #[serde(default)]
+    pub injury_status: String,
+    #[serde(default)]
+    pub game_status: String,
+    #[serde(default)]
+    pub is_closer: bool,
+    pub jersey_number: String,
+    #[serde(default)]
+    pub eligible_positions: String,
+    #[serde(default)]
+    pub bat_side: String,
+    #[serde(default)]
+    pub pitch_hand: String,
+    #[serde(default)]
+    pub yahoo_rank: Option<i64>,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub in_yahoo_pool: bool,
+    #[serde(default)]
+    pub plate_appearances: i64,
+    #[serde(default)]
+    pub on_base_percentage: f64,
+    #[serde(default)]
+    pub runs: i64,
+    #[serde(default)]
+    pub home_runs: i64,
+    #[serde(default)]
+    pub runs_batted_in: i64,
+    #[serde(default)]
+    pub stolen_bases: i64,
+    #[serde(default)]
+    pub batting_average: f64,
+    #[serde(default)]
+    pub innings_pitched: f64,
+    #[serde(default)]
+    pub quality_starts: i64,
+    #[serde(default)]
+    pub wins: i64,
+    #[serde(default)]
+    pub saves: i64,
+    #[serde(default)]
+    pub strikeouts: i64,
+    #[serde(default)]
+    pub earned_run_average: f64,
+    #[serde(default)]
+    pub whip: f64,
+}
+
+/// One MLB standings row with its resolved club identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MlbStanding {
+    pub team: MlbTeam,
+    pub wins: i64,
+    pub losses: i64,
+    pub games_back: String,
+}
+
+/// Aggregated season totals for one MLB club.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MlbTeamTotals {
+    pub team: MlbTeam,
+    pub batting: BattingStats,
+    pub pitching: PitchingStats,
+    pub yahoo_players: Option<i64>,
+    pub players_available: Option<i64>,
+}
+
+/// One probable-pitcher side in a three-day MLB slate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MlbSlateRow {
+    pub date: String,
+    pub game_id: i64,
+    pub game_time: String,
+    pub away_team: String,
+    pub home_team: String,
+    pub away_pitcher: String,
+    pub home_pitcher: String,
+    pub win_probability: Option<f64>,
+    #[serde(default)]
+    pub away_free_agent: bool,
+    #[serde(default)]
+    pub home_free_agent: bool,
+    #[serde(default)]
+    pub away_mine: bool,
+    #[serde(default)]
+    pub home_mine: bool,
+}
+
 /// A fantasy-league scoring format.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ScoringType {
@@ -245,7 +354,7 @@ impl RosterWeekStats {
 }
 
 /// Standard season batting statistics.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BattingStats {
     pub plate_appearances: i32,
     pub batting_average: f64,
@@ -261,7 +370,7 @@ pub struct BattingStats {
 }
 
 /// Standard season pitching statistics.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct PitchingStats {
     pub games: i32,
     pub games_started: i32,

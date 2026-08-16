@@ -85,6 +85,33 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
+        name: "t",
+        display_label: "t [team]",
+        description: "Show MLB 40-man rosters",
+        argument: Some(ArgumentDescriptor {
+            id: "team",
+            value_name: "TEAM",
+        }),
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "tt",
+        display_label: "tt",
+        description: "Show MLB standings and team totals",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "sp",
+        display_label: "sp",
+        description: "Show the three-day probable-pitcher slate",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
         name: "i",
         display_label: "i [term]",
         description: "Look up a term in the b9 glossary",
@@ -208,6 +235,21 @@ where
             ),
             true,
         ),
+        Some(("t", subcommand)) => run_result(
+            crate::mlb_commands::show_teams(
+                subcommand.get_one::<String>("team").map(String::as_str),
+                subcommand.get_flag("force"),
+            ),
+            false,
+        ),
+        Some(("tt", subcommand)) => run_result(
+            crate::mlb_commands::show_totals(subcommand.get_flag("force")),
+            false,
+        ),
+        Some(("sp", subcommand)) => run_result(
+            crate::mlb_commands::show_probables(subcommand.get_flag("force")),
+            false,
+        ),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -263,7 +305,19 @@ fn root_command(version: &'static str) -> Command {
                     .value_parser(clap::value_parser!(i32)),
             );
         }
-        if matches!(descriptor.name, "login" | "logout" | "st" | "sync" | "m") {
+        if matches!(descriptor.name, "t" | "tt" | "sp") {
+            subcommand = subcommand.arg(
+                Arg::new("force")
+                    .short('f')
+                    .long("force")
+                    .help("Refresh provider data")
+                    .action(ArgAction::SetTrue),
+            );
+        }
+        if matches!(
+            descriptor.name,
+            "login" | "logout" | "st" | "sync" | "m" | "t" | "tt" | "sp"
+        ) {
             subcommand = subcommand.arg(
                 Arg::new("command_help")
                     .short('h')

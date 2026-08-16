@@ -1,5 +1,11 @@
 # b9
 
+## MLB utilities
+
+Run `b9 t` to show skout-style 40-man roster tables or `b9 t [team]` to select a club by abbreviation, city, or nickname. The roster rows include season statistics and locally cached Yahoo rank, eligibility, and owner context when available. Run `b9 tt` for division-grouped MLB standings with inline team totals. Run `b9 sp` for three compact host-local slate days with paired probable pitchers, matchup odds bars, and optional local roster context.
+
+Use `-f` or `--force` with any MLB utility command to bypass its freshness gate. These commands use unauthenticated MLB, ESPN, and OddsShark data and never require or refresh Yahoo authorization. When b9 has no Yahoo-linked local state, the first MLB utility command imports compatible identity, ownership, statistics, freshness, and empty selections once from the read-only legacy database at `~/.config/skout/skout.db`. Complete cached snapshots remain available with a stale warning when a provider refresh fails. OddsShark is an unofficial future-game source and may degrade without failing the MLB slate.
+
 `b9` is a Rust port of `skout`, which is written in Go. The port is at an early stage and does not yet claim feature parity or readiness to replace `skout`.
 
 ## Why

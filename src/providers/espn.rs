@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::ProviderError;
 use crate::transport::{HttpClient, HttpMethod, HttpRequest};
@@ -41,7 +41,7 @@ impl EspnEndpoints {
 }
 
 /// One normalized ESPN game and its optional top-provider moneyline.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameLine {
     pub event_id: String,
     pub competition_id: String,
@@ -54,17 +54,29 @@ pub struct GameLine {
 }
 
 /// One degraded per-game odds fetch.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OddsIssue {
     pub event_id: String,
     pub detail: String,
 }
 
 /// One complete two-day ESPN acquisition result.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SlateLines {
     pub games: Vec<GameLine>,
     pub issues: Vec<OddsIssue>,
+}
+
+/// Compare an ESPN team name with an MLB team name through punctuation-insensitive folding.
+pub fn matches_team(left: &str, right: &str) -> bool {
+    let fold = |value: &str| {
+        value
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    fold(left) == fold(right)
 }
 
 /// Acquires ESPN JSON through an injected validating HTTP client.

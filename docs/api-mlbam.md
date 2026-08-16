@@ -1,5 +1,14 @@
 # MLB StatsAPI Reference
 
+## MLB utility consumers
+
+- Request `/teams?sportId=1&season=<year>` for the current 30-club directory and retain stable team ID, full name, location, club name, abbreviation, and AL or NL league ID.
+- Request `/teams/<id>/roster?rosterType=40Man` for `b9 t` and validate positive unique person-and-role rows before team-scoped replacement.
+- Request `/standings?leagueId=103,104&season=<year>` plus bulk regular-season hitting and pitching statistics for `b9 tt`.
+- Request three host-local schedule dates with probable-pitcher hydration for `b9 sp`.
+- Preserve the last complete snapshot after acquisition, validation, or storage failure and surface one dataset warning.
+- Keep schedules fresh for 60 seconds, standings and totals for 15 minutes, and team directory and rosters for 24 hours unless forced.
+
 ## Status
 
 Treat `https://statsapi.mlb.com/api/v1` as a public, unauthenticated JSON service without a supported stability guarantee. Treat the committed fixtures as the pre-release contract and live responses as post-release observations.

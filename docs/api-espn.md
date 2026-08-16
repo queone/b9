@@ -1,5 +1,9 @@
 # ESPN MLB Scoreboard And Odds
 
+## Probable-pitcher slate consumer
+
+Use ESPN moneylines only for the current host-local slate day. Match an ESPN event to an MLB game by folded home and away club names, retain an unquoted game without probability, and treat scoreboard failure or per-game odds failure as optional enrichment degradation. Never use ESPN for the two future slate days.
+
 ## Status
 
 ESPN's MLB scoreboard and core-odds endpoints are public, unauthenticated, unofficial, and unsupported. Treat captured fixtures as the pre-release contract and live responses as post-release observations.

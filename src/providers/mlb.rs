@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::ProviderError;
 use crate::cache::{CacheLookup, DiskCache};
@@ -70,14 +70,14 @@ pub struct SeasonDates {
 }
 
 /// One lineup player in provider order.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct LineupPlayer {
     pub person_id: i64,
     pub full_name: String,
 }
 
 /// Hydrated live state for one scheduled game.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Linescore {
     pub inning: Option<i64>,
     pub inning_ordinal: String,
@@ -87,7 +87,7 @@ pub struct Linescore {
 }
 
 /// One MLB schedule game.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleGame {
     pub game_id: i64,
     pub game_date: String,
@@ -155,12 +155,24 @@ pub struct Boxscore {
 }
 
 /// One MLB standings row.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TeamStanding {
     pub team_id: i64,
+    pub league_id: i64,
     pub wins: i64,
     pub losses: i64,
     pub games_back: String,
+}
+
+/// One current MLB club from the StatsAPI team directory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TeamDirectoryEntry {
+    pub team_id: i64,
+    pub name: String,
+    pub location_name: String,
+    pub club_name: String,
+    pub abbreviation: String,
+    pub league_id: i64,
 }
 
 /// Hitter or pitcher compatibility classification.
@@ -566,15 +578,58 @@ impl MlbClient {
         })?;
         Ok(records
             .into_iter()
-            .flat_map(|record| record.team_records)
-            .filter(|row| row.team.id > 0)
-            .map(|row| TeamStanding {
+            .flat_map(|record| {
+                let league_id = record.league.id;
+                record
+                    .team_records
+                    .into_iter()
+                    .map(move |row| (league_id, row))
+            })
+            .filter(|(_, row)| row.team.id > 0)
+            .map(|(league_id, row)| TeamStanding {
                 team_id: row.team.id,
+                league_id,
                 wins: row.wins,
                 losses: row.losses,
                 games_back: row.games_back,
             })
             .collect())
+    }
+
+    /// Fetch the current season's 30-club MLB directory.
+    pub fn fetch_team_directory(
+        &self,
+        season: i64,
+    ) -> Result<Vec<TeamDirectoryEntry>, ProviderError> {
+        validate_season(season)?;
+        let season = season.to_string();
+        let response: TeamsResponse = self.get_json(
+            "fetch MLB team directory",
+            self.url(&["teams"], &[("sportId", "1"), ("season", &season)]),
+        )?;
+        let teams = response.teams.ok_or_else(|| {
+            ProviderError::invalid("fetch MLB team directory", "teams envelope is absent")
+        })?;
+        let mut output = teams
+            .into_iter()
+            .filter(|team| team.id > 0 && matches!(team.league.id, 103 | 104))
+            .map(|team| TeamDirectoryEntry {
+                team_id: team.id,
+                name: team.name,
+                location_name: team.location_name,
+                club_name: team.club_name,
+                abbreviation: team.abbreviation.to_uppercase(),
+                league_id: team.league.id,
+            })
+            .collect::<Vec<_>>();
+        output.sort_by(|left, right| left.abbreviation.cmp(&right.abbreviation));
+        if output.len() != 30 {
+            return Err(ProviderError::invalid(
+                "fetch MLB team directory",
+                format!("expected 30 active clubs, received {}", output.len()),
+            ));
+        }
+        Ok(output)
     }
 
     /// Fetch one team's normalized 40-man roster.
@@ -1642,8 +1697,31 @@ struct StandingsResponse {
 
 #[derive(Deserialize)]
 struct StandingRecordWire {
+    #[serde(default)]
+    league: IdWire,
     #[serde(default, rename = "teamRecords")]
     team_records: Vec<TeamStandingWire>,
+}
+
+#[derive(Deserialize)]
+struct TeamsResponse {
+    teams: Option<Vec<TeamWire>>,
+}
+
+#[derive(Deserialize)]
+struct TeamWire {
+    #[serde(default)]
+    id: i64,
+    #[serde(default)]
+    name: String,
+    #[serde(default, rename = "locationName")]
+    location_name: String,
+    #[serde(default, rename = "teamName")]
+    club_name: String,
+    #[serde(default)]
+    abbreviation: String,
+    #[serde(default)]
+    league: IdWire,
 }
 
 #[derive(Deserialize)]

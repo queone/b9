@@ -5,6 +5,42 @@ use b9::domain::{
     Position, Roster, RosterWeekStats, ScoringType, StatcastData,
 };
 
+#[test]
+fn mlb_utility_records_round_trip_without_provider_fields() {
+    let team = b9::domain::MlbTeam {
+        id: 147,
+        name: "New York Yankees".into(),
+        location: "New York".into(),
+        club_name: "Yankees".into(),
+        abbreviation: "NYY".into(),
+        league_id: 103,
+    };
+    let encoded = serde_json::to_string(&team).unwrap();
+    assert_eq!(
+        serde_json::from_str::<b9::domain::MlbTeam>(&encoded).unwrap(),
+        team
+    );
+    let row = b9::domain::MlbSlateRow {
+        date: "2026-08-15".into(),
+        game_id: 1,
+        game_time: "2026-08-15 19:05".into(),
+        away_team: "NYY".into(),
+        home_team: "BOS".into(),
+        away_pitcher: "Starter".into(),
+        home_pitcher: "Other Starter".into(),
+        win_probability: Some(0.55),
+        away_free_agent: false,
+        home_free_agent: false,
+        away_mine: false,
+        home_mine: false,
+    };
+    assert_eq!(
+        serde_json::from_str::<b9::domain::MlbSlateRow>(&serde_json::to_string(&row).unwrap())
+            .unwrap(),
+        row
+    );
+}
+
 fn batting_stats() -> BattingStats {
     BattingStats {
         plate_appearances: 101,

@@ -6,6 +6,8 @@ pub mod config;
 pub mod domain;
 pub mod glossary;
 pub mod matchup;
+pub mod mlb_commands;
+pub mod mlb_display;
 pub mod providers;
 pub mod store;
 pub mod sync;

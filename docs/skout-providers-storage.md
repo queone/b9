@@ -532,13 +532,15 @@ The b9 persistence and acquisition foundation uses pinned `rusqlite =0.40.1` wit
 
 ## Existing-State Compatibility
 
+The MLB utility integration now reuses schema version one for MLB identities, 40-man roster rows, and season statistics. It adds no table. Complete team-directory, standings, totals, slate, and future-odds inputs use validated versioned snapshots; team rosters replace and fall back independently. The OddsShark subset is implemented through injected bounded transport with its required Referer and optional-enrichment degradation.
+
 | Option | Result | Tradeoff | Status |
 |---|---|---|---|
 | Reuse Skout database | Open v36 `~/.config/skout/skout.db` | Immediate continuity; schema/concurrency coupling | Rejected for PS-1 |
-| Migrate to b9 database | One-time supported-state transfer | Explicit boundary; migration/rollback burden | Deferred to a separate explicit slice |
+| Migrate to b9 database | Guarded one-time compatible-state transfer | Explicit read-only boundary; transaction and rollback burden | Selected for fantasy context needed by MLB utilities |
 | Isolated storage | Rebuild from providers at `$HOME/.config/b9/b9.db` | Simple; cold history/cache | Selected |
 
-Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-one storage, typed state and snapshots, bounded cache and transport boundaries, Yahoo PKCE authentication, numeric-key fantasy normalization, complete-league persistence, foreground synchronization, ambiguity-safe MLB identity reconciliation, ESPN moneyline context, and bounded MLB acquisition. Scraping providers and the remaining command integrations remain deferred.
+Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-one storage, typed state and snapshots, bounded cache and transport boundaries, Yahoo PKCE authentication, numeric-key fantasy normalization, complete-league persistence, foreground synchronization, ambiguity-safe MLB identity reconciliation, ESPN moneyline context, and bounded MLB acquisition. When b9 has no Yahoo-linked state, a guarded compatibility adapter reads the legacy database once and transactionally imports the compatible fantasy context required by the MLB utilities; b9 remains the sole owner of subsequent writes. Scraping providers and the remaining command integrations remain deferred.
 
 ## Verification
 
@@ -571,7 +573,7 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 
 PS-1 through PS-4 and the baseline PS-6 fantasy workflow are implemented after their acceptance tests pass. Other remaining MLB acquisition, PS-5, and the rest of PS-6 require later governed work.
 
-PS-2 uses an injected thread-safe clock, explicit source identities, typed statuses, pipeline-version gates, strict stored-state decoding, deterministic run-count JSON, and atomic snapshot replacement. It returns contextual storage and JSON failures instead of silently treating them as missing state. It does not read `sync_log`, infer sources from item names, or carry predecessor database fallback into isolated b9 storage. Provider TTL constants, command payload types, fallback selection, transport, and reconciliation remain deferred.
+PS-2 uses an injected thread-safe clock, explicit source identities, typed statuses, pipeline-version gates, strict stored-state decoding, deterministic run-count JSON, and atomic snapshot replacement. It returns contextual storage and JSON failures instead of silently treating them as missing state. Normal freshness state does not infer sources from item names or fall back to a predecessor database; the later MLB utility compatibility bootstrap uses `sync_log` only as its one-time completion and ownership-freshness record. Provider TTL constants, command payload types, fallback selection, transport, and reconciliation remain deferred.
 
 PS-3 keeps Skout's durable short-lived cache and synchronous request capabilities while replacing arbitrary paths, direct overwrites, process-global locking, silent cache-write failures, implicit clocks, unbounded bodies, and provider-owned clients. b9 uses versioned bounded cache framing, hashed logical keys, atomic last-writer-wins replacement, explicit pruning, strict path handling, a validating `HttpClient`, and an injected executor with no retries, bounded redirects, total timeouts, body limits, and sensitive-header redaction. Provider TTLs, cache keys, authentication, request construction, parsing, and error interpretation remain adapter-owned. Each provider's `docs/api-*.md` file migrates with its PS-4 or PS-5 adapter so it records these improved shared mechanics alongside the owning endpoint contract.
 

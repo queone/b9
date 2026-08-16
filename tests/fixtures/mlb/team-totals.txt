@@ -1,0 +1,4 @@
+American League (AL)
+TEAM    W    L    PCT     GB   YP     PA    OBP    R   HR  RBI   SB    AVG      IP   QS    W   SV     K    ERA   WHIP
+East
+NYY    70   50   .583     --   14   4500   .330  600  180  575   90   .250  1080.0    0   70   35  1100   3.75   1.20
