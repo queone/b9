@@ -1,5 +1,6 @@
 use b9::advisory_credentials::{
-    AdvisoryCredentialError, AdvisoryCredentialStore, load_credential_from, selected_provider,
+    AdvisoryCredentialError, AdvisoryCredentialStore, load_credential_from,
+    load_credential_with_environment, selected_provider,
 };
 use b9::config::Config;
 
@@ -22,6 +23,11 @@ impl AdvisoryCredentialStore for Store {
         assert_eq!(account, "advisory-openai-api-key");
         Ok(self.0.clone())
     }
+
+    fn store(&self, account: &str, _credential: &str) -> Result<(), AdvisoryCredentialError> {
+        assert_eq!(account, "advisory-openai-api-key");
+        Ok(())
+    }
 }
 
 #[test]
@@ -30,5 +36,19 @@ fn credential_recovery_is_provider_scoped_and_handles_missing_entries() {
     assert_eq!(
         load_credential_from("openai", &Store(Some("opaque".into()))).unwrap(),
         Some("opaque".into())
+    );
+}
+
+#[test]
+fn environment_credential_precedes_secure_storage() {
+    assert_eq!(
+        load_credential_with_environment("openai", Some(" environment-key "), &Store(None))
+            .unwrap(),
+        Some("environment-key".into())
+    );
+    assert_eq!(
+        load_credential_with_environment("openai", Some(" "), &Store(Some("keyring".into())))
+            .unwrap(),
+        Some("keyring".into())
     );
 }

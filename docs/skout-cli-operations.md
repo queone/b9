@@ -225,6 +225,16 @@ No crate, framework, or compatibility change is selected.
 - Player-card game logs refresh from MLB when available and render a labeled durable fallback after a refresh failure.
 - Waiver mode admits only free agents on the active 26-man roster that clear the predecessor-compatible 60th-percentile hitter, starter, or reliever usage floor.
 
+## Current b9 Operations Surface
+
+- `b9 fetch <path>` performs one authenticated, bounded Yahoo GET, pretty-prints JSON, preserves other response bytes, and keeps attribution on stderr.
+- `b9 reset` confirms before deleting only b9's database and stale private runtime control state; it preserves configuration, cache, log, credentials, and every skout file.
+- `b9 log` provides bounded tail, follow, and path modes over an owner-only log capped at 5 MiB.
+- `b9 start`, `b9 stop`, and `b9 restart` explicitly manage one detached synchronization daemon through held owner locks and an owner-only Unix control socket.
+- No unrelated command starts the daemon. `b9 sync -f/--force` remains a direct foreground operation and shares its synchronization service with startup and scheduled daemon work.
+- `_daemon` remains hidden; process identity files are diagnostic only and never authorize signaling or shutdown.
+- `b9 lm` configures None, Gemini, Groq/Llama, Mistral, Claude, or OpenAI interactively, keeps secrets outside configuration, and uses bounded provider validation and OpenAI model discovery.
+
 ## Verification Strategy
 
 ### Deterministic pre-release tests

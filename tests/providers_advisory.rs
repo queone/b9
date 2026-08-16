@@ -108,3 +108,25 @@ fn provider_errors_do_not_echo_credentials() {
     assert!(error.contains("HTTP 401"));
     assert!(!error.contains("secret-value"));
 }
+
+#[test]
+fn openai_model_discovery_is_bounded_filtered_and_sorted() {
+    let executor = Arc::new(ReplyExecutor {
+        request: Mutex::new(None),
+        response: HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: br#"{"data":[{"id":"text-embedding-3-small"},{"id":"gpt-5"},{"id":"o3-mini"},{"id":"gpt-4o"}]}"#.to_vec(),
+        },
+    });
+    let client = AdvisoryClient::new(Arc::new(HttpClient::new(executor.clone())));
+    assert_eq!(
+        client.discover_openai_models("private-token").unwrap(),
+        ["gpt-4o", "gpt-5", "o3-mini"]
+    );
+    let request = executor.request.lock().unwrap();
+    let request = request.as_ref().unwrap();
+    assert_eq!(request.timeout().as_secs(), 15);
+    assert_eq!(request.body_limit(), 64 * 1024);
+    assert!(!format!("{request:?}").contains("private-token"));
+}

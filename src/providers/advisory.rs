@@ -54,7 +54,8 @@ impl AdvisoryProvider {
         }
     }
 
-    fn default_model(self) -> &'static str {
+    /// Return the stable adapter-default model.
+    pub fn default_model(self) -> &'static str {
         match self {
             Self::Gemini => "gemini-2.0-flash",
             Self::Groq => "llama-3.3-70b-versatile",
@@ -132,6 +133,66 @@ impl AdvisoryClient {
                 "response does not contain advisory JSON",
             )
         })
+    }
+
+    /// Discover bounded OpenAI model identifiers suitable for interactive selection.
+    pub fn discover_openai_models(&self, credential: &str) -> Result<Vec<String>, ProviderError> {
+        if credential.trim().is_empty() {
+            return Err(ProviderError::invalid(
+                "discover OpenAI models",
+                "credential is empty",
+            ));
+        }
+        let response = self
+            .http
+            .execute(HttpRequest {
+                method: HttpMethod::Get,
+                url: "https://api.openai.com/v1/models".into(),
+                headers: vec![bearer(credential)],
+                body: Vec::new(),
+                timeout: TIMEOUT,
+                body_limit: RESPONSE_LIMIT,
+            })
+            .map_err(|error| {
+                ProviderError::operation("discover OpenAI models", error.to_string(), error)
+            })?;
+        if response.status != 200 {
+            return Err(ProviderError::invalid(
+                "discover OpenAI models",
+                format!("provider returned HTTP {}", response.status),
+            ));
+        }
+        let value: Value = serde_json::from_slice(&response.body).map_err(|_| {
+            ProviderError::invalid("discover OpenAI models", "response is not JSON")
+        })?;
+        let mut models = value
+            .get("data")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|row| row.get("id").and_then(Value::as_str))
+            .filter(|id| id.starts_with("gpt-") || id.starts_with("o1") || id.starts_with("o3"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        models.sort();
+        models.dedup();
+        models.truncate(100);
+        Ok(models)
+    }
+
+    /// Validate one credential with a bounded minimal provider request.
+    pub fn validate_credential(
+        &self,
+        provider: AdvisoryProvider,
+        configured_model: &str,
+        credential: &str,
+    ) -> Result<(), ProviderError> {
+        let context = AdvisoryContext {
+            lineup_candidates: Vec::new(),
+            roster_moves: Vec::new(),
+        };
+        self.complete(provider, configured_model, credential, &context)
+            .map(|_| ())
     }
 }
 

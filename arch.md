@@ -14,7 +14,7 @@ Port `skout` from Go to Rust over multiple releases.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, MLB, and advisory adapters, foreground fantasy synchronization, and daily or weekly matchup surfaces. Remaining commands, background operation, scrapers, and deeper advisory analysis remain later parity work.
+The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, MLB, and advisory adapters, shared foreground and explicitly managed background fantasy synchronization, operational utilities, and daily or weekly matchup surfaces. Rejected scraping providers and deeper analysis remain outside the current port.
 
 ## Current Platform
 
@@ -33,6 +33,9 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
 - `src/config.rs`: private atomic selected-league and authenticated-team preferences
 - `src/sync.rs`: login, logout, status, and foreground stable-data synchronization application services
+- `src/daemon.rs`: explicit detached lifecycle, held ownership and synchronization locks, private control socket, and scheduled synchronization
+- `src/operations.rs`: raw Yahoo fetch, confirmed database reset, and bounded private daemon-log operations
+- `src/model_config.rs`: interactive advisory provider, model, validation, and secret-safe credential orchestration
 - `src/matchup.rs`: selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
 - `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
@@ -72,7 +75,7 @@ Weekly roster totals use Yahoo matchup category values in the stored league orde
 
 The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness, lifecycle, cache, and odds writes deterministic. The disk cache stores bounded opaque payload bytes under hashed logical keys and replaces entries atomically. Typed persistence and transport APIs return contextual failures instead of silently interpreting operational errors as missing state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
 
-The executable passes its literal utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. Package updates that literal together with Cargo package and lockfile versions, and canonical validation rejects disagreement. The CLI dispatches authentication, status, sync, and matchup work into application modules rather than provider or storage internals. A terminal presentation boundary enables contracted color roles only for supported terminal stdout and otherwise renders deterministic plain output.
+The executable passes its literal utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. Package updates that literal together with Cargo package and lockfile versions, and canonical validation rejects disagreement. The CLI dispatches authentication, status, synchronization, operations, daemon lifecycle, model configuration, and matchup work into application modules rather than provider or storage internals. Foreground, startup, and scheduled synchronization share one application service and one held execution lock. The daemon starts only through an explicit lifecycle command, publishes an owner-only local control socket after acquiring its owner lock, and writes an owner-only bounded log. Reset coordinates verified shutdown and preserves configuration, cache, log, credentials, and predecessor files. A terminal presentation boundary enables contracted color roles only for supported terminal stdout and otherwise renders deterministic plain output.
 
 ## AC Lifecycle Control Flow
 
@@ -107,7 +110,10 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep Yahoo fantasy parsing outside the Yahoo authentication adapter.
 - Keep stable normalized synchronization separate from lazy weekly matchup acquisition.
 - Keep weekly scoreboards and roster statistics in versioned snapshots rather than new normalized tables.
-- Keep synchronization foreground-owned until background operation demonstrates product value.
+- Keep background synchronization explicitly started and controlled through the private local endpoint.
+- Keep foreground and daemon synchronization behind one exclusive execution lock and shared application service.
+- Keep advisory credentials in environment or keyring boundaries and persist only provider/model selection.
+- Keep rejected automated provider acquisition unreachable from commands, synchronization, transport, and adapters.
 
 ## Conventions
 

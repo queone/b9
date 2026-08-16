@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.17.0 | AC21: Add operational commands, managed sync, and model configuration |
 | 0.16.0 | AC20: Add deterministic roster and waiver evaluation |
 | 0.15.0 | AC19: Add daily and weekly matchup views with grounded advisory |
 | 0.14.0 | AC18: Add roster and player-pool commands |

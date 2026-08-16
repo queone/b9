@@ -8,8 +8,8 @@ use b9::providers::yahoo_fantasy::{
     LeagueRosters, LeagueSettings, RosterPosition, StatCategory, UserLeague, YahooFantasyError,
     YahooFantasySource,
 };
-use b9::store::{Store, inspect_status_at};
-use b9::sync::{select_league, synchronize_with};
+use b9::store::{Store, SyncMode, SyncOrigin, inspect_status_at};
+use b9::sync::{select_league, synchronize_with, synchronize_with_origin};
 use tempfile::tempdir;
 
 struct Source {
@@ -199,4 +199,35 @@ fn application_boundaries_remain_layered() {
     assert!(!cli.contains("YahooClient"));
     assert!(!matchup.contains("rusqlite"));
     assert!(!yahoo.contains("crate::store"));
+}
+
+#[test]
+fn all_callers_record_the_shared_synchronization_service_origin() {
+    let directory = tempdir().unwrap();
+    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut identities = |_| Vec::new();
+    for origin in [
+        SyncOrigin::Manual,
+        SyncOrigin::Startup,
+        SyncOrigin::Automatic,
+    ] {
+        synchronize_with_origin(
+            &Source {
+                fail_rosters: false,
+            },
+            &mut store,
+            "mlb.l.1",
+            origin,
+            &mut identities,
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .latest_sync_run(SyncMode::Live)
+                .unwrap()
+                .unwrap()
+                .origin,
+            origin
+        );
+    }
 }

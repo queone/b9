@@ -15,7 +15,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "b9 v0.16.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  m                            Show the baseline weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
+        "b9 v0.17.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m                            Show the baseline weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
     for form in [
@@ -49,7 +49,7 @@ fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
         let output = b9(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.16.0\n");
+        assert_eq!(output.stdout, b"b9 0.17.0\n");
         assert!(output.stderr.is_empty());
     }
 }
@@ -109,11 +109,39 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
-    for command in ["login", "logout", "st", "sync", "m"] {
+    for command in [
+        "login", "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "fetch", "lm",
+        "m",
+    ] {
         let output = b9(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
         assert!(String::from_utf8(output.stdout).unwrap().contains("Usage:"));
+    }
+}
+
+#[test]
+fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
+    let missing_fetch = b9(&["fetch"]);
+    assert_eq!(missing_fetch.status.code(), Some(2));
+    let extra_fetch = b9(&["fetch", "/a", "/b"]);
+    assert_eq!(extra_fetch.status.code(), Some(2));
+    let negative_lines = b9(&["log", "--lines", "-1"]);
+    assert_eq!(negative_lines.status.code(), Some(2));
+    let model = b9(&["lm"]);
+    assert_eq!(model.status.code(), Some(1));
+    let stderr = String::from_utf8(model.stderr).unwrap();
+    assert!(stderr.contains("interactive terminal is required"));
+    assert!(!stderr.contains("API key"));
+}
+
+#[test]
+fn operational_help_exposes_settled_short_and_long_flags() {
+    let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
+    assert!(sync.contains("-f, --force"));
+    let log = String::from_utf8(b9(&["log", "--help"]).stdout).unwrap();
+    for flag in ["-n, --lines", "-f, --follow", "-p, --path"] {
+        assert!(log.contains(flag), "missing {flag}");
     }
 }
 

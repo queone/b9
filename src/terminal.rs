@@ -1,6 +1,8 @@
 //! Terminal-aware styling for deterministic CLI presentation.
 
 use std::io::IsTerminal;
+use std::io::{self, Write};
+use std::process::Command;
 
 /// Explicit help color mode used by renderers and deterministic tests.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,6 +45,28 @@ pub fn detected_help_color_mode() -> HelpColorMode {
         term: term.as_deref(),
         colorterm: colorterm.as_deref(),
     })
+}
+
+/// Read one credential from an interactive terminal with echo disabled.
+pub fn read_secret(prompt: &str) -> io::Result<String> {
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return Err(io::Error::other("interactive terminal required"));
+    }
+    print!("{prompt}");
+    io::stdout().flush()?;
+    let disabled = Command::new("stty").arg("-echo").status()?.success();
+    if !disabled {
+        return Err(io::Error::other("disable terminal echo failed"));
+    }
+    let mut value = String::new();
+    let read = io::stdin().read_line(&mut value);
+    let restored = Command::new("stty").arg("echo").status();
+    println!();
+    read?;
+    if !restored?.success() {
+        return Err(io::Error::other("restore terminal echo failed"));
+    }
+    Ok(value.trim().to_owned())
 }
 
 /// Style the b9 title using its bold bright-white role.

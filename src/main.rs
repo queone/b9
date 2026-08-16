@@ -1,4 +1,4 @@
-const PROGRAM_VERSION: &str = "0.16.0";
+const PROGRAM_VERSION: &str = "0.17.0";
 
 fn main() -> std::process::ExitCode {
     b9::cli::run(PROGRAM_VERSION)

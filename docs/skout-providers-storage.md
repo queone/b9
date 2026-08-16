@@ -38,6 +38,14 @@ Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not com
 
 No provider implements general retries or quota accounting. Yahoo alone implements provider-local bounded 429 retries with response tests. Authentication is not applicable outside Yahoo. Rate-limit response tests remain gaps for the other providers.
 
+### Rejected Automated Providers
+
+- Reject automated Savant acquisition because the [MLB terms reviewed 2026-08-16](https://www.mlb.com/official-information/terms-of-use) prohibit automated scripts that collect from MLB digital properties.
+- Reject automated FanGraphs acquisition because the [FanGraphs guidance reviewed 2026-08-16](https://blogs.fangraphs.com/contact/) says scraping and public API endpoints are not supported.
+- Reject FantasyPros HTML scraping; reconsider only its [authorized API reviewed 2026-08-16](https://support.fantasypros.com/hc/en-us/articles/49749297704475-How-do-I-request-access-to-the-FantasyPros-API) after separately approved production access exists.
+- Reject automated RotoWire acquisition because the [RotoWire terms reviewed 2026-08-16](https://www.rotowire.com/termsandconditions.php) prohibit crawling and spidering.
+- Retain predecessor-named compatibility columns as inert schema-version-two data only; expose no b9 command, adapter, transport, credential, synchronization, or new write path for these rejected providers.
+
 ## Provider Operation Ledger
 
 Extraction: exported production provider functions matching `Fetch*` or `GetRaw`. Constructors are boundaries, not acquisition operations.
@@ -568,7 +576,7 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | PS-2 Freshness/snapshots | PS-1 | Typed item/row/season/run state and validated durable snapshots implemented | Injected clock/version/stale/completeness implemented | Transports |
 | PS-3 Cache/transport | Ratified inventory | Bounded atomic disk cache and validating injectable HTTP executor implemented | Filesystem/request/redirect/limit contracts implemented | Parsing/auth adapters |
 | PS-4 JSON providers | PS-2/PS-3 | Yahoo authentication and fantasy data, ESPN current odds, and bounded MLB metadata/live-game/statistics acquisition implemented | Yahoo/ESPN/MLB fixtures, transport doubles, secure boundaries, parsing variants, cache boundaries, concurrency, and store rollback implemented | Other MLB/live checks |
-| PS-5 Scrapers | PS-2/PS-3 | Savant, FG, FP, OddsShark, RotoWire | CSV/HTML/script/degradation | Live shape as gate |
+| PS-5 Scrapers | PS-2/PS-3 | OddsShark implemented; Savant, FanGraphs, FantasyPros HTML, and RotoWire rejected by the reviewed provider policy | OddsShark fixture coverage; official policy evidence for rejected acquisition | No rejected-provider live checks |
 | PS-6 Integration | PS-4/PS-5 | Baseline Yahoo sync, reconciliation, matchup snapshots, stale fallback, and matchup display implemented | Fixture DB, orchestration, fallback, and failure paths | Remaining commands, analysis, and advisory |
 
 PS-1 through PS-4 and the baseline PS-6 fantasy workflow are implemented after their acceptance tests pass. Other remaining MLB acquisition, PS-5, and the rest of PS-6 require later governed work.

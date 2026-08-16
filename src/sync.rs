@@ -279,8 +279,25 @@ pub fn synchronize_with(
     league_key: &str,
     identities_for_season: &mut dyn FnMut(i32) -> Vec<IdentityCandidate>,
 ) -> Result<SyncSummary, WorkflowError> {
+    synchronize_with_origin(
+        source,
+        store,
+        league_key,
+        SyncOrigin::Manual,
+        identities_for_season,
+    )
+}
+
+/// Synchronize through injected boundaries with an explicit durable caller origin.
+pub fn synchronize_with_origin(
+    source: &dyn YahooFantasySource,
+    store: &mut Store,
+    league_key: &str,
+    origin: SyncOrigin,
+    identities_for_season: &mut dyn FnMut(i32) -> Vec<IdentityCandidate>,
+) -> Result<SyncSummary, WorkflowError> {
     let run = store
-        .start_sync_run(SyncMode::Live, SyncOrigin::Manual)
+        .start_sync_run(SyncMode::Live, origin)
         .map_err(|error| WorkflowError::context("start sync run", error))?;
     let result = (|| {
         let settings = source
@@ -359,6 +376,26 @@ pub fn synchronize_with(
 
 /// Synchronize the selected league's stable normalized Yahoo data in the foreground.
 pub fn synchronize(league_override: Option<&str>) -> Result<String, WorkflowError> {
+    synchronize_with_options(league_override, false)
+}
+
+/// Synchronize manually, optionally bypassing all application freshness gates.
+pub fn synchronize_with_options(
+    league_override: Option<&str>,
+    _force: bool,
+) -> Result<String, WorkflowError> {
+    // Stable Yahoo synchronization currently always acquires a complete snapshot. Keeping force
+    // explicit here preserves manual execution semantics when freshness gates are introduced.
+    synchronize_for_origin(league_override, SyncOrigin::Manual)
+}
+
+/// Synchronize the selected league through the shared production service.
+pub fn synchronize_for_origin(
+    league_override: Option<&str>,
+    origin: SyncOrigin,
+) -> Result<String, WorkflowError> {
+    let _guard = crate::daemon::SyncGuard::acquire()
+        .map_err(|error| WorkflowError::context("start synchronization", error))?;
     let mut config =
         config::read().map_err(|error| WorkflowError::context("read configuration", error))?;
     let league_key = league_override
@@ -402,7 +439,8 @@ pub fn synchronize(league_override: Option<&str>) -> Result<String, WorkflowErro
         }
         values
     };
-    let summary = synchronize_with(&source, &mut store, &league_key, &mut identities)?;
+    let summary =
+        synchronize_with_origin(&source, &mut store, &league_key, origin, &mut identities)?;
     if league_override.is_none() || config.current_league == league_key {
         config.current_team_key = summary.team_key;
         config::write(&config)

@@ -62,3 +62,16 @@ fn legacy_selections_fill_only_empty_b9_fields() {
     assert_eq!(adopted.current_team_key, "legacy.l.1.t.2");
     assert_eq!(read_at(&target).unwrap(), adopted);
 }
+
+#[test]
+fn advisory_configuration_serializes_no_credential_material() {
+    let config = Config {
+        advisory_provider: "claude".into(),
+        advisory_model: "model".into(),
+        ..Config::default()
+    };
+    let serialized = serde_json::to_string(&config).unwrap();
+    assert!(serialized.contains("claude"));
+    assert!(!serialized.contains("credential"));
+    assert!(!serialized.contains("api_key"));
+}

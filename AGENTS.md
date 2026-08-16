@@ -308,4 +308,8 @@ Note: `CLAUDE.md` is an example of an exempt identifier — it names the Claude 
 
 ## Project Rules
 
+- Continue Ratify automatically through implementation-only corrections that require no Director decision.
+- Rerun validation and repeat the final review after each automatic Ratify correction.
+- Pause Ratify only when a finding requires a contract, scope, product, or other Director decision.
+- Skip `./build.sh` for documentation-only changes unless the governing contract or changed document explicitly requires it.
 - Follow existing repo patterns unless an approved improvement says otherwise.

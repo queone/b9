@@ -77,6 +77,65 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
+        name: "start",
+        display_label: "start",
+        description: "Start the background sync daemon",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "stop",
+        display_label: "stop",
+        description: "Stop the background sync daemon",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "restart",
+        display_label: "restart",
+        description: "Restart the background sync daemon",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "log",
+        display_label: "log",
+        description: "Show or follow the daemon log",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "reset",
+        display_label: "reset",
+        description: "Delete the local b9 database",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "fetch",
+        display_label: "fetch <path>",
+        description: "Perform a raw Yahoo API GET",
+        argument: Some(ArgumentDescriptor {
+            id: "path",
+            value_name: "PATH",
+        }),
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
+        name: "lm",
+        display_label: "lm",
+        description: "Configure the advisory provider",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
         name: "m",
         display_label: "m",
         description: "Show the baseline weekly matchup",
@@ -265,10 +324,78 @@ where
             crate::sync::status(matches.get_one::<String>("league").map(String::as_str)),
             true,
         ),
-        Some(("sync", _)) => run_result(
-            crate::sync::synchronize(matches.get_one::<String>("league").map(String::as_str)),
+        Some(("sync", subcommand)) => run_result(
+            crate::sync::synchronize_with_options(
+                matches.get_one::<String>("league").map(String::as_str),
+                subcommand.get_flag("force"),
+            ),
             true,
         ),
+        Some(("start", _)) => run_result(crate::daemon::start(), false),
+        Some(("stop", _)) => run_result(crate::daemon::stop(), false),
+        Some(("restart", _)) => run_result(crate::daemon::restart(), false),
+        Some(("_daemon", _)) => run_result(crate::daemon::run(), false),
+        Some(("reset", _)) => {
+            let mut input = std::io::BufReader::new(std::io::stdin().lock());
+            let mut output = std::io::stdout();
+            run_result(crate::operations::reset(&mut input, &mut output), false)
+        }
+        Some(("fetch", subcommand)) => {
+            let Some(path) = subcommand.get_one::<String>("path") else {
+                eprintln!("fetch: PATH is required; quote paths containing semicolons and retry");
+                return ExitCode::from(2);
+            };
+            match crate::operations::fetch(path) {
+                Ok(bytes) => {
+                    use std::io::Write;
+                    if let Err(error) = std::io::stdout().write_all(&bytes) {
+                        eprintln!("fetch: write response: {error}; retry");
+                        ExitCode::from(1)
+                    } else {
+                        eprintln!("Data provided by Yahoo Fantasy Sports.");
+                        ExitCode::SUCCESS
+                    }
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Some(("log", subcommand)) => {
+            let path = match crate::operations::log_path() {
+                Ok(path) => path,
+                Err(error) => {
+                    return run_result::<crate::operations::OperationsError>(Err(error), false);
+                }
+            };
+            if subcommand.get_flag("path_only") {
+                println!("{}", path.display());
+                ExitCode::SUCCESS
+            } else {
+                let lines = subcommand.get_one::<usize>("lines").copied().unwrap_or(50);
+                match crate::operations::tail_log(&path, lines) {
+                    Ok(output) => {
+                        print!("{output}");
+                        if subcommand.get_flag("follow") {
+                            let mut stdout = std::io::stdout();
+                            let mut cancelled = || false;
+                            run_result(
+                                crate::operations::follow_log(&path, &mut stdout, &mut cancelled)
+                                    .map(|()| String::new()),
+                                false,
+                            )
+                        } else {
+                            ExitCode::SUCCESS
+                        }
+                    }
+                    Err(error) => {
+                        run_result::<crate::operations::OperationsError>(Err(error), false)
+                    }
+                }
+            }
+        }
+        Some(("lm", _)) => run_result(crate::model_config::configure(), false),
         Some(("m", subcommand)) => run_result(
             crate::matchup::show_with_options(
                 matches.get_one::<String>("league").map(String::as_str),
@@ -368,11 +495,12 @@ fn root_command(version: &'static str) -> Command {
             subcommand = subcommand.alias(alias);
         }
         if let Some(argument) = descriptor.argument {
-            subcommand = subcommand.arg(
-                Arg::new(argument.id)
-                    .value_name(argument.value_name)
-                    .num_args(0..=1),
-            );
+            let argument = Arg::new(argument.id).value_name(argument.value_name);
+            subcommand = subcommand.arg(if descriptor.name == "fetch" {
+                argument.num_args(1)
+            } else {
+                argument.num_args(0..=1)
+            });
         }
         if descriptor.name == "m" {
             subcommand = subcommand
@@ -440,9 +568,59 @@ fn root_command(version: &'static str) -> Command {
                     .action(ArgAction::SetTrue),
             );
         }
+        if descriptor.name == "sync" {
+            subcommand = subcommand.arg(
+                Arg::new("force")
+                    .short('f')
+                    .long("force")
+                    .help("Bypass synchronization freshness gates")
+                    .action(ArgAction::SetTrue),
+            );
+        }
+        if descriptor.name == "log" {
+            subcommand = subcommand
+                .arg(
+                    Arg::new("lines")
+                        .short('n')
+                        .long("lines")
+                        .value_name("N")
+                        .default_value("50")
+                        .value_parser(clap::value_parser!(usize)),
+                )
+                .arg(
+                    Arg::new("follow")
+                        .short('f')
+                        .long("follow")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("path_only")
+                        .short('p')
+                        .long("path")
+                        .action(ArgAction::SetTrue),
+                );
+        }
         if matches!(
             descriptor.name,
-            "login" | "logout" | "st" | "sync" | "m" | "t" | "tt" | "sp" | "r" | "rt" | "h" | "p"
+            "login"
+                | "logout"
+                | "st"
+                | "sync"
+                | "start"
+                | "stop"
+                | "restart"
+                | "log"
+                | "reset"
+                | "fetch"
+                | "lm"
+                | "m"
+                | "t"
+                | "tt"
+                | "sp"
+                | "r"
+                | "rt"
+                | "h"
+                | "p"
         ) {
             subcommand = subcommand.arg(
                 Arg::new("command_help")
@@ -453,6 +631,7 @@ fn root_command(version: &'static str) -> Command {
         }
         command = command.subcommand(subcommand);
     }
+    command = command.subcommand(Command::new("_daemon").hide(true));
     for descriptor in FLAGS {
         let action = match descriptor.action {
             FlagAction::Help => ArgAction::Help,

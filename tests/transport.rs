@@ -332,3 +332,26 @@ fn redirect_loops_fail_contextually() {
     assert!(error.contains("loop") && error.contains("verify"));
     server.join().unwrap();
 }
+
+#[test]
+fn rejected_automated_providers_have_no_reachable_acquisition_path() {
+    let providers = include_str!("../src/providers/mod.rs").to_ascii_lowercase();
+    let commands = include_str!("../src/cli.rs").to_ascii_lowercase();
+    let synchronization = include_str!("../src/sync.rs").to_ascii_lowercase();
+    let credentials = include_str!("../src/advisory_credentials.rs").to_ascii_lowercase();
+    for rejected in ["savant", "fangraphs", "fantasypros", "rotowire"] {
+        assert!(!providers.contains(rejected));
+        assert!(!commands.contains(rejected));
+        assert!(!synchronization.contains(rejected));
+        assert!(!credentials.contains(rejected));
+    }
+    let policy = include_str!("../docs/skout-providers-storage.md");
+    for official in [
+        "mlb.com",
+        "fangraphs.com",
+        "fantasypros.com",
+        "rotowire.com",
+    ] {
+        assert!(policy.contains(official));
+    }
+}
