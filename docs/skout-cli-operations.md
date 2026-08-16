@@ -50,6 +50,7 @@ The Rust command layer now implements the Yahoo-network-independent `t`, `tt`, a
 - Implement CMD-LOGIN, CMD-LOGOUT, and CMD-STATUS with b9-owned PKCE, credential, configuration, deterministic league-selection, and status boundaries.
 - Implement CMD-SYNC as a bounded foreground operation without Skout's daemon, signal, PID, log-tail, or automatic-start mechanics.
 - Implement CMD-MATCH daily default and ISO-day overlays, explicit and current weekly modes, durable stale fallback, optional current-game odds, and opt-in grounded advisory.
+- Implement deterministic season-stat evaluation for `r` and existing `h -w` / `p -w` waiver ordering without new provider calls.
 - Implement `-l/--league`, secret-safe `-d/--debug`, command-specific help for the delivered commands, and Yahoo attribution on stderr.
 - Defer startup hooks, daemon-only commands, the remaining public commands, the extended matchup flags, and colored glossary presentation.
 - Preserve the inherited mismatch between the glossary Coverage Checklist and its 113 defined entries.

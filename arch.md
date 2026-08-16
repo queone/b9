@@ -34,6 +34,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/config.rs`: private atomic selected-league and authenticated-team preferences
 - `src/sync.rs`: login, logout, status, and foreground stable-data synchronization application services
 - `src/matchup.rs`: selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
+- `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
 - `src/store/schema.sql`: embedded b9 schema-version-one table definitions

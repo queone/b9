@@ -234,7 +234,7 @@ Require the Director to record rationale and accept residual risk before a waive
 | Capability | Inventory | Slice | Implementation | Deterministic | Live | Decision | Evidence | Overall |
 |---|---|---|---|---|---|---|---|---|
 | CORE-DOMAIN | DOM-* | SLICE-DOM | COMPLETE | PASS | NOT REQUIRED | NONE | `src/domain.rs` and `tests/domain.rs`; no migration required for the internal, non-persisted model | READY |
-| AN-SIGNALS | AN-*, FORM-* | analysis slices | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | No conflict | NOT READY |
+| AN-SIGNALS | AN-*, FORM-* | analysis slices | PARTIAL | PASS | NOT REQUIRED | NONE | Deterministic durable-season roster and waiver ranking is implemented; Statcast-dependent PQS, undefined PQT, and SHS remain deferred | PARTIAL |
 | DISP-TABLES | DISP-* | view/display slices | PARTIAL | PASS | PENDING | NONE | Plain glossary and deterministic baseline matchup rendering implemented; full table/card surfaces and LIVE-TERM pending | NOT READY |
 | ADV-LLM | ADV-* | advisory slices | PARTIAL | PASS | PENDING | RESOLVED | Five bounded provider adapters, keyring boundary, deterministic grounding, and partial-response filtering are implemented; live protocol and model-selection UI remain pending | PARTIAL |
 | CLI-PLAYER | CMD-POOL/CARD/H/P | SLICE-PARITY | NOT STARTED | NOT RUN | NOT REQUIRED | NONE | CLI inventory authoritative | NOT READY |

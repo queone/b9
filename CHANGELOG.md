@@ -2,7 +2,9 @@
 
 | Version | Summary |
 |---------|---------|
-| Unreleased | AC19: Add daily and weekly matchup views with grounded advisory |
+| Unreleased | |
+| 0.16.0 | AC20: Add deterministic roster and waiver evaluation |
+| 0.15.0 | AC19: Add daily and weekly matchup views with grounded advisory |
 | 0.14.0 | AC18: Add roster and player-pool commands |
 | 0.13.0 | AC17: deliver MLB utility workflow |
 | 0.12.0 | AC16: deliver first usable fantasy workflow |

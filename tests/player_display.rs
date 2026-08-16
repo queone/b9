@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use b9::domain::{MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
-use b9::player_display::{render_detail, render_weekly_totals};
+use b9::player_display::{render_detail, render_players, render_weekly_totals};
 use b9::store::StoredFantasyCategory;
 use b9::terminal::HelpColorMode;
 
@@ -74,4 +74,16 @@ fn weekly_totals_follow_league_category_order() {
     assert!(output.contains("STALE — showing the last complete Yahoo weekly snapshot."));
     assert!(output.contains("AVG    .321\nR      12"));
     assert!(!output.contains("Fantasy data provided by Yahoo Fantasy"));
+}
+
+#[test]
+fn player_table_exposes_deterministic_score_and_rationale_columns() {
+    let output = render_players("HITTERS", &[hitter()], HelpColorMode::Plain);
+    assert!(output.contains("SCORE"));
+    assert!(output.contains("RATIONALE"));
+    assert!(output.contains("  38"));
+    assert!(output.contains("R 2 HR 1 RBI 3 SB 1 AVG 0.250"));
+    assert!(!output.contains("PQS"));
+    assert!(!output.contains("PQT"));
+    assert!(!output.contains("SHS"));
 }

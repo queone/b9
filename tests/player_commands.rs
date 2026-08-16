@@ -73,6 +73,9 @@ fn waiver_gate_excludes_injured_and_off_roster_players() {
     let mut injured = player(7, "P", "SP");
     injured.status = "IL10".into();
     assert!(!waiver_eligible(&injured, None, &candidates));
+    let mut owned = player(7, "P", "SP");
+    owned.owner = Some("Operators".into());
+    assert!(!waiver_eligible(&owned, None, &candidates));
     assert!(!waiver_eligible(&player(8, "P", "SP"), None, &candidates));
 }
 
@@ -80,4 +83,12 @@ fn waiver_gate_excludes_injured_and_off_roster_players() {
 fn yahoo_results_are_attributed_only_when_fresh() {
     assert!(with_yahoo_result_notice(false, "POOL\n".into()).contains("Fantasy data provided"));
     assert!(with_yahoo_result_notice(true, "POOL\n".into()).starts_with("STALE —"));
+}
+#[test]
+fn evaluation_uses_name_as_a_stable_tie_breaker() {
+    let mut players = vec![player(1, "B", "OF"), player(2, "B", "OF")];
+    players[0].name = "Zed".into();
+    players[1].name = "Ada".into();
+    b9::evaluation::sort_by_evaluation(&mut players);
+    assert_eq!(players[0].name, "Ada");
 }

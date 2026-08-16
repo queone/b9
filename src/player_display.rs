@@ -1,24 +1,30 @@
 //! Deterministic roster, player-pool, and detail rendering.
 
 use crate::domain::{MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
+use crate::evaluation::evaluate;
 use crate::store::StoredFantasyCategory;
 use crate::terminal::{HelpColorMode, section};
 
 /// Render one roster or player-pool table.
 pub fn render_players(title: &str, players: &[StoredFantasyPlayer], mode: HelpColorMode) -> String {
     let mut output = format!("{}\n", section(title, mode));
-    output.push_str("PLAYER                    POS    TEAM   YR  OWNER\n");
+    output.push_str(
+        "PLAYER                    POS    TEAM   YR  SCORE  OWNER                 RATIONALE\n",
+    );
     for player in players {
         let owner = player.owner.as_deref().unwrap_or("<available>");
+        let evaluation = evaluate(player);
         output.push_str(&format!(
-            "{:<25}  {:<5}  {:<4}  {:>3}  {}\n",
+            "{:<25}  {:<5}  {:<4}  {:>3}  {:>5.0}  {:<20}  {}\n",
             format!("{} {}", player.name, player.team),
             player.positions,
             player.team,
             player
                 .rank
                 .map_or_else(|| "—".into(), |rank| rank.to_string()),
-            owner
+            evaluation.score,
+            owner,
+            evaluation.rationale
         ));
     }
     output

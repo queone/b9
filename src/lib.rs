@@ -6,6 +6,7 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod domain;
+pub mod evaluation;
 pub mod glossary;
 pub mod matchup;
 pub mod mlb_commands;

@@ -6,6 +6,7 @@ use std::time::SystemTime;
 
 use crate::config;
 use crate::domain::{Matchup, PlayerGameLog, StoredFantasyPlayer};
+use crate::evaluation::sort_by_evaluation;
 use crate::player_display::{render_detail, render_players, render_totals, render_weekly_totals};
 use crate::providers::mlb::MlbClient;
 use crate::providers::yahoo::YahooClient;
@@ -59,6 +60,8 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
             "the selected team has no durable roster snapshot",
         ));
     }
+    let mut players = players;
+    sort_by_evaluation(&mut players);
     let output = render_players(&team.name, &players, detected_help_color_mode());
     yahoo_result_notice(&store, output)
 }
@@ -279,7 +282,11 @@ pub fn show_pool(
                 .as_ref()
                 .is_none_or(|candidates| waiver_eligible(player, position, candidates))
     });
-    sort_pool_players(&mut players, sort.unwrap_or("rank"));
+    if waiver && sort.is_none() {
+        sort_by_evaluation(&mut players);
+    } else {
+        sort_pool_players(&mut players, sort.unwrap_or("rank"));
+    }
     let limit = argument
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(20);
