@@ -142,6 +142,11 @@ pub fn warning(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;100", mode)
 }
 
+/// Style a player-detail injury status using skout's red role.
+pub fn injury_status(value: &str, mode: HelpColorMode) -> String {
+    style(value, "38;5;196", mode)
+}
+
 /// Apply the active, injured-list, or off-active semantic tier to a complete row.
 pub fn roster_row(value: &str, status: &str, mode: HelpColorMode) -> String {
     if status.starts_with('D') {

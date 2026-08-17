@@ -579,7 +579,8 @@ pub fn synchronize_for_origin(
     let source = YahooFantasyClient::new(yahoo);
     let mut store =
         Store::open().map_err(|error| WorkflowError::context("open database", error))?;
-    let mlb = crate::providers::mlb::MlbClient::production(http);
+    let mlb = crate::providers::mlb::MlbClient::production(http.clone());
+    let savant = crate::providers::savant::SavantClient::production(http);
     let mut identities = |season: i32| {
         let mut values = Vec::new();
         if let Ok(rows) = mlb.fetch_bulk_hitting_stats(i64::from(season), "R") {
@@ -602,6 +603,27 @@ pub fn synchronize_for_origin(
     };
     let summary =
         synchronize_with_origin(&source, &mut store, &league_key, origin, &mut identities)?;
+    let season = store
+        .fantasy_season(&league_key)
+        .map_err(|error| WorkflowError::context("read Statcast season", error))?
+        .ok_or_else(|| {
+            WorkflowError(
+                "sync Statcast: league season is unavailable; retry after Yahoo synchronization"
+                    .into(),
+            )
+        })?;
+    let batting = savant
+        .fetch_batting(season)
+        .map_err(|error| WorkflowError::context("fetch Statcast batting snapshot", error))?;
+    let pitching = savant
+        .fetch_pitching(season)
+        .map_err(|error| WorkflowError::context("fetch Statcast pitching snapshot", error))?;
+    store
+        .replace_statcast_snapshot(season, "batting", &batting)
+        .map_err(|error| WorkflowError::context("persist Statcast batting snapshot", error))?;
+    store
+        .replace_statcast_snapshot(season, "pitching", &pitching)
+        .map_err(|error| WorkflowError::context("persist Statcast pitching snapshot", error))?;
     if league_override.is_none() || config.current_league == league_key {
         config.current_team_key = summary.team_key;
         config::write(&config)

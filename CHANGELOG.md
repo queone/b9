@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.21.0 | AC28: close skout runtime parity gaps |
 | 0.20.0 | AC23+AC27: add pp public-feed import and b9 m matchup fallback |
 | 0.19.0 | AC25: local-first status dashboard, Keychain boundary, and circuit breaker |
 | 0.18.1 | AC24: adopt Govna v0.14.0 canon |

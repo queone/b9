@@ -336,10 +336,16 @@ fn redirect_loops_fail_contextually() {
 #[test]
 fn rejected_automated_providers_have_no_reachable_acquisition_path() {
     let providers = include_str!("../src/providers/mod.rs").to_ascii_lowercase();
+    let savant = include_str!("../src/providers/savant.rs").to_ascii_lowercase();
     let commands = include_str!("../src/cli.rs").to_ascii_lowercase();
     let synchronization = include_str!("../src/sync.rs").to_ascii_lowercase();
     let credentials = include_str!("../src/advisory_credentials.rs").to_ascii_lowercase();
-    for rejected in ["savant", "fangraphs", "fantasypros", "rotowire"] {
+    assert!(providers.contains("savant"));
+    assert!(synchronization.contains("savantclient"));
+    assert!(savant.contains("httpclient") && savant.contains(".execute("));
+    assert!(!commands.contains("savant"));
+    assert!(!credentials.contains("savant"));
+    for rejected in ["fangraphs", "fantasypros", "rotowire"] {
         assert!(!providers.contains(rejected));
         assert!(!commands.contains(rejected));
         assert!(!synchronization.contains(rejected));

@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
 use crate::glossary::{LookupResult, embedded_entries, lookup, render_entry, render_full};
-use crate::terminal::{HelpColorMode, detected_help_color_mode, section, subtitle, title};
+use crate::terminal::{HelpColorMode, detected_help_color_mode, dim, section, subtitle, title};
 
 #[derive(Clone, Copy)]
 struct ArgumentDescriptor {
@@ -329,31 +329,26 @@ where
 
     match matches.subcommand() {
         Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
-        Some(("login", _)) => run_result(crate::sync::login().map(|()| String::new()), false),
-        Some(("logout", _)) => run_result(crate::sync::logout(), false),
-        Some(("st", _)) => run_result(
-            crate::sync::status(matches.get_one::<String>("league").map(String::as_str)),
-            false,
-        ),
-        Some(("sync", subcommand)) => run_result(
-            crate::sync::synchronize_with_options(
-                matches.get_one::<String>("league").map(String::as_str),
-                subcommand.get_flag("force"),
-            ),
-            true,
-        ),
-        Some(("pp", _)) => run_result(
-            crate::public_pull::pull(matches.get_one::<String>("league").map(String::as_str)),
-            true,
-        ),
-        Some(("start", _)) => run_result(crate::daemon::start(), false),
-        Some(("stop", _)) => run_result(crate::daemon::stop(), false),
-        Some(("restart", _)) => run_result(crate::daemon::restart(), false),
-        Some(("_daemon", _)) => run_result(crate::daemon::run(), false),
+        Some(("login", _)) => run_result(crate::sync::login().map(|()| String::new())),
+        Some(("logout", _)) => run_result(crate::sync::logout()),
+        Some(("st", _)) => run_result(crate::sync::status(
+            matches.get_one::<String>("league").map(String::as_str),
+        )),
+        Some(("sync", subcommand)) => run_result(crate::sync::synchronize_with_options(
+            matches.get_one::<String>("league").map(String::as_str),
+            subcommand.get_flag("force"),
+        )),
+        Some(("pp", _)) => run_result(crate::public_pull::pull(
+            matches.get_one::<String>("league").map(String::as_str),
+        )),
+        Some(("start", _)) => run_result(crate::daemon::start()),
+        Some(("stop", _)) => run_result(crate::daemon::stop()),
+        Some(("restart", _)) => run_result(crate::daemon::restart()),
+        Some(("_daemon", _)) => run_result(crate::daemon::run()),
         Some(("reset", _)) => {
             let mut input = std::io::BufReader::new(std::io::stdin().lock());
             let mut output = std::io::stdout();
-            run_result(crate::operations::reset(&mut input, &mut output), false)
+            run_result(crate::operations::reset(&mut input, &mut output))
         }
         Some(("fetch", subcommand)) => {
             let Some(path) = subcommand.get_one::<String>("path") else {
@@ -367,7 +362,6 @@ where
                         eprintln!("fetch: write response: {error}; retry");
                         ExitCode::from(1)
                     } else {
-                        eprintln!("Data provided by Yahoo Fantasy Sports.");
                         ExitCode::SUCCESS
                     }
                 }
@@ -381,7 +375,7 @@ where
             let path = match crate::operations::log_path() {
                 Ok(path) => path,
                 Err(error) => {
-                    return run_result::<crate::operations::OperationsError>(Err(error), false);
+                    return run_result::<crate::operations::OperationsError>(Err(error));
                 }
             };
             if subcommand.get_flag("path_only") {
@@ -398,79 +392,56 @@ where
                             run_result(
                                 crate::operations::follow_log(&path, &mut stdout, &mut cancelled)
                                     .map(|()| String::new()),
-                                false,
                             )
                         } else {
                             ExitCode::SUCCESS
                         }
                     }
-                    Err(error) => {
-                        run_result::<crate::operations::OperationsError>(Err(error), false)
-                    }
+                    Err(error) => run_result::<crate::operations::OperationsError>(Err(error)),
                 }
             }
         }
-        Some(("lm", _)) => run_result(crate::model_config::configure(), false),
-        Some(("m", subcommand)) => run_result(
-            crate::matchup::show_with_team_options(
-                matches.get_one::<String>("league").map(String::as_str),
-                subcommand.get_one::<String>("team").map(String::as_str),
-                crate::matchup::MatchupOptions {
-                    week: subcommand.get_one::<i32>("week").copied(),
-                    weekly: subcommand.get_flag("weekly"),
-                    day: subcommand.get_one::<String>("day").cloned(),
-                    advise: subcommand.get_flag("advise"),
-                },
-            ),
-            true,
-        ),
-        Some(("t", subcommand)) => run_result(
-            crate::mlb_commands::show_teams(
-                subcommand.get_one::<String>("team").map(String::as_str),
-                subcommand.get_flag("force"),
-            ),
-            false,
-        ),
-        Some(("tt", subcommand)) => run_result(
-            crate::mlb_commands::show_totals(subcommand.get_flag("force")),
-            false,
-        ),
-        Some(("sp", subcommand)) => run_result(
-            crate::mlb_commands::show_probables(subcommand.get_flag("force")),
-            false,
-        ),
-        Some(("r", subcommand)) => run_result(
-            crate::player_commands::show_roster(
-                subcommand.get_one::<String>("team").map(String::as_str),
-            ),
-            false,
-        ),
-        Some(("rt", subcommand)) => run_result(
-            crate::player_commands::show_totals(
-                subcommand.get_one::<String>("weekly").map(String::as_str),
-            ),
-            false,
-        ),
-        Some(("h", subcommand)) => run_result(
-            crate::player_commands::show_pool(
-                "B",
-                subcommand.get_one::<String>("player").map(String::as_str),
-                subcommand.get_one::<String>("sort").map(String::as_str),
-                subcommand.get_one::<String>("position").map(String::as_str),
-                subcommand.get_flag("waiver"),
-            ),
-            false,
-        ),
-        Some(("p", subcommand)) => run_result(
-            crate::player_commands::show_pool(
-                "P",
-                subcommand.get_one::<String>("player").map(String::as_str),
-                subcommand.get_one::<String>("sort").map(String::as_str),
-                subcommand.get_one::<String>("position").map(String::as_str),
-                subcommand.get_flag("waiver"),
-            ),
-            false,
-        ),
+        Some(("lm", _)) => run_result(crate::model_config::configure()),
+        Some(("m", subcommand)) => run_result(crate::matchup::show_with_team_options(
+            matches.get_one::<String>("league").map(String::as_str),
+            subcommand.get_one::<String>("team").map(String::as_str),
+            crate::matchup::MatchupOptions {
+                week: subcommand.get_one::<i32>("week").copied(),
+                weekly: subcommand.get_flag("weekly"),
+                day: subcommand.get_one::<String>("day").cloned(),
+                advise: subcommand.get_flag("advise"),
+            },
+        )),
+        Some(("t", subcommand)) => run_result(crate::mlb_commands::show_teams(
+            subcommand.get_one::<String>("team").map(String::as_str),
+            subcommand.get_flag("force"),
+        )),
+        Some(("tt", subcommand)) => run_result(crate::mlb_commands::show_totals(
+            subcommand.get_flag("force"),
+        )),
+        Some(("sp", subcommand)) => run_result(crate::mlb_commands::show_probables(
+            subcommand.get_flag("force"),
+        )),
+        Some(("r", subcommand)) => run_result(crate::player_commands::show_roster(
+            subcommand.get_one::<String>("team").map(String::as_str),
+        )),
+        Some(("rt", subcommand)) => run_result(crate::player_commands::show_totals(
+            subcommand.get_one::<String>("weekly").map(String::as_str),
+        )),
+        Some(("h", subcommand)) => run_result(crate::player_commands::show_pool(
+            "B",
+            subcommand.get_one::<String>("player").map(String::as_str),
+            subcommand.get_one::<String>("sort").map(String::as_str),
+            subcommand.get_one::<String>("position").map(String::as_str),
+            subcommand.get_flag("waiver"),
+        )),
+        Some(("p", subcommand)) => run_result(crate::player_commands::show_pool(
+            "P",
+            subcommand.get_one::<String>("player").map(String::as_str),
+            subcommand.get_one::<String>("sort").map(String::as_str),
+            subcommand.get_one::<String>("position").map(String::as_str),
+            subcommand.get_flag("waiver"),
+        )),
         _ => ExitCode::SUCCESS,
     }
 }
@@ -500,7 +471,7 @@ fn is_root_help_invocation(arguments: &[OsString]) -> bool {
 
 fn root_command(version: &'static str) -> Command {
     let mut command = Command::new("b9")
-        .about("Fantasy Baseball Advisor")
+        .about("Fantasy Baseball advisor — github.com/queone/b9")
         .version(version)
         .disable_help_flag(true)
         .disable_help_subcommand(true)
@@ -673,16 +644,10 @@ fn root_command(version: &'static str) -> Command {
     command
 }
 
-fn run_result<E: std::fmt::Display>(
-    result: Result<String, E>,
-    yahoo_attribution: bool,
-) -> ExitCode {
+fn run_result<E: std::fmt::Display>(result: Result<String, E>) -> ExitCode {
     match result {
         Ok(output) => {
             print!("{output}");
-            if yahoo_attribution {
-                eprintln!("Data provided by Yahoo Fantasy Sports.");
-            }
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -699,7 +664,10 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
     output.push_str(" v");
     output.push_str(version);
     output.push('\n');
-    output.push_str(&subtitle("Fantasy Baseball Advisor", mode));
+    output.push_str(&subtitle(
+        "Fantasy Baseball advisor — github.com/queone/b9",
+        mode,
+    ));
     output.push_str("\n\n");
     output.push_str(&section("USAGE", mode));
     output.push_str("\n  b9 <command> [flags]\n\n");
@@ -722,6 +690,12 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
             descriptor.description,
         );
     }
+    output.push('\n');
+    output.push_str(&dim(
+        "Fantasy data provided by https://sports.yahoo.com/fantasy/",
+        mode,
+    ));
+    output.push('\n');
     output
 }
 

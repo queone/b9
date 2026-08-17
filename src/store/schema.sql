@@ -148,7 +148,10 @@ CREATE TABLE IF NOT EXISTS statcast_seasons (
     xwoba               REAL,
     xobp                REAL,
     sprint_speed        REAL,
-    -- Batting metrics (FanGraphs)
+    strikeout_pct       REAL,                  -- Savant-computed K% for batting or pitching
+    walk_pct            REAL,                  -- Savant-computed BB% for batting or pitching
+    ops                 REAL,                  -- Savant-computed hitter OPS
+    -- Additional batting metrics
     fb_pct              REAL,                  -- fly ball rate (batters)
     hr_fb_pct           REAL,                  -- HR/FB ratio (batters, FanGraphs)
     -- Pitching metrics (Statcast)
@@ -156,7 +159,7 @@ CREATE TABLE IF NOT EXISTS statcast_seasons (
     spin_rate           REAL,
     hard_hit_pct_pit    REAL,
     xera                REAL,
-    -- Pitching metrics (FanGraphs)
+    -- Additional pitching metrics
     whiff_pct           REAL,
     chase_pct           REAL,
     gb_pct              REAL,

@@ -10,12 +10,18 @@ fn player(name: &str, role: &str, batting: [f64; 7], pitching: [f64; 7]) -> Stor
         role: role.into(),
         positions: String::new(),
         status: String::new(),
+        injury_note: String::new(),
+        birth_date: String::new(),
+        game_status: String::new(),
+        hand: String::new(),
         rank: None,
         percent_owned: None,
         owner: None,
         slot: None,
         batting,
         pitching,
+        hitting_advanced: [None; 8],
+        pitching_advanced: [None; 6],
     }
 }
 

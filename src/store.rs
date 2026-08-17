@@ -21,6 +21,7 @@ mod mlb;
 mod odds;
 mod seasons;
 mod snapshots;
+mod statcast;
 mod sync_runs;
 
 pub use fantasy::{
@@ -35,10 +36,11 @@ pub use mlb::{RosterWrite, SeasonStatWrite, StoredRosterPlayer, WaiverCandidate}
 pub use odds::{MoneylineQuote, StoredMoneyline};
 pub use seasons::{SeasonState, SeasonSyncStatus};
 pub use snapshots::CommandSnapshot;
+pub use statcast::StatcastWrite;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for b9-owned databases.
-pub const CURRENT_SCHEMA_VERSION: i64 = 3;
+pub const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 /// Read-only production status fields used by `b9 st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -725,10 +727,15 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
     }
     if version == 1 {
         migrate_v1_to_v2(connection, path)?;
-        return migrate_v2_to_v3(connection, path);
+        migrate_v2_to_v3(connection, path)?;
+        return migrate_v3_to_v4(connection, path);
     }
     if version == 2 {
-        return migrate_v2_to_v3(connection, path);
+        migrate_v2_to_v3(connection, path)?;
+        return migrate_v3_to_v4(connection, path);
+    }
+    if version == 3 {
+        return migrate_v3_to_v4(connection, path);
     }
     Err(StoreError::unsupported(
         path,
@@ -746,10 +753,7 @@ fn migrate_v1_to_v2(connection: &mut Connection, path: &Path) -> Result<(), Stor
         )
         .map_err(|error| StoreError::operation("apply version-two schema migration", path, error))?;
     transaction
-        .execute(
-            "UPDATE schema_version SET version=?1",
-            [CURRENT_SCHEMA_VERSION],
-        )
+        .execute("UPDATE schema_version SET version=?1", [2])
         .map_err(|error| StoreError::operation("write schema version", path, error))?;
     transaction
         .commit()
@@ -782,10 +786,39 @@ fn migrate_v2_to_v3(connection: &mut Connection, path: &Path) -> Result<(), Stor
             StoreError::operation("apply version-three schema migration", path, error)
         })?;
     transaction
-        .execute(
-            "UPDATE schema_version SET version=?1",
-            [CURRENT_SCHEMA_VERSION],
+        .execute("UPDATE schema_version SET version=?1", [3])
+        .map_err(|error| StoreError::operation("write schema version", path, error))?;
+    transaction
+        .commit()
+        .map_err(|error| StoreError::operation("commit schema migration", path, error))
+}
+
+fn migrate_v3_to_v4(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| StoreError::operation("begin schema migration", path, error))?;
+    let has_statcast: bool = transaction
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_schema WHERE type='table' AND name='statcast_seasons'",
+            [],
+            |row| row.get(0),
         )
+        .map_err(|error| {
+            StoreError::operation("inspect version-three Statcast schema", path, error)
+        })?;
+    if has_statcast {
+        transaction
+            .execute_batch(
+                "ALTER TABLE statcast_seasons ADD COLUMN strikeout_pct REAL;
+                 ALTER TABLE statcast_seasons ADD COLUMN walk_pct REAL;
+                 ALTER TABLE statcast_seasons ADD COLUMN ops REAL;",
+            )
+            .map_err(|error| {
+                StoreError::operation("apply version-four schema migration", path, error)
+            })?;
+    }
+    transaction
+        .execute("UPDATE schema_version SET version=?1", [4])
         .map_err(|error| StoreError::operation("write schema version", path, error))?;
     transaction
         .commit()

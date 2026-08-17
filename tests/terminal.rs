@@ -1,14 +1,14 @@
 use b9::cli::render_root_help;
 use b9::terminal::{
-    ColorContext, HelpColorMode, help_color_mode, roster_status, section, subtitle, title,
-    visible_width,
+    ColorContext, HelpColorMode, help_color_mode, injury_status, roster_status, section, subtitle,
+    title, visible_width,
 };
 
-const PLAIN_HELP: &str = "b9 v0.20.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  pp                           Fetch public Yahoo league data without login\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n";
+const PLAIN_HELP: &str = "b9 v0.21.0\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  pp                           Fetch public Yahoo league data without login\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\nFantasy data provided by https://sports.yahoo.com/fantasy/\n";
 
 #[test]
 fn plain_help_matches_the_b9_style_golden() {
-    let output = render_root_help("0.20.0", HelpColorMode::Plain);
+    let output = render_root_help("0.21.0", HelpColorMode::Plain);
     assert_eq!(output, PLAIN_HELP);
     assert!(!output.contains('\u{1b}'));
     assert!(!output.ends_with("\n\n"));
@@ -16,17 +16,21 @@ fn plain_help_matches_the_b9_style_golden() {
 
 #[test]
 fn colored_help_uses_only_the_contracted_spans() {
-    let output = render_root_help("0.20.0", HelpColorMode::Color);
+    let output = render_root_help("0.21.0", HelpColorMode::Color);
     let expected = PLAIN_HELP
         .replacen("b9", "\u{1b}[1;38;5;231mb9\u{1b}[0m", 1)
         .replacen(
-            "Fantasy Baseball Advisor",
-            "\u{1b}[38;5;245mFantasy Baseball Advisor\u{1b}[0m",
+            "Fantasy Baseball advisor — github.com/queone/b9",
+            "\u{1b}[38;5;245mFantasy Baseball advisor — github.com/queone/b9\u{1b}[0m",
             1,
         )
         .replace("USAGE", "\u{1b}[38;5;255mUSAGE\u{1b}[0m")
         .replace("COMMANDS", "\u{1b}[38;5;255mCOMMANDS\u{1b}[0m")
-        .replace("FLAGS", "\u{1b}[38;5;255mFLAGS\u{1b}[0m");
+        .replace("FLAGS", "\u{1b}[38;5;255mFLAGS\u{1b}[0m")
+        .replace(
+            "Fantasy data provided by https://sports.yahoo.com/fantasy/",
+            "\u{1b}[38;5;245mFantasy data provided by https://sports.yahoo.com/fantasy/\u{1b}[0m",
+        );
     assert_eq!(output, expected);
     assert_eq!(
         title("b9", HelpColorMode::Color),
@@ -85,6 +89,11 @@ fn mlb_status_roles_preserve_visible_width() {
     let value = roster_status("IL D10", HelpColorMode::Color);
     assert_eq!(visible_width(&value), 6);
     assert_eq!(roster_status("MINORS", HelpColorMode::Plain), "MINORS");
+    assert_eq!(
+        injury_status("IL60", HelpColorMode::Color),
+        "\u{1b}[38;5;196mIL60\u{1b}[0m"
+    );
+    assert_eq!(injury_status("IL60", HelpColorMode::Plain), "IL60");
 }
 
 #[test]

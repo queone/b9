@@ -214,6 +214,45 @@ fn inspect_status_at_reads_a_pre_dashboard_status_database_without_migrating() {
 }
 
 #[test]
+fn version_three_migration_adds_computed_statcast_rates_without_losing_rows() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("version-three.db");
+    Store::open_at(&path).unwrap().close().unwrap();
+    let connection = Connection::open(&path).unwrap();
+    connection.execute_batch(
+        "ALTER TABLE statcast_seasons RENAME TO statcast_seasons_v4;
+         CREATE TABLE statcast_seasons (
+           player_id INTEGER NOT NULL, season INTEGER NOT NULL, stat_group TEXT NOT NULL,
+           xwoba REAL, fetched_at INTEGER, PRIMARY KEY(player_id,season,stat_group)
+         );
+         INSERT INTO statcast_seasons(player_id,season,stat_group,xwoba,fetched_at) VALUES(7,2026,'batting',.401,1);
+         DROP TABLE statcast_seasons_v4;
+         UPDATE schema_version SET version=3;",
+    ).unwrap();
+    drop(connection);
+
+    let store = Store::open_at(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 4);
+    store.close().unwrap();
+    let connection = Connection::open(&path).unwrap();
+    let row: (f64, Option<f64>, Option<f64>, Option<f64>) = connection
+        .query_row(
+            "SELECT xwoba,strikeout_pct,walk_pct,ops FROM statcast_seasons WHERE player_id=7",
+            [],
+            |result| {
+                Ok((
+                    result.get(0)?,
+                    result.get(1)?,
+                    result.get(2)?,
+                    result.get(3)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(row, (0.401, None, None, None));
+}
+
+#[test]
 fn production_path_is_b9_owned() {
     let home = std::env::var_os("HOME").expect("HOME for test process");
     let path = database_path().unwrap();

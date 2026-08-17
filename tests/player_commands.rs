@@ -11,12 +11,18 @@ fn player(id: i64, role: &str, positions: &str) -> StoredFantasyPlayer {
         role: role.into(),
         positions: positions.into(),
         status: String::new(),
+        injury_note: String::new(),
+        birth_date: String::new(),
+        game_status: String::new(),
+        hand: String::new(),
         rank: None,
         percent_owned: None,
         owner: None,
         slot: None,
         batting: [0.0; 7],
         pitching: [0.0; 7],
+        hitting_advanced: [None; 8],
+        pitching_advanced: [None; 6],
     }
 }
 
@@ -80,8 +86,8 @@ fn waiver_gate_excludes_injured_and_off_roster_players() {
 }
 
 #[test]
-fn yahoo_results_are_attributed_only_when_fresh() {
-    assert!(with_yahoo_result_notice(false, "POOL\n".into()).contains("Fantasy data provided"));
+fn yahoo_results_show_only_the_stale_notice() {
+    assert_eq!(with_yahoo_result_notice(false, "POOL\n".into()), "POOL\n");
     assert!(with_yahoo_result_notice(true, "POOL\n".into()).starts_with("STALE —"));
 }
 #[test]

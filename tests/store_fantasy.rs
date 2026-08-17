@@ -180,13 +180,13 @@ fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() 
     let connection = Connection::open(&path).unwrap();
     connection
         .execute(
-            "UPDATE players SET mlbam_id=700001,mlbam_match_source='seed' WHERE yahoo_player_id=101",
+            "UPDATE players SET mlbam_id=700001,mlbam_match_source='name',injury_note='Right rib stress fracture',birth_date='1992-04-26' WHERE yahoo_player_id=101",
             [],
         )
         .unwrap();
     connection
         .execute(
-            "INSERT INTO players (mlbam_id,name,position_type,mlbam_match_source,synced_at) VALUES (700001,'Ada Hitter','H','bulk',20)",
+            "INSERT INTO players (mlbam_id,name,position_type,mlbam_match_source,synced_at) VALUES (700001,'Ada Hitter','H','seed',20)",
             [],
         )
         .unwrap();
@@ -203,6 +203,17 @@ fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() 
             [stats_player],
         )
         .unwrap();
+    let yahoo_player: i64 = connection
+        .query_row(
+            "SELECT id FROM players WHERE yahoo_player_id=101",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    connection.execute(
+        "INSERT INTO mlbam_season_stats (player_id,season,stat_group,pa,r,avg,synced_at) VALUES (?1,2026,'hitting',450,70,.260,5)",
+        [yahoo_player],
+    ).unwrap();
 
     let ada = store
         .fantasy_players("mlb.l.1")
@@ -210,6 +221,8 @@ fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() 
         .into_iter()
         .find(|player| player.yahoo_player_id == Some(101))
         .unwrap();
-    assert_eq!(ada.batting[0], 500.0);
-    assert_eq!(ada.batting[2], 75.0);
+    assert_eq!(ada.batting[0], 450.0);
+    assert_eq!(ada.batting[2], 70.0);
+    assert_eq!(ada.injury_note, "Right rib stress fracture");
+    assert_eq!(ada.birth_date, "1992-04-26");
 }

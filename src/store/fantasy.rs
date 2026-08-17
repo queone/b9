@@ -271,11 +271,15 @@ impl Store {
         validate_identity("read fantasy players", "league key", league_key)?;
         let sql = "SELECT p.yahoo_player_id,p.mlbam_id,p.name,COALESCE(p.mlb_team,''),COALESCE(p.position_type,''),COALESCE(p.eligible_positions,p.display_position,''),COALESCE(p.status,''),p.yahoo_rank,p.percent_owned,t.name,ys.slot_position,
 COALESCE(h.pa,0),COALESCE(h.obp,0),COALESCE(h.r,0),COALESCE(h.hr,0),COALESCE(h.rbi,0),COALESCE(h.sb,0),COALESCE(h.avg,0),
-COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0)
+COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0),COALESCE(p.bat_side,''),COALESCE(NULLIF(p.injury_note,''),p.mlbam_injury_note,''),COALESCE(p.birth_date,''),
+sh.xwoba,sh.exit_velo_avg,sh.barrel_pct,sh.hard_hit_pct,sh.strikeout_pct,sh.walk_pct,sh.sprint_speed,sh.ops,
+sp.fastball_velo,sp.whiff_pct,sp.chase_pct,sp.gb_pct,sp.strikeout_pct,sp.walk_pct
 FROM players p LEFT JOIN yahoo_roster_slots ys ON ys.player_id=p.id AND ys.team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1) LEFT JOIN yahoo_teams t ON t.team_key=ys.team_key
 LEFT JOIN yahoo_free_agents fa ON fa.player_id=p.id AND fa.league_key=?1
-LEFT JOIN mlbam_season_stats h ON h.player_id=(SELECT hs.player_id FROM mlbam_season_stats hs JOIN players hp ON hp.id=hs.player_id WHERE hp.mlbam_id=p.mlbam_id AND hs.stat_group='hitting' AND hs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY hs.synced_at DESC,hs.player_id LIMIT 1) AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
-LEFT JOIN mlbam_season_stats q ON q.player_id=(SELECT qs.player_id FROM mlbam_season_stats qs JOIN players qp ON qp.id=qs.player_id WHERE qp.mlbam_id=p.mlbam_id AND qs.stat_group='pitching' AND qs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY qs.synced_at DESC,qs.player_id LIMIT 1) AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats h ON h.player_id=(SELECT hs.player_id FROM mlbam_season_stats hs JOIN players hp ON hp.id=hs.player_id WHERE hp.mlbam_id=p.mlbam_id AND hs.stat_group='hitting' AND hs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY CASE WHEN hp.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,hs.synced_at DESC,hs.player_id LIMIT 1) AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats q ON q.player_id=(SELECT qs.player_id FROM mlbam_season_stats qs JOIN players qp ON qp.id=qs.player_id WHERE qp.mlbam_id=p.mlbam_id AND qs.stat_group='pitching' AND qs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY CASE WHEN qp.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,qs.synced_at DESC,qs.player_id LIMIT 1) AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN statcast_seasons sh ON sh.player_id=(SELECT p2.id FROM players p2 WHERE p2.mlbam_id=p.mlbam_id ORDER BY CASE WHEN p2.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,p2.yahoo_player_id IS NULL,p2.id LIMIT 1) AND sh.stat_group='batting' AND sh.season=(SELECT MAX(season) FROM statcast_seasons)
+LEFT JOIN statcast_seasons sp ON sp.player_id=(SELECT p2.id FROM players p2 WHERE p2.mlbam_id=p.mlbam_id ORDER BY CASE WHEN p2.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,p2.yahoo_player_id IS NULL,p2.id LIMIT 1) AND sp.stat_group='pitching' AND sp.season=(SELECT MAX(season) FROM statcast_seasons)
 WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id IS NOT NULL) ORDER BY COALESCE(p.yahoo_rank,999999),p.name";
         let mut statement = self
             .connection()
@@ -291,6 +295,10 @@ WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id 
                     role: row.get(4)?,
                     positions: row.get(5)?,
                     status: row.get(6)?,
+                    injury_note: row.get(26)?,
+                    birth_date: row.get(27)?,
+                    game_status: String::new(),
+                    hand: row.get(25)?,
                     rank: row.get(7)?,
                     percent_owned: row.get(8)?,
                     owner: row
@@ -314,6 +322,24 @@ WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id 
                         row.get(22)?,
                         row.get(23)?,
                         row.get(24)?,
+                    ],
+                    hitting_advanced: [
+                        row.get(28)?,
+                        row.get(29)?,
+                        row.get(30)?,
+                        row.get(31)?,
+                        row.get(32)?,
+                        row.get(33)?,
+                        row.get(34)?,
+                        row.get(35)?,
+                    ],
+                    pitching_advanced: [
+                        row.get(36)?,
+                        row.get(37)?,
+                        row.get(38)?,
+                        row.get(39)?,
+                        row.get(40)?,
+                        row.get(41)?,
                     ],
                 })
             })

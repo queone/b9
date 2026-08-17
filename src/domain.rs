@@ -365,12 +365,18 @@ pub struct StoredFantasyPlayer {
     pub role: String,
     pub positions: String,
     pub status: String,
+    pub injury_note: String,
+    pub birth_date: String,
+    pub game_status: String,
+    pub hand: String,
     pub rank: Option<i64>,
     pub percent_owned: Option<f64>,
     pub owner: Option<String>,
     pub slot: Option<String>,
     pub batting: [f64; 7],
     pub pitching: [f64; 7],
+    pub hitting_advanced: [Option<f64>; 8],
+    pub pitching_advanced: [Option<f64>; 6],
 }
 
 /// One rendered player-game-log line retained for an offline player card.

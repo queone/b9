@@ -129,14 +129,6 @@ pub fn render_rosters(
             }
         }
     }
-    if groups
-        .iter()
-        .any(|(_, players)| players.iter().any(|player| player.in_yahoo_pool))
-    {
-        output.push_str(
-            "\nFantasy data provided by Yahoo Fantasy — https://sports.yahoo.com/fantasy/\n",
-        );
-    }
     output
 }
 

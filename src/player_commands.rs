@@ -64,8 +64,123 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
     }
     let mut players = players;
     sort_roster_players(&mut players);
+    populate_game_statuses(&mut players);
     let output = render_players(&team.name, &players, detected_help_color_mode());
     yahoo_result_notice(&store, output)
+}
+
+fn populate_game_statuses(players: &mut [StoredFantasyPlayer]) {
+    let Ok(http) = HttpClient::production() else {
+        return;
+    };
+    let client = MlbClient::production(Arc::new(http));
+    let date = utc_date(SystemTime::now());
+    let Ok(games) = client.fetch_schedule(&date) else {
+        return;
+    };
+    apply_game_statuses(players, &games);
+}
+
+fn apply_game_statuses(
+    players: &mut [StoredFantasyPlayer],
+    games: &[crate::providers::mlb::ScheduleGame],
+) {
+    for player in players.iter_mut().filter(|player| player.status.is_empty()) {
+        let Some(game) = games.iter().find(|game| {
+            let away = mlb_team_abbreviation(game.away_team_id);
+            let home = mlb_team_abbreviation(game.home_team_id);
+            player.team.eq_ignore_ascii_case(away) || player.team.eq_ignore_ascii_case(home)
+        }) else {
+            continue;
+        };
+        let away = player
+            .team
+            .eq_ignore_ascii_case(mlb_team_abbreviation(game.away_team_id));
+        let opponent = if away {
+            mlb_team_abbreviation(game.home_team_id)
+        } else {
+            mlb_team_abbreviation(game.away_team_id)
+        };
+        let location = if away {
+            format!("@ {opponent}")
+        } else {
+            format!("vs {opponent}")
+        };
+        player.game_status = if game.detailed_state.eq_ignore_ascii_case("final") {
+            game.linescore.as_ref().map_or_else(
+                || format!("Final {location}"),
+                |score| format!("Final {}-{} {location}", score.away_runs, score.home_runs),
+            )
+        } else if let Some(score) = &game.linescore {
+            format!(
+                "{}{} {}-{} {location}",
+                score.inning_state.chars().next().unwrap_or('T'),
+                score.inning_ordinal,
+                score.away_runs,
+                score.home_runs
+            )
+        } else {
+            format!(
+                "{} {location}",
+                game.game_date.get(11..16).unwrap_or("Scheduled")
+            )
+        };
+    }
+}
+
+fn utc_date(now: SystemTime) -> String {
+    let days = now
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+        / 86_400;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn mlb_team_abbreviation(team_id: i64) -> &'static str {
+    match team_id {
+        108 => "LAA",
+        109 => "ARI",
+        110 => "BAL",
+        111 => "BOS",
+        112 => "CHC",
+        113 => "CIN",
+        114 => "CLE",
+        115 => "COL",
+        116 => "DET",
+        117 => "HOU",
+        118 => "KC",
+        119 => "LAD",
+        120 => "WSH",
+        121 => "NYM",
+        133 => "OAK",
+        134 => "PIT",
+        135 => "SD",
+        136 => "SEA",
+        137 => "SF",
+        138 => "STL",
+        139 => "TB",
+        140 => "TEX",
+        141 => "TOR",
+        142 => "MIN",
+        143 => "PHI",
+        144 => "ATL",
+        145 => "CWS",
+        146 => "MIA",
+        147 => "NYY",
+        158 => "MIL",
+        _ => "",
+    }
 }
 
 fn sort_roster_players(players: &mut [StoredFantasyPlayer]) {
@@ -261,7 +376,13 @@ pub fn show_pool(
                     .map_err(|failure| error(role, failure))?
                     .ok_or_else(|| error(role, "league season is unavailable"))?;
                 let (logs, stale) = game_logs(&mut store, player, season)?;
-                let output = render_detail(player, &logs, stale, detected_help_color_mode());
+                let output = render_detail(
+                    player,
+                    &logs,
+                    stale,
+                    &utc_date(SystemTime::now()),
+                    detected_help_color_mode(),
+                );
                 yahoo_result_notice(&store, output)
             }
             [] => Err(error(role, "no player matches the query")),
@@ -346,16 +467,14 @@ fn yahoo_result_notice(store: &Store, output: String) -> Result<String, PlayerCo
     })
 }
 
-/// Label retained Yahoo output or attribute a fresh completed Yahoo result.
+/// Label retained Yahoo output without repeating root-help attribution.
 pub fn with_yahoo_result_notice(stale: bool, output: String) -> String {
     if stale {
         format!(
             "STALE — showing the last complete Yahoo roster and player-pool snapshot.\n{output}"
         )
     } else {
-        format!(
-            "{output}\nFantasy data provided by Yahoo Fantasy — https://sports.yahoo.com/fantasy/\n"
-        )
+        output
     }
 }
 
@@ -523,13 +642,14 @@ fn game_logs(
                                     entry.opponent_abbreviation
                                 ),
                                 line: format!(
-                                    "AB {}  H {}  R {}  HR {}  RBI {}  SB {}",
+                                    "AB {}  H {}  R {}  HR {}  RBI {}  SB {}  AVG {}",
                                     entry.stat.at_bats,
                                     entry.stat.hits,
                                     entry.stat.runs,
                                     entry.stat.home_runs,
                                     entry.stat.rbi,
-                                    entry.stat.stolen_bases
+                                    entry.stat.stolen_bases,
+                                    entry.stat.average,
                                 ),
                             })
                             .collect()
@@ -571,10 +691,13 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        resolve_date_matchup, select_roster_team, sort_pool_players, weekly_matchup,
-        yahoo_result_notice,
+        apply_game_statuses, resolve_date_matchup, select_roster_team, sort_pool_players,
+        weekly_matchup, yahoo_result_notice,
     };
-    use crate::domain::{FantasyPlayer, FantasyTeam, Matchup, MatchupTeam, RosterWeekStats};
+    use crate::domain::{
+        FantasyPlayer, FantasyTeam, Matchup, MatchupTeam, RosterWeekStats, StoredFantasyPlayer,
+    };
+    use crate::providers::mlb::{Linescore, ScheduleGame};
     use crate::providers::yahoo_fantasy::{
         LeagueRosters, LeagueSettings, UserLeague, YahooFantasyError, YahooFantasySource,
     };
@@ -725,12 +848,18 @@ mod tests {
                 role: "B".into(),
                 positions: "OF".into(),
                 status: String::new(),
+                injury_note: String::new(),
+                birth_date: String::new(),
+                game_status: String::new(),
+                hand: String::new(),
                 rank: Some(9),
                 percent_owned: None,
                 owner: Some("Zulu Owner".into()),
                 slot: None,
                 batting: [1.0; 7],
                 pitching: [0.0; 7],
+                hitting_advanced: [None; 8],
+                pitching_advanced: [None; 6],
             },
             crate::domain::StoredFantasyPlayer {
                 yahoo_player_id: Some(2),
@@ -740,12 +869,18 @@ mod tests {
                 role: "B".into(),
                 positions: "C".into(),
                 status: String::new(),
+                injury_note: String::new(),
+                birth_date: String::new(),
+                game_status: String::new(),
+                hand: String::new(),
                 rank: Some(1),
                 percent_owned: None,
                 owner: None,
                 slot: None,
                 batting: [2.0; 7],
                 pitching: [0.0; 7],
+                hitting_advanced: [None; 8],
+                pitching_advanced: [None; 6],
             },
         ];
         for (field, expected) in [
@@ -769,5 +904,56 @@ mod tests {
             yahoo_result_notice(&store, "POOL\n".into()).unwrap(),
             "POOL\n"
         );
+    }
+
+    #[test]
+    fn game_state_fills_only_players_without_injury_status() {
+        let player = |status: &str| StoredFantasyPlayer {
+            yahoo_player_id: Some(1),
+            mlbam_id: Some(1),
+            name: "Ada".into(),
+            team: "NYY".into(),
+            role: "B".into(),
+            positions: "OF".into(),
+            status: status.into(),
+            injury_note: String::new(),
+            birth_date: String::new(),
+            game_status: String::new(),
+            hand: "R".into(),
+            rank: None,
+            percent_owned: None,
+            owner: None,
+            slot: None,
+            batting: [0.0; 7],
+            pitching: [0.0; 7],
+            hitting_advanced: [None; 8],
+            pitching_advanced: [None; 6],
+        };
+        let game = ScheduleGame {
+            game_id: 1,
+            game_date: "2026-08-17T19:05:00Z".into(),
+            detailed_state: "Final".into(),
+            away_team_id: 147,
+            away_team_name: "Yankees".into(),
+            home_team_id: 111,
+            home_team_name: "Red Sox".into(),
+            away_probable_pitcher_id: None,
+            away_probable_pitcher_name: String::new(),
+            home_probable_pitcher_id: None,
+            home_probable_pitcher_name: String::new(),
+            linescore: Some(Linescore {
+                inning: Some(9),
+                inning_ordinal: "9th".into(),
+                inning_state: "End".into(),
+                away_runs: 4,
+                home_runs: 2,
+            }),
+            away_lineup: None,
+            home_lineup: None,
+        };
+        let mut players = [player(""), player("DTD")];
+        apply_game_statuses(&mut players, &[game]);
+        assert_eq!(players[0].game_status, "Final 4-2 @ BOS");
+        assert!(players[1].game_status.is_empty());
     }
 }
