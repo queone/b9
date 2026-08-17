@@ -73,6 +73,7 @@ struct FakeCredentials {
     save_error: Mutex<bool>,
     delete_error: Mutex<bool>,
     saves: AtomicUsize,
+    loads: AtomicUsize,
 }
 
 impl FakeCredentials {
@@ -86,6 +87,7 @@ impl FakeCredentials {
 
 impl YahooCredentialStore for FakeCredentials {
     fn load(&self) -> Result<Option<String>, YahooError> {
+        self.loads.fetch_add(1, Ordering::SeqCst);
         if *self.load_error.lock().unwrap() {
             return Err(YahooError::Credential("synthetic load failure"));
         }
@@ -108,6 +110,42 @@ impl YahooCredentialStore for FakeCredentials {
         *self.value.lock().unwrap() = None;
         Ok(())
     }
+}
+
+#[test]
+fn shared_client_loads_credentials_once_across_supplemental_requests() {
+    let responses = (0..5)
+        .map(|_| {
+            Ok(HttpResponse {
+                status: 200,
+                headers: Vec::new(),
+                body: b"{}".to_vec(),
+            })
+        })
+        .collect();
+    let executor = Arc::new(FakeExecutor::new(responses));
+    let credentials = Arc::new(FakeCredentials::with_value(token(
+        "access", "refresh", 3_700,
+    )));
+    let client = client(
+        executor,
+        credentials.clone(),
+        Arc::new(FakeClock::new(100)),
+        Arc::new(FakeNonces::new(Vec::new())),
+        Arc::new(FakeWaiter::default()),
+    );
+
+    for path in [
+        "/league/settings",
+        "/league/standings",
+        "/league/rosters",
+        "/league/free-agents",
+        "/league/team",
+    ] {
+        client.get_raw(path).unwrap();
+    }
+
+    assert_eq!(credentials.loads.load(Ordering::SeqCst), 1);
 }
 
 struct FakeClock {

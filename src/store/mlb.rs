@@ -3,6 +3,7 @@
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
+use crate::domain::HitterAverage;
 use crate::domain::clean_fantasy_team_name;
 
 use super::{Store, StoreError, validate_identity};
@@ -181,7 +182,7 @@ impl Store {
             for row in rows {
                 let player_id: Option<i64> = tx.query_row("SELECT id FROM players WHERE mlbam_id=?1 AND position_type=?2 ORDER BY yahoo_player_id IS NULL, id LIMIT 1", params![row.mlbam_id, row.primary_type], |result| result.get(0)).optional().map_err(|error| StoreError::operation(OP, &path, error))?;
                 if let Some(player_id) = player_id {
-                    tx.execute("UPDATE players SET name=?2, mlb_team=?3, display_position=?4, status=?5, jersey_number=?6, synced_at=?7 WHERE id=?1", params![player_id, row.name, team, row.position, row.status, nullable(&row.jersey_number), now]).map_err(|error| StoreError::operation(OP, &path, error))?;
+                    tx.execute("UPDATE players SET name=?2, mlb_team=?3, display_position=?4, jersey_number=?5, synced_at=?6 WHERE id=?1", params![player_id, row.name, team, row.position, nullable(&row.jersey_number), now]).map_err(|error| StoreError::operation(OP, &path, error))?;
                 } else {
                     tx.execute("INSERT INTO players (mlbam_id,name,mlb_team,display_position,position_type,status,jersey_number,mlbam_match_source,mlbam_matched_at,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,'40man',?8,?8)", params![row.mlbam_id,row.name,team,row.position,row.primary_type,row.status,nullable(&row.jersey_number),now]).map_err(|error| StoreError::operation(OP, &path, error))?;
                 }
@@ -189,6 +190,47 @@ impl Store {
             }
             Ok(())
         })
+    }
+
+    /// Derive one hitter's rolling five-completed-season 162-game line.
+    pub fn hitter_average(
+        &self,
+        mlbam_id: i64,
+        current_season: i64,
+    ) -> Result<Option<HitterAverage>, StoreError> {
+        const OP: &str = "read hitter completed-season average";
+        let values: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) = self
+            .connection()
+            .query_row(
+                "SELECT COALESCE(SUM(g),0),COALESCE(SUM(pa),0),COALESCE(SUM(r),0),COALESCE(SUM(hr),0),COALESCE(SUM(rbi),0),COALESCE(SUM(sb),0),COALESCE(SUM(h),0),COALESCE(SUM(ab),0),COALESCE(SUM(bb),0),COALESCE(SUM(hbp),0),COALESCE(SUM(tb),0) FROM mlbam_season_stats WHERE stat_group='hitting' AND season>=?2 AND season<?3 AND player_id=(SELECT id FROM players WHERE mlbam_id=?1 AND position_type IN ('H','B') ORDER BY CASE WHEN mlbam_match_source='seed' THEN 0 ELSE 1 END,id LIMIT 1)",
+                (mlbam_id, current_season - 5, current_season),
+                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?,row.get(7)?,row.get(8)?,row.get(9)?,row.get(10)?)),
+            )
+            .map_err(|error| StoreError::operation(OP, &self.path, error))?;
+        let (games, pa, runs, home_runs, rbi, stolen_bases, hits, at_bats, walks, hbp, total_bases) =
+            values;
+        if games == 0 || at_bats == 0 {
+            return Ok(None);
+        }
+        let scale = |value: i64| ((value as f64 * 162.0 / games as f64) + 0.5) as i64;
+        let avg = hits as f64 / at_bats as f64;
+        let slg = total_bases as f64 / at_bats as f64;
+        let denominator = at_bats + walks + hbp;
+        let obp = if denominator == 0 {
+            0.0
+        } else {
+            (hits + walks + hbp) as f64 / denominator as f64
+        };
+        Ok(Some(HitterAverage {
+            plate_appearances: scale(pa),
+            on_base_percentage: obp,
+            on_base_plus_slugging: obp + slg,
+            runs: scale(runs),
+            home_runs: scale(home_runs),
+            runs_batted_in: scale(rbi),
+            stolen_bases: scale(stolen_bases),
+            batting_average: avg,
+        }))
     }
 
     /// Read one team's roster in stable role and name order.

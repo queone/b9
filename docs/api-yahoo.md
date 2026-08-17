@@ -73,6 +73,9 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 
 - Acquire authenticated user leagues and team identity.
 - Acquire league settings, scoring categories, roster positions, standings, and complete league rosters for foreground synchronization.
+- Treat authenticated player status as the precise player-card injury source.
+- Preserve a prior precise authenticated status when authenticated acquisition fails and the public feed supplies only generic `IL` or no status.
+- Clear a prior precise status only when a successful authenticated player response reports the player active.
 - Acquire weekly scoreboards and both matchup rosters lazily for `b9 m`, from either OAuth or the public redzone feed — see "Matchup data from the public feed" below.
 - Traverse Yahoo numeric-key collections and accept observed array-or-object variants.
 - Remove emoji presentation runes from fantasy team names before persistence or display while preserving textual Unicode.
@@ -142,7 +145,7 @@ b9's configuration stores the full Yahoo league key (`{game_key}.l.{league_id}`,
 
 ### Provenance and precedence
 
-`sync_runs.origin` gained a fourth value, `public_pull` (`SyncOrigin::PublicPull`), alongside the existing `manual`/`automatic`/`startup`. `sync` and `pp` write the same durable fantasy tables; whichever completes successfully most recently is what's live — a plain overwrite, no field-level merge. `Store::current_data_origin` reports the `origin` of the latest **complete** run, never merely the latest run regardless of status, so a failed attempt (either source) never misreports what's actually in the tables. Redacted fields (e.g. manager nicknames) render as an explicit `--hidden--` placeholder and resolve automatically the next time an official `sync` succeeds — `pp` never attempts to infer or backfill them.
+`sync_runs.origin` gained a fourth value, `public_pull` (`SyncOrigin::PublicPull`), alongside the existing `manual`/`automatic`/`startup`. Standalone `pp` keeps its complete public replacement behavior. `b9 sync` instead merges the public snapshot field by field, preserves unfetched authenticated-only values, and then applies successful authenticated supplements. Precise authenticated injury status outranks MLB roster status, which outranks generic public status; a failed authenticated refresh cannot downgrade a retained precise value. `Store::current_data_origin` reports the `origin` of the latest **complete** run, never merely the latest run regardless of status. Redacted fields render as explicit placeholders rather than inferred values.
 
 ### Matchup data from the public feed
 

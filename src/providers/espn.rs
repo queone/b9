@@ -8,11 +8,13 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use super::ProviderError;
-use crate::transport::{HttpClient, HttpMethod, HttpRequest};
+use crate::transport::{HttpClient, HttpHeader, HttpMethod, HttpRequest};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const RESPONSE_BODY_LIMIT: usize = 4 * 1024 * 1024;
 const MAX_ISSUE_DETAIL: usize = 256;
+const JSON_ACCEPT: &str = "application/json";
+const CLIENT_CONTACT: &str = "https://github.com/queone/b9";
 
 /// Production ESPN endpoint configuration.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -176,7 +178,16 @@ impl EspnClient {
             .execute(HttpRequest {
                 method: HttpMethod::Get,
                 url: url.into(),
-                headers: Vec::new(),
+                headers: vec![
+                    HttpHeader {
+                        name: "User-Agent".into(),
+                        value: format!("b9/{} (+{CLIENT_CONTACT})", env!("CARGO_PKG_VERSION")),
+                    },
+                    HttpHeader {
+                        name: "Accept".into(),
+                        value: JSON_ACCEPT.into(),
+                    },
+                ],
                 body: Vec::new(),
                 timeout: REQUEST_TIMEOUT,
                 body_limit: RESPONSE_BODY_LIMIT,

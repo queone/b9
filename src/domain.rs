@@ -383,8 +383,27 @@ pub struct StoredFantasyPlayer {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PlayerGameLog {
     pub date: String,
+    #[serde(default)]
+    pub game_id: i64,
     pub opponent: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub batting_order: i32,
     pub line: String,
+}
+
+/// One completed-season hitter line normalized to a 162-game pace.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HitterAverage {
+    pub plate_appearances: i64,
+    pub on_base_percentage: f64,
+    pub on_base_plus_slugging: f64,
+    pub runs: i64,
+    pub home_runs: i64,
+    pub runs_batted_in: i64,
+    pub stolen_bases: i64,
+    pub batting_average: f64,
 }
 
 /// One Yahoo roster ownership row using provider identities.

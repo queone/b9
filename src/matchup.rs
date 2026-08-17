@@ -278,7 +278,7 @@ pub fn show_with_team_options(
             http.clone(),
         )?;
     }
-    let odds = acquire_odds_context(http.clone()).unwrap_or_default();
+    let odds = acquire_odds_context(&mut store, http.clone()).unwrap_or_default();
     let stale = scoreboard_stale || mine_stale || opponent_stale;
     let view = MatchupView {
         matchup,
@@ -611,7 +611,7 @@ fn show_weekly_matchup(
             http.clone(),
         )?;
     }
-    let odds = acquire_odds_context(http).unwrap_or_default();
+    let odds = acquire_odds_context(store, http).unwrap_or_default();
     let stale = scoreboard_stale || mine_stale || opponent_stale;
     let view = MatchupView {
         matchup,
@@ -1061,15 +1061,47 @@ fn render_local_players(
     }
 }
 
-fn acquire_odds_context(http: Arc<HttpClient>) -> Result<Vec<String>, MatchupError> {
+fn acquire_odds_context(
+    store: &mut Store,
+    http: Arc<HttpClient>,
+) -> Result<Vec<String>, MatchupError> {
     let now = SystemTime::now();
     let date = utc_date(now)?;
     let schedule = crate::providers::mlb::MlbClient::production(http.clone())
         .fetch_schedule(&date)
         .map_err(|error| contextual("refresh MLB schedule", error))?;
-    let lines = crate::providers::espn::EspnClient::production(http)
-        .fetch_game_lines(now)
-        .map_err(|error| contextual("refresh ESPN odds", error))?;
+    let cached = store
+        .command_snapshot("mlb_current_odds", "espn", &date)
+        .map_err(|error| contextual("read synchronized ESPN odds", error))?;
+    let lines = if let Some(snapshot) = cached.as_ref().filter(|snapshot| {
+        !snapshot.stale
+            && now
+                .duration_since(snapshot.last_successful_at)
+                .unwrap_or(Duration::MAX)
+                <= Duration::from_secs(30 * 60)
+    }) {
+        serde_json::from_str(&snapshot.payload)
+            .map_err(|error| contextual("decode synchronized ESPN odds", error))?
+    } else {
+        match crate::providers::espn::EspnClient::production(http).fetch_game_lines(now) {
+            Ok(lines) => {
+                let payload = serde_json::to_string(&lines)
+                    .map_err(|error| contextual("encode refreshed ESPN odds", error))?;
+                store
+                    .save_command_snapshot("mlb_current_odds", "espn", &date, "1", &payload)
+                    .map_err(|error| contextual("cache refreshed ESPN odds", error))?;
+                lines
+            }
+            Err(error) => {
+                if let Some(snapshot) = cached {
+                    serde_json::from_str(&snapshot.payload)
+                        .map_err(|decode| contextual("decode stale ESPN odds", decode))?
+                } else {
+                    return Err(contextual("refresh ESPN odds", error));
+                }
+            }
+        }
+    };
     let mut output = Vec::new();
     for game in schedule {
         if let Some(line) = lines.games.iter().find(|line| {

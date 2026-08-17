@@ -8,7 +8,9 @@ use b9::providers::yahoo_fantasy::{
     LeagueRosters, LeagueSettings, RosterPosition, StatCategory, UserLeague, YahooFantasyError,
     YahooFantasySource,
 };
-use b9::store::{Store, SyncMode, SyncOrigin, inspect_status_at};
+use b9::store::{
+    FantasySnapshotWrite, PositionWrite, Store, SyncMode, SyncOrigin, inspect_status_at,
+};
 use b9::sync::{select_league, synchronize_with, synchronize_with_origin};
 use tempfile::tempdir;
 
@@ -195,6 +197,112 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
         .is_err()
     );
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+}
+
+#[test]
+fn public_merge_preserves_unfetched_authenticated_fields() {
+    let directory = tempdir().unwrap();
+    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let source = Source {
+        fail_rosters: false,
+    };
+    let mut identities = |_| Vec::new();
+    synchronize_with(&source, &mut store, "mlb.l.1", &mut identities).unwrap();
+
+    let settings = source.league_settings("mlb.l.1").unwrap();
+    let mut public_teams = source.standings("mlb.l.1").unwrap();
+    for team in &mut public_teams {
+        team.waiver_priority = 0;
+        team.faab_balance = 0;
+        team.moves = 0;
+    }
+    let mut public_players = source.league_rosters("mlb.l.1").unwrap().players;
+    let target_id = public_players[0].yahoo_player_id;
+    let mut precise = public_players[0].clone();
+    precise.injury_status = "IL60".into();
+    store.merge_authenticated_players(&[precise]).unwrap();
+    for player in &mut public_players {
+        player.percent_owned = None;
+        player.yahoo_rank = None;
+    }
+    public_players[0].injury_status = "IL".into();
+    store
+        .merge_public_fantasy_snapshot(&FantasySnapshotWrite {
+            league: settings.league,
+            current_week: settings.current_week,
+            categories: Vec::new(),
+            positions: vec![PositionWrite {
+                position: "OF".into(),
+                count: 1,
+            }],
+            teams: public_teams,
+            players: public_players.clone(),
+            slots: source.league_rosters("mlb.l.1").unwrap().slots,
+        })
+        .unwrap();
+
+    let teams = store.fantasy_teams("mlb.l.1").unwrap();
+    assert_eq!(
+        (
+            teams[0].waiver_priority,
+            teams[0].faab_balance,
+            teams[0].moves
+        ),
+        (1, 99, 2)
+    );
+    let players = store.fantasy_players("mlb.l.1").unwrap();
+    assert_eq!(players[0].rank, Some(101));
+    assert_eq!(players[0].percent_owned, Some(90.0));
+    assert_eq!(
+        players
+            .iter()
+            .find(|player| player.yahoo_player_id == Some(target_id))
+            .unwrap()
+            .status,
+        "IL60"
+    );
+
+    let mut active = public_players[0].clone();
+    active.injury_status.clear();
+    store.merge_authenticated_players(&[active]).unwrap();
+    let players = store.fantasy_players("mlb.l.1").unwrap();
+    assert!(
+        players
+            .iter()
+            .find(|player| player.yahoo_player_id == Some(target_id))
+            .unwrap()
+            .status
+            .is_empty()
+    );
+
+    let mut dtd = public_players[0].clone();
+    dtd.injury_status = "DTD".into();
+    store.merge_authenticated_players(&[dtd]).unwrap();
+    let settings = source.league_settings("mlb.l.1").unwrap();
+    store
+        .merge_public_fantasy_snapshot(&FantasySnapshotWrite {
+            league: settings.league,
+            current_week: settings.current_week,
+            categories: Vec::new(),
+            positions: vec![PositionWrite {
+                position: "OF".into(),
+                count: 1,
+            }],
+            teams: source.standings("mlb.l.1").unwrap(),
+            players: public_players,
+            slots: source.league_rosters("mlb.l.1").unwrap().slots,
+        })
+        .unwrap();
+    assert_eq!(
+        store
+            .fantasy_players("mlb.l.1")
+            .unwrap()
+            .into_iter()
+            .find(|player| player.yahoo_player_id == Some(target_id))
+            .unwrap()
+            .status,
+        "DTD"
+    );
 }
 
 #[test]

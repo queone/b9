@@ -213,6 +213,37 @@ impl Store {
         })
     }
 
+    /// Record a complete but degraded item refresh with bounded issue detail.
+    pub fn mark_sync_item_degraded(
+        &mut self,
+        source: &str,
+        item: &str,
+        scope: &str,
+        pipeline_version: &str,
+        detail: &str,
+    ) -> Result<(), StoreError> {
+        const OPERATION: &str = "record degraded item refresh";
+        validate_item_write(OPERATION, source, item, pipeline_version)?;
+        validate_identity(OPERATION, "issue detail", detail)?;
+        let (_, now) = self.captured_time(OPERATION)?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction.execute(
+                "INSERT INTO sync_item_state
+                 (source, item, scope, last_attempted_at, last_successful_at, status, error_message, pipeline_version)
+                 VALUES (?1, ?2, ?3, ?4, ?4, 'complete', ?5, ?6)
+                 ON CONFLICT(source, item, scope) DO UPDATE SET
+                 last_attempted_at = excluded.last_attempted_at,
+                 last_successful_at = excluded.last_successful_at,
+                 status = excluded.status,
+                 error_message = excluded.error_message,
+                 pipeline_version = excluded.pipeline_version",
+                (source, item, scope, now, detail, pipeline_version),
+            ).map_err(|error| StoreError::operation(OPERATION, &path, error))?;
+            Ok(())
+        })
+    }
+
     /// Record a failed item refresh while retaining prior success.
     pub fn mark_sync_item_failure(
         &mut self,

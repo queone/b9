@@ -334,10 +334,16 @@ where
         Some(("st", _)) => run_result(crate::sync::status(
             matches.get_one::<String>("league").map(String::as_str),
         )),
-        Some(("sync", subcommand)) => run_result(crate::sync::synchronize_with_options(
-            matches.get_one::<String>("league").map(String::as_str),
-            subcommand.get_flag("force"),
-        )),
+        Some(("sync", subcommand)) => {
+            let mut output = std::io::stdout().lock();
+            let result = crate::sync::synchronize_with_options_streaming(
+                matches.get_one::<String>("league").map(String::as_str),
+                subcommand.get_flag("force"),
+                &mut output,
+            );
+            drop(output);
+            run_result(result)
+        }
         Some(("pp", _)) => run_result(crate::public_pull::pull(
             matches.get_one::<String>("league").map(String::as_str),
         )),

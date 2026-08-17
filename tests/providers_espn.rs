@@ -42,6 +42,33 @@ impl HttpExecutor for QueueExecutor {
     }
 }
 
+struct HeaderRequiredExecutor {
+    requests: Mutex<Vec<ValidatedRequest>>,
+}
+
+impl HttpExecutor for HeaderRequiredExecutor {
+    fn execute(&self, request: ValidatedRequest) -> Result<HttpResponse, ExecutorError> {
+        let accepted = request.headers().iter().any(|header| {
+            header.name.eq_ignore_ascii_case("user-agent")
+                && header.value
+                    == format!(
+                        "b9/{} (+https://github.com/queone/b9)",
+                        env!("CARGO_PKG_VERSION")
+                    )
+        });
+        self.requests.lock().unwrap().push(request);
+        Ok(HttpResponse {
+            status: if accepted { 200 } else { 403 },
+            headers: Vec::new(),
+            body: if accepted {
+                SCOREBOARD_EMPTY.to_vec()
+            } else {
+                b"header required".to_vec()
+            },
+        })
+    }
+}
+
 fn response(body: &[u8]) -> Result<HttpResponse, ExecutorError> {
     Ok(HttpResponse {
         status: 200,
@@ -98,6 +125,38 @@ fn requests_two_utc_days_deduplicates_and_uses_first_odds_item() {
     assert!(urls[2].ends_with("/events/event-1/competitions/competition-1/odds"));
     assert_eq!(requests[0].timeout(), Duration::from_secs(10));
     assert_eq!(requests[0].body_limit(), 4 * 1024 * 1024);
+    for request in requests.iter() {
+        let headers = request.headers();
+        assert!(headers.iter().any(|header| {
+            header.name.eq_ignore_ascii_case("user-agent")
+                && header.value
+                    == format!(
+                        "b9/{} (+https://github.com/queone/b9)",
+                        env!("CARGO_PKG_VERSION")
+                    )
+        }));
+        assert!(headers.iter().any(|header| {
+            header.name.eq_ignore_ascii_case("accept") && header.value == "application/json"
+        }));
+    }
+}
+
+#[test]
+fn provider_that_rejects_a_missing_user_agent_accepts_settled_headers() {
+    let executor = Arc::new(HeaderRequiredExecutor {
+        requests: Mutex::new(Vec::new()),
+    });
+    let http = Arc::new(HttpClient::new(executor.clone()));
+    let endpoints = EspnEndpoints::new(
+        "http://127.0.0.1:12345/scoreboard",
+        "http://127.0.0.1:12345/core/",
+    )
+    .unwrap();
+
+    let result = EspnClient::new(http, endpoints).fetch_game_lines(day());
+
+    assert!(result.is_ok());
+    assert_eq!(executor.requests.lock().unwrap().len(), 2);
 }
 
 #[test]

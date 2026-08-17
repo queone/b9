@@ -75,6 +75,171 @@ pub struct IdentityCandidate {
 }
 
 impl Store {
+    /// Replace one complete authenticated Yahoo category collection.
+    pub fn replace_authenticated_categories(
+        &mut self,
+        league_key: &str,
+        rows: &[CategoryWrite],
+    ) -> Result<(), StoreError> {
+        validate_identity(
+            "replace authenticated Yahoo categories",
+            "league key",
+            league_key,
+        )?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction.execute("DELETE FROM yahoo_stat_categories WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace authenticated Yahoo categories", &path, error))?;
+            for row in rows {
+                transaction.execute("INSERT INTO yahoo_stat_categories (league_key,stat_id,abbr,name,sort_order,display_only,seq) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![league_key,row.stat_id,row.abbreviation,row.name,row.sort_order,i64::from(row.display_only),row.sequence]).map_err(|error| StoreError::operation("insert authenticated Yahoo category", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Merge authenticated-only Yahoo team fields.
+    pub fn merge_authenticated_teams(&mut self, teams: &[FantasyTeam]) -> Result<(), StoreError> {
+        let (_, captured_at) = self.captured_time("merge authenticated Yahoo teams")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            for team in teams {
+                transaction.execute("UPDATE yahoo_teams SET waiver_priority=?1,faab_balance=?2,moves=?3,synced_at=?4 WHERE team_key=?5", params![team.waiver_priority,team.faab_balance,team.moves,captured_at,team.team_key]).map_err(|error| StoreError::operation("merge authenticated Yahoo team", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Merge authenticated-only Yahoo player metadata.
+    pub fn merge_authenticated_players(
+        &mut self,
+        players: &[FantasyPlayer],
+    ) -> Result<(), StoreError> {
+        let (_, captured_at) = self.captured_time("merge authenticated Yahoo players")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            for player in players {
+                let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=excluded.yahoo_rank,synced_at=excluded.synced_at", params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at]).map_err(|error| StoreError::operation("merge authenticated Yahoo player", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Replace one complete authenticated Yahoo free-agent collection.
+    pub fn replace_authenticated_free_agents(
+        &mut self,
+        league_key: &str,
+        players: &[FantasyPlayer],
+    ) -> Result<(), StoreError> {
+        self.merge_authenticated_players(players)?;
+        let (_, captured_at) = self.captured_time("replace authenticated Yahoo free agents")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace authenticated Yahoo free agents", &path, error))?;
+            for player in players {
+                let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [player.yahoo_player_id], |row| row.get(0)).map_err(|error| StoreError::operation("resolve authenticated Yahoo free agent", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![league_key,player_id,captured_at]).map_err(|error| StoreError::operation("insert authenticated Yahoo free agent", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Merge one complete public Yahoo roster snapshot without erasing supplemental fields.
+    pub fn merge_public_fantasy_snapshot(
+        &mut self,
+        snapshot: &FantasySnapshotWrite,
+    ) -> Result<(), StoreError> {
+        validate_snapshot(snapshot)?;
+        let (_, captured_at) = self.captured_time("merge public fantasy snapshot")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction.execute(
+                "INSERT INTO yahoo_leagues (league_key,name,season,num_teams,scoring_type,current_week,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(league_key) DO UPDATE SET name=excluded.name,season=excluded.season,num_teams=excluded.num_teams,scoring_type=excluded.scoring_type,current_week=excluded.current_week,synced_at=excluded.synced_at",
+                params![snapshot.league.league_key, snapshot.league.name, snapshot.league.season, snapshot.league.num_teams, snapshot.league.scoring_type.to_string(), snapshot.current_week, captured_at],
+            ).map_err(|error| StoreError::operation("upsert public Yahoo league", &path, error))?;
+
+            transaction.execute("DELETE FROM yahoo_roster_positions WHERE league_key=?1", [&snapshot.league.league_key])
+                .map_err(|error| StoreError::operation("replace public Yahoo positions", &path, error))?;
+            for row in &snapshot.positions {
+                transaction.execute("INSERT INTO yahoo_roster_positions (league_key,position,count) VALUES (?1,?2,?3)",
+                    params![snapshot.league.league_key,row.position,row.count])
+                    .map_err(|error| StoreError::operation("insert public Yahoo position", &path, error))?;
+            }
+            for team in &snapshot.teams {
+                transaction.execute("INSERT INTO yahoo_teams (team_key,league_key,team_id,name,manager_nickname,waiver_priority,faab_balance,wins,losses,ties,moves,rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(team_key) DO UPDATE SET league_key=excluded.league_key,team_id=excluded.team_id,name=excluded.name,manager_nickname=excluded.manager_nickname,wins=excluded.wins,losses=excluded.losses,ties=excluded.ties,rank=excluded.rank,synced_at=excluded.synced_at",
+                    params![team.team_key,team.league_key,team.team_id,team.name,team.manager_name,team.waiver_priority,team.faab_balance,team.wins,team.losses,team.ties,team.moves,team.rank,captured_at])
+                    .map_err(|error| StoreError::operation("upsert public Yahoo team", &path, error))?;
+            }
+            for player in &snapshot.players {
+                let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET name=excluded.name,mlb_team=excluded.mlb_team,display_position=excluded.display_position,position_type=excluded.position_type,eligible_positions=excluded.eligible_positions,status=CASE WHEN players.status NOT IN ('','IL') AND excluded.status IN ('','IL') THEN players.status ELSE excluded.status END,synced_at=excluded.synced_at",
+                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
+                    .map_err(|error| StoreError::operation("upsert public Yahoo player", &path, error))?;
+            }
+            transaction.execute("DELETE FROM yahoo_roster_slots WHERE team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1)", [&snapshot.league.league_key])
+                .map_err(|error| StoreError::operation("replace public Yahoo roster slots", &path, error))?;
+            let current_team_keys = snapshot.teams.iter().map(|team| team.team_key.as_str()).collect::<BTreeSet<_>>();
+            let mut stale_statement = transaction.prepare("SELECT team_key FROM yahoo_teams WHERE league_key=?1")
+                .map_err(|error| StoreError::operation("prepare stale public Yahoo teams", &path, error))?;
+            let stale_keys = stale_statement.query_map([&snapshot.league.league_key], |row| row.get::<_, String>(0))
+                .map_err(|error| StoreError::operation("query stale public Yahoo teams", &path, error))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| StoreError::operation("read stale public Yahoo teams", &path, error))?;
+            drop(stale_statement);
+            for team_key in stale_keys.into_iter().filter(|key| !current_team_keys.contains(key.as_str())) {
+                transaction.execute("DELETE FROM yahoo_teams WHERE team_key=?1", [&team_key])
+                    .map_err(|error| StoreError::operation("delete stale public Yahoo team", &path, error))?;
+            }
+            for slot in &snapshot.slots {
+                let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [slot.yahoo_player_id], |row| row.get(0))
+                    .map_err(|error| StoreError::operation("resolve public Yahoo roster player", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_roster_slots (team_key,player_id,slot_position,synced_at) VALUES (?1,?2,?3,?4)",
+                    params![slot.team_key,player_id,slot.slot_position.to_string(),captured_at])
+                    .map_err(|error| StoreError::operation("insert public Yahoo roster slot", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Merge one complete authenticated Yahoo supplement without replacing public-owned fields.
+    pub fn merge_authenticated_fantasy_supplement(
+        &mut self,
+        snapshot: &FantasySnapshotWrite,
+    ) -> Result<(), StoreError> {
+        validate_snapshot(snapshot)?;
+        let (_, captured_at) = self.captured_time("merge authenticated fantasy supplement")?;
+        let path = self.path.clone();
+        self.transaction(|transaction| {
+            transaction.execute("DELETE FROM yahoo_stat_categories WHERE league_key=?1", [&snapshot.league.league_key])
+                .map_err(|error| StoreError::operation("replace authenticated Yahoo categories", &path, error))?;
+            for row in &snapshot.categories {
+                transaction.execute("INSERT INTO yahoo_stat_categories (league_key,stat_id,abbr,name,sort_order,display_only,seq) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                    params![snapshot.league.league_key,row.stat_id,row.abbreviation,row.name,row.sort_order,i64::from(row.display_only),row.sequence])
+                    .map_err(|error| StoreError::operation("insert authenticated Yahoo category", &path, error))?;
+            }
+            for team in &snapshot.teams {
+                transaction.execute("UPDATE yahoo_teams SET waiver_priority=?1,faab_balance=?2,moves=?3,synced_at=?4 WHERE team_key=?5",
+                    params![team.waiver_priority,team.faab_balance,team.moves,captured_at,team.team_key])
+                    .map_err(|error| StoreError::operation("merge authenticated Yahoo team", &path, error))?;
+            }
+            for player in &snapshot.players {
+                let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=excluded.yahoo_rank,synced_at=excluded.synced_at",
+                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
+                    .map_err(|error| StoreError::operation("merge authenticated Yahoo player", &path, error))?;
+            }
+            transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [&snapshot.league.league_key])
+                .map_err(|error| StoreError::operation("replace authenticated Yahoo free agents", &path, error))?;
+            let rostered = snapshot.slots.iter().map(|slot| slot.yahoo_player_id).collect::<BTreeSet<_>>();
+            for player in snapshot.players.iter().filter(|player| !rostered.contains(&player.yahoo_player_id)) {
+                let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [player.yahoo_player_id], |row| row.get(0))
+                    .map_err(|error| StoreError::operation("resolve authenticated Yahoo free agent", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![snapshot.league.league_key,player_id,captured_at])
+                    .map_err(|error| StoreError::operation("insert authenticated Yahoo free agent", &path, error))?;
+            }
+            Ok(())
+        })
+    }
+
     /// Replace one complete league snapshot transactionally.
     pub fn replace_fantasy_snapshot(
         &mut self,
@@ -269,7 +434,7 @@ impl Store {
         league_key: &str,
     ) -> Result<Vec<StoredFantasyPlayer>, StoreError> {
         validate_identity("read fantasy players", "league key", league_key)?;
-        let sql = "SELECT p.yahoo_player_id,p.mlbam_id,p.name,COALESCE(p.mlb_team,''),COALESCE(p.position_type,''),COALESCE(p.eligible_positions,p.display_position,''),COALESCE(p.status,''),p.yahoo_rank,p.percent_owned,t.name,ys.slot_position,
+        let sql = "SELECT p.yahoo_player_id,p.mlbam_id,p.name,COALESCE(p.mlb_team,''),COALESCE(p.position_type,''),COALESCE(p.eligible_positions,p.display_position,''),CASE WHEN COALESCE(p.status,'') NOT IN ('','IL') THEN p.status WHEN (SELECT r.status FROM mlb_team_active_rosters r WHERE r.mlbam_id=p.mlbam_id ORDER BY CASE WHEN r.primary_type=CASE WHEN p.position_type='P' THEN 'P' ELSE 'H' END THEN 0 ELSE 1 END LIMIT 1)='D7' THEN 'IL7' WHEN (SELECT r.status FROM mlb_team_active_rosters r WHERE r.mlbam_id=p.mlbam_id ORDER BY CASE WHEN r.primary_type=CASE WHEN p.position_type='P' THEN 'P' ELSE 'H' END THEN 0 ELSE 1 END LIMIT 1)='D10' THEN 'IL10' WHEN (SELECT r.status FROM mlb_team_active_rosters r WHERE r.mlbam_id=p.mlbam_id ORDER BY CASE WHEN r.primary_type=CASE WHEN p.position_type='P' THEN 'P' ELSE 'H' END THEN 0 ELSE 1 END LIMIT 1)='D15' THEN 'IL15' WHEN (SELECT r.status FROM mlb_team_active_rosters r WHERE r.mlbam_id=p.mlbam_id ORDER BY CASE WHEN r.primary_type=CASE WHEN p.position_type='P' THEN 'P' ELSE 'H' END THEN 0 ELSE 1 END LIMIT 1)='D60' THEN 'IL60' ELSE COALESCE(p.status,'') END,p.yahoo_rank,p.percent_owned,t.name,ys.slot_position,
 COALESCE(h.pa,0),COALESCE(h.obp,0),COALESCE(h.r,0),COALESCE(h.hr,0),COALESCE(h.rbi,0),COALESCE(h.sb,0),COALESCE(h.avg,0),
 COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0),COALESCE(p.bat_side,''),COALESCE(NULLIF(p.injury_note,''),p.mlbam_injury_note,''),COALESCE(p.birth_date,''),
 sh.xwoba,sh.exit_velo_avg,sh.barrel_pct,sh.hard_hit_pct,sh.strikeout_pct,sh.walk_pct,sh.sprint_speed,sh.ops,

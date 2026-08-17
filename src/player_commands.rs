@@ -10,7 +10,7 @@ use crate::evaluation::sort_by_evaluation;
 use crate::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
-use crate::providers::mlb::MlbClient;
+use crate::providers::mlb::{Boxscore, MlbClient, ScheduleGame};
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
 use crate::store::{Store, StoredFantasyTeam, WaiverCandidate};
@@ -376,9 +376,16 @@ pub fn show_pool(
                     .map_err(|failure| error(role, failure))?
                     .ok_or_else(|| error(role, "league season is unavailable"))?;
                 let (logs, stale) = game_logs(&mut store, player, season)?;
+                let average = player
+                    .mlbam_id
+                    .map(|id| store.hitter_average(id, season))
+                    .transpose()
+                    .map_err(|failure| error(role, failure))?
+                    .flatten();
                 let output = render_detail(
                     player,
                     &logs,
+                    average.as_ref(),
                     stale,
                     &utc_date(SystemTime::now()),
                     detected_help_color_mode(),
@@ -611,11 +618,14 @@ fn game_logs(
                             .into_iter()
                             .map(|entry| PlayerGameLog {
                                 date: entry.date,
+                                game_id: entry.game_id,
                                 opponent: format!(
                                     "{} {}",
                                     if entry.is_home { "vs" } else { "@" },
                                     entry.opponent_abbreviation
                                 ),
+                                status: String::new(),
+                                batting_order: 0,
                                 line: format!(
                                     "IP {}  W {}  SV {}  K {}  ERA {}  WHIP {}",
                                     entry.stat.innings_pitched,
@@ -636,11 +646,14 @@ fn game_logs(
                             .into_iter()
                             .map(|entry| PlayerGameLog {
                                 date: entry.date,
+                                game_id: entry.game_id,
                                 opponent: format!(
-                                    "{} {}",
-                                    if entry.is_home { "vs" } else { "@" },
+                                    "{}{}",
+                                    if entry.is_home { "" } else { "@" },
                                     entry.opponent_abbreviation
                                 ),
+                                status: String::new(),
+                                batting_order: 0,
                                 line: format!(
                                     "AB {}  H {}  R {}  HR {}  RBI {}  SB {}  AVG {}",
                                     entry.stat.at_bats,
@@ -658,7 +671,10 @@ fn game_logs(
             .map_err(|failure| failure.to_string())
         });
     match refreshed {
-        Ok(logs) => {
+        Ok(mut logs) => {
+            if player.role != "P" {
+                logs = enrich_hitter_logs(store, player, logs, &utc_date(SystemTime::now()))?;
+            }
             let payload =
                 serde_json::to_string(&logs).map_err(|failure| error("player detail", failure))?;
             store
@@ -681,6 +697,208 @@ fn game_logs(
             Ok((logs, true))
         }
     }
+}
+
+fn enrich_hitter_logs(
+    store: &mut Store,
+    player: &StoredFantasyPlayer,
+    logs: Vec<PlayerGameLog>,
+    today: &str,
+) -> Result<Vec<PlayerGameLog>, PlayerCommandError> {
+    let http = HttpClient::production().map_err(|failure| error("player detail", failure))?;
+    let client = MlbClient::production(std::sync::Arc::new(http));
+    let by_game = logs
+        .into_iter()
+        .map(|row| (row.game_id, row))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let today_days =
+        date_days(today).ok_or_else(|| error("player detail", "invalid current date"))?;
+    let mut output = Vec::new();
+    for offset in (0..10).rev() {
+        let date = civil_date(today_days - offset);
+        let games = card_schedule(store, &client, &date)?;
+        let Some(game) = games.iter().find(|game| {
+            mlb_team_abbreviation(game.home_team_id) == player.team
+                || mlb_team_abbreviation(game.away_team_id) == player.team
+        }) else {
+            output.push(PlayerGameLog {
+                date,
+                game_id: 0,
+                opponent: String::new(),
+                status: String::new(),
+                batting_order: 0,
+                line: String::new(),
+            });
+            continue;
+        };
+        if date == today && game_not_started(&game.detailed_state) {
+            continue;
+        }
+        let is_home = mlb_team_abbreviation(game.home_team_id) == player.team;
+        let opponent = if is_home {
+            mlb_team_abbreviation(game.away_team_id).to_owned()
+        } else {
+            format!("@{}", mlb_team_abbreviation(game.home_team_id))
+        };
+        let status = game_result(game, is_home);
+        let batting_order = player
+            .mlbam_id
+            .and_then(|id| {
+                card_boxscore(store, &client, game.game_id)
+                    .ok()
+                    .flatten()
+                    .map(|boxscore| batting_slot(&boxscore, id, is_home))
+            })
+            .unwrap_or(0);
+        let mut row = by_game
+            .get(&game.game_id)
+            .cloned()
+            .unwrap_or(PlayerGameLog {
+                date: date.clone(),
+                game_id: game.game_id,
+                opponent: String::new(),
+                status: String::new(),
+                batting_order: 0,
+                line: String::new(),
+            });
+        row.date = date;
+        row.opponent = opponent;
+        row.status = status;
+        row.batting_order = batting_order;
+        output.push(row);
+    }
+    Ok(output)
+}
+
+fn card_schedule(
+    store: &mut Store,
+    client: &MlbClient,
+    date: &str,
+) -> Result<Vec<ScheduleGame>, PlayerCommandError> {
+    match client.fetch_schedule(date) {
+        Ok(games) => {
+            let payload =
+                serde_json::to_string(&games).map_err(|failure| error("player detail", failure))?;
+            store
+                .save_command_snapshot("player_card_schedule", "mlbam", date, "v1", &payload)
+                .map_err(|failure| error("player detail", failure))?;
+            Ok(games)
+        }
+        Err(failure) => {
+            let _ = store.mark_command_snapshot_stale(
+                "player_card_schedule",
+                "mlbam",
+                date,
+                &failure.to_string(),
+            );
+            let snapshot = store
+                .command_snapshot("player_card_schedule", "mlbam", date)
+                .map_err(|read| error("player detail", read))?;
+            snapshot
+                .map(|row| serde_json::from_str(&row.payload))
+                .transpose()
+                .map_err(|decode| error("player detail", decode))
+                .map(|rows| rows.unwrap_or_default())
+        }
+    }
+}
+
+fn card_boxscore(
+    store: &mut Store,
+    client: &MlbClient,
+    game_id: i64,
+) -> Result<Option<Boxscore>, PlayerCommandError> {
+    let scope = game_id.to_string();
+    match client.fetch_boxscore(game_id) {
+        Ok(boxscore) => {
+            let payload = serde_json::to_string(&boxscore)
+                .map_err(|failure| error("player detail", failure))?;
+            store
+                .save_command_snapshot("player_card_boxscore", "mlbam", &scope, "v1", &payload)
+                .map_err(|failure| error("player detail", failure))?;
+            Ok(Some(boxscore))
+        }
+        Err(failure) => {
+            let _ = store.mark_command_snapshot_stale(
+                "player_card_boxscore",
+                "mlbam",
+                &scope,
+                &failure.to_string(),
+            );
+            let snapshot = store
+                .command_snapshot("player_card_boxscore", "mlbam", &scope)
+                .map_err(|read| error("player detail", read))?;
+            snapshot
+                .map(|row| serde_json::from_str(&row.payload))
+                .transpose()
+                .map_err(|decode| error("player detail", decode))
+        }
+    }
+}
+
+fn batting_slot(boxscore: &Boxscore, player_id: i64, is_home: bool) -> i32 {
+    let order = if is_home {
+        &boxscore.home.batting_order
+    } else {
+        &boxscore.away.batting_order
+    };
+    order
+        .iter()
+        .position(|id| *id == player_id)
+        .map_or(0, |index| (index + 1) as i32)
+}
+
+fn game_result(game: &ScheduleGame, is_home: bool) -> String {
+    let state = game.detailed_state.to_ascii_lowercase();
+    if !state.starts_with("final") && state != "game over" && state != "completed early" {
+        return String::new();
+    }
+    let Some(score) = &game.linescore else {
+        return String::new();
+    };
+    let (mine, theirs) = if is_home {
+        (score.home_runs, score.away_runs)
+    } else {
+        (score.away_runs, score.home_runs)
+    };
+    format!("{}, {mine}-{theirs}", if mine > theirs { "W" } else { "L" })
+}
+
+fn game_not_started(state: &str) -> bool {
+    matches!(
+        state.to_ascii_lowercase().as_str(),
+        "scheduled" | "pre-game" | "warmup" | "preview"
+    )
+}
+
+fn date_days(value: &str) -> Option<i64> {
+    let mut parts = value.split('-');
+    let year = parts.next()?.parse::<i64>().ok()?;
+    let month = parts.next()?.parse::<i64>().ok()?;
+    let day = parts.next()?.parse::<i64>().ok()?;
+    let year = year - i64::from(month <= 2);
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let yoe = year - era * 400;
+    let adjusted_month = month + if month > 2 { -3 } else { 9 };
+    Some(
+        era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + (153 * adjusted_month + 2) / 5 + day
+            - 1
+            - 719_468,
+    )
+}
+
+fn civil_date(days: i64) -> String {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 #[cfg(test)]

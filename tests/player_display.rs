@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use b9::domain::{MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
+use b9::domain::{HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
 use b9::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
@@ -54,6 +54,7 @@ fn detail_renders_recent_game_log_and_stale_label() {
             "fixtures/player/game-log.json"
         ))
         .unwrap(),
+        None,
         true,
         "2026-04-10",
         HelpColorMode::Plain,
@@ -89,17 +90,67 @@ fn detail_renders_recent_game_log_and_stale_label() {
         .unwrap();
     assert!(split_header.contains("OPS"));
     assert!(!output.contains("OF,Util"));
-    assert!(!output.contains("AVG162G"));
+    assert!(output.contains("AVG162G"));
 
-    let colored = render_detail(&player, &[], false, "2026-04-10", HelpColorMode::Color);
+    let colored = render_detail(
+        &player,
+        &[],
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Color,
+    );
     for heading in ["HITTER", "SOURCE", "SPLIT", "GAME LOG", "INJURIES"] {
         assert!(colored.contains(&format!("\u{1b}[38;5;33m{heading}")));
     }
     assert!(colored.contains("\u{1b}[38;5;196mIL60"));
 
     player.injury_note.clear();
-    let status_only = render_detail(&player, &[], false, "2026-04-10", HelpColorMode::Plain);
+    let status_only = render_detail(
+        &player,
+        &[],
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
     assert!(status_only.contains("INJURIES\nIL60\n"));
+}
+
+#[test]
+fn hitter_detail_matches_completed_average_and_game_context_columns() {
+    let average = HitterAverage {
+        plate_appearances: 712,
+        on_base_percentage: 0.429,
+        on_base_plus_slugging: 1.078,
+        runs: 126,
+        home_runs: 56,
+        runs_batted_in: 126,
+        stolen_bases: 11,
+        batting_average: 0.306,
+    };
+    let logs = vec![PlayerGameLog {
+        date: "2026-08-08".into(),
+        game_id: 1,
+        opponent: "ATL".into(),
+        status: "W, 5-4".into(),
+        batting_order: 0,
+        line: String::new(),
+    }];
+    let output = render_detail(
+        &hitter(),
+        &logs,
+        Some(&average),
+        false,
+        "2026-08-17",
+        HelpColorMode::Plain,
+    );
+    assert!(
+        output.contains("AVG162G        712    .429  1.078   126    56   126    11   .306"),
+        "{output}"
+    );
+    assert!(output.contains("GAME LOG   OPP      STATUS   H/AB     R    HR   RBI    SB    AVG"));
+    assert!(output.contains("Aug 08     X ATL    W, 5-4"));
 }
 
 #[test]
@@ -116,7 +167,14 @@ fn pitcher_detail_uses_pitching_statcast_and_missing_value_fallbacks() {
         Some(30.1),
         Some(7.4),
     ];
-    let output = render_detail(&player, &[], false, "2026-04-10", HelpColorMode::Plain);
+    let output = render_detail(
+        &player,
+        &[],
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
     assert!(output.starts_with("PITCHER"));
     assert!(output.contains("SAVANT"));
     assert!(output.contains("96.4"));
@@ -125,7 +183,14 @@ fn pitcher_detail_uses_pitching_statcast_and_missing_value_fallbacks() {
     assert!(output.contains('—'));
     assert!(!output.contains("SP,Util"));
 
-    let missing_hitter = render_detail(&hitter(), &[], false, "2026-04-10", HelpColorMode::Plain);
+    let missing_hitter = render_detail(
+        &hitter(),
+        &[],
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
     let current = missing_hitter
         .lines()
         .find(|line| line.starts_with("CURRENT"))

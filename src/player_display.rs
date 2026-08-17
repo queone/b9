@@ -1,6 +1,6 @@
 //! Deterministic roster, player-pool, totals, and detail rendering.
 
-use crate::domain::{MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
+use crate::domain::{HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
 use crate::store::{StoredFantasyCategory, StoredFantasyTeam};
 use crate::terminal::{
     HelpColorMode, available, dim, injury_status, roster_row, table_heading, title, warning,
@@ -467,6 +467,7 @@ pub fn render_weekly_totals(
 pub fn render_detail(
     player: &StoredFantasyPlayer,
     logs: &[PlayerGameLog],
+    average: Option<&HitterAverage>,
     stale: bool,
     today: &str,
     mode: HelpColorMode,
@@ -511,7 +512,7 @@ pub fn render_detail(
     );
     output.push_str(&detail_source(player, mode));
     output.push('\n');
-    output.push_str(&detail_split(player, mode));
+    output.push_str(&detail_split(player, average, mode));
     output.push('\n');
     if stale {
         output.push_str("GAME LOG data may be stale — refresh unavailable.\n");
@@ -525,11 +526,25 @@ pub fn render_detail(
         mode,
     ));
     output.push('\n');
-    for date in recent_dates(today) {
-        if let Some(log) = logs.iter().find(|log| log.date == date) {
-            output.push_str(&detail_log_row(player, &date, log));
-        } else {
-            output.push_str(&empty_detail_log_row(player, &date));
+    if player.role == "P" {
+        for date in recent_dates(today) {
+            if let Some(log) = logs.iter().find(|log| log.date == date) {
+                output.push_str(&detail_log_row(player, &date, log, mode));
+            } else {
+                output.push_str(&empty_detail_log_row(player, &date));
+            }
+        }
+    } else if logs.iter().any(|log| log.game_id > 0) {
+        for log in logs {
+            output.push_str(&detail_log_row(player, &log.date, log, mode));
+        }
+    } else {
+        for date in recent_dates(today) {
+            if let Some(log) = logs.iter().find(|log| log.date == date) {
+                output.push_str(&detail_log_row(player, &date, log, mode));
+            } else {
+                output.push_str(&empty_detail_log_row(player, &date));
+            }
         }
     }
     if !player.status.is_empty() || !player.injury_note.is_empty() {
@@ -567,7 +582,7 @@ fn detail_source(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
         )
     } else {
         format!(
-            "{}\n{:<8} {}  {}  {}  {}  {}  {}  {}  {owner}\n",
+            "{}\n{:<7}  {}  {}  {}  {}  {}  {}  {}  {owner}\n",
             table_heading(
                 "SOURCE    xwOBA     EV   BRL%    HH%     K%    BB%    SPD  OWNER",
                 mode,
@@ -584,7 +599,11 @@ fn detail_source(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
     }
 }
 
-fn detail_split(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
+fn detail_split(
+    player: &StoredFantasyPlayer,
+    average: Option<&HitterAverage>,
+    mode: HelpColorMode,
+) -> String {
     if player.role == "P" {
         format!(
             "{}\n{:<8} {:>7.1} {:>4.0} {:>4.0} {:>4.0} {:>5.0} {:>6.2} {:>6.2}\n",
@@ -600,12 +619,35 @@ fn detail_split(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
         )
     } else {
         let ops = detail_rate(player.hitting_advanced[7], 5);
+        let average = average.map_or_else(
+            || {
+                format!(
+                    "{:<12}  {:>4}  {:>6}  {:>5}  {:>4}  {:>4}  {:>4}  {:>4}  {:>5}\n",
+                    "AVG162G", "—", "—", "—", "—", "—", "—", "—", "—"
+                )
+            },
+            |average| {
+                format!(
+                    "{:<12}  {:>4}  {:>6}  {:>5}  {:>4}  {:>4}  {:>4}  {:>4}  {:>5}\n",
+                    "AVG162G",
+                    average.plate_appearances,
+                    rate(average.on_base_percentage, 3),
+                    rate(average.on_base_plus_slugging, 3),
+                    average.runs,
+                    average.home_runs,
+                    average.runs_batted_in,
+                    average.stolen_bases,
+                    rate(average.batting_average, 3),
+                )
+            },
+        );
         format!(
-            "{}\n{:<8} {:>7.0} {:>7} {} {:>4.0} {:>5.0} {:>5.0} {:>4.0} {:>6}\n",
+            "{}\n{}{:<12}  {:>4.0}  {:>6}  {:>5}  {:>4.0}  {:>4.0}  {:>4.0}  {:>4.0}  {:>5}\n",
             table_heading(
-                "SPLIT           PA     OBP    OPS    R    HR   RBI   SB    AVG",
+                "SPLIT           PA     OBP    OPS     R    HR   RBI    SB    AVG",
                 mode
             ),
+            average,
             "CURRENT",
             player.batting[0],
             rate(player.batting[1], 3),
@@ -640,7 +682,12 @@ fn detail_percent(value: Option<f64>, width: usize) -> String {
     )
 }
 
-fn detail_log_row(player: &StoredFantasyPlayer, date: &str, log: &PlayerGameLog) -> String {
+fn detail_log_row(
+    player: &StoredFantasyPlayer,
+    date: &str,
+    log: &PlayerGameLog,
+    mode: HelpColorMode,
+) -> String {
     if player.role == "P" {
         format!(
             "{:<10} {:<8} {:<8} {:>5} {:>4} {:>4} {:>4} {:>6} {:>6}\n",
@@ -662,11 +709,25 @@ fn detail_log_row(player: &StoredFantasyPlayer, date: &str, log: &PlayerGameLog)
         } else {
             format!("{hits}/{at_bats}")
         };
+        let marker = if log.game_id == 0 {
+            String::new()
+        } else if log.batting_order > 0 {
+            available(&log.batting_order.to_string(), mode)
+        } else {
+            injury_status("X", mode)
+        };
+        let opponent = if marker.is_empty() {
+            log.opponent.clone()
+        } else if log.opponent.is_empty() {
+            marker
+        } else {
+            format!("{marker} {}", log.opponent)
+        };
         format!(
-            "{:<10} {:<8} {:<8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}\n",
+            "{:<9}  {:<7}  {:<7}  {:>4}  {:>4}  {:>4}  {:>4}  {:>4}  {:>5}\n",
             display_date(date),
-            log.opponent,
-            "",
+            opponent,
+            log.status,
             hits_at_bats,
             log_value(&log.line, "R"),
             log_value(&log.line, "HR"),
@@ -693,7 +754,7 @@ fn empty_detail_log_row(player: &StoredFantasyPlayer, date: &str) -> String {
         )
     } else {
         format!(
-            "{:<10} {:<8} {:<8} {:>5} {:>5} {:>5} {:>5} {:>5} {:>6}\n",
+            "{:<9}  {:<7}  {:<7}  {:>4}  {:>4}  {:>4}  {:>4}  {:>4}  {:>5}\n",
             display_date(date),
             "",
             "",

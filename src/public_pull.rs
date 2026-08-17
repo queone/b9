@@ -81,22 +81,7 @@ pub fn pull_with(
         let feed = client
             .fetch_redzone(&league_id, &league_key)
             .map_err(|error| PublicPullError::context("fetch public feed", error))?;
-        let snapshot = FantasySnapshotWrite {
-            league: feed.league,
-            current_week: Some(feed.week),
-            categories: Vec::new(),
-            positions: feed
-                .roster_positions
-                .into_iter()
-                .map(|row| PositionWrite {
-                    position: row.position.to_string(),
-                    count: row.count,
-                })
-                .collect(),
-            teams: feed.teams,
-            players: feed.players,
-            slots: feed.slots,
-        };
+        let snapshot = public_snapshot(feed);
         store
             .replace_fantasy_snapshot(&snapshot)
             .map_err(|error| PublicPullError::context("persist public snapshot", error))?;
@@ -123,6 +108,28 @@ pub fn pull_with(
         snapshot.players.len(),
         snapshot.slots.len(),
     ))
+}
+
+/// Normalize a fetched public feed through the same snapshot shape used by `pp`.
+pub(crate) fn public_snapshot(
+    feed: crate::providers::yahoo_public::RedzoneFeed,
+) -> FantasySnapshotWrite {
+    FantasySnapshotWrite {
+        league: feed.league,
+        current_week: Some(feed.week),
+        categories: Vec::new(),
+        positions: feed
+            .roster_positions
+            .into_iter()
+            .map(|row| PositionWrite {
+                position: row.position.to_string(),
+                count: row.count,
+            })
+            .collect(),
+        teams: feed.teams,
+        players: feed.players,
+        slots: feed.slots,
+    }
 }
 
 /// Resolve the numeric league id and the b9 storage key to write it under.

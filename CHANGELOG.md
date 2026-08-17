@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.22.0 | AC30: isolate provider sync and improve player-detail parity |
 | 0.21.0 | AC28: close skout runtime parity gaps |
 | 0.20.0 | AC23+AC27: add pp public-feed import and b9 m matchup fallback |
 | 0.19.0 | AC25: local-first status dashboard, Keychain boundary, and circuit breaker |

@@ -91,3 +91,40 @@ fn bulk_stats_preserve_separately_acquired_quality_starts() {
     assert_eq!(values.2, 70);
     assert!((values.3 - 6.2).abs() < f64::EPSILON);
 }
+
+#[test]
+fn completed_hitter_average_excludes_current_and_uses_skout_formulas() {
+    let dir = tempdir().unwrap();
+    let mut store =
+        Store::open_at_with_clock(dir.path().join("b9.db"), Arc::new(FixedClock)).unwrap();
+    for (season, games) in [(2024, 150), (2025, 150), (2026, 50)] {
+        store
+            .replace_mlb_season_stats(
+                season,
+                &[SeasonStatWrite {
+                    mlbam_id: 592450,
+                    name: "Average Hitter".into(),
+                    team_abbreviation: "NYY".into(),
+                    stat_group: "hitting".into(),
+                    games,
+                    plate_appearances: games * 4,
+                    at_bats: games * 3,
+                    hits: games,
+                    home_runs: games / 10,
+                    runs_batted_in: games / 2,
+                    runs: games / 2,
+                    stolen_bases: games / 20,
+                    walks: games / 2,
+                    hit_by_pitch: 0,
+                    total_bases: games * 2,
+                    ..SeasonStatWrite::default()
+                }],
+            )
+            .unwrap();
+    }
+    let average = store.hitter_average(592450, 2026).unwrap().unwrap();
+    assert_eq!(average.plate_appearances, 648);
+    assert_eq!(average.home_runs, 16);
+    assert!((average.batting_average - 1.0 / 3.0).abs() < 0.000_001);
+    assert!((average.on_base_percentage - 3.0 / 7.0).abs() < 0.000_001);
+}

@@ -1,6 +1,6 @@
 //! MLB StatsAPI acquisition through b9's transport and cache boundaries.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -106,7 +106,7 @@ pub struct ScheduleGame {
 }
 
 /// Optional batting values from a boxscore player.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoxscoreBatting {
     pub hits: Option<i64>,
     pub at_bats: Option<i64>,
@@ -117,7 +117,7 @@ pub struct BoxscoreBatting {
 }
 
 /// Optional pitching values from a boxscore player.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoxscorePitching {
     pub innings_pitched: Option<String>,
     pub wins: Option<i64>,
@@ -131,7 +131,7 @@ pub struct BoxscorePitching {
 }
 
 /// One keyed boxscore player.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoxscorePlayer {
     pub person_id: i64,
     pub full_name: String,
@@ -140,7 +140,7 @@ pub struct BoxscorePlayer {
 }
 
 /// One side of an MLB boxscore.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BoxscoreTeam {
     pub batting_order: Vec<i64>,
     pub bench: Vec<i64>,
@@ -148,7 +148,7 @@ pub struct BoxscoreTeam {
 }
 
 /// Both sides of one MLB boxscore.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Boxscore {
     pub away: BoxscoreTeam,
     pub home: BoxscoreTeam,
@@ -623,10 +623,18 @@ impl MlbClient {
             })
             .collect::<Vec<_>>();
         output.sort_by(|left, right| left.abbreviation.cmp(&right.abbreviation));
-        if output.len() != 30 {
+        let unique = output
+            .iter()
+            .map(|team| (team.team_id, team.abbreviation.as_str()))
+            .collect::<BTreeSet<_>>();
+        if output.len() != 30 || unique.len() != 30 {
             return Err(ProviderError::invalid(
                 "fetch MLB team directory",
-                format!("expected 30 active clubs, received {}", output.len()),
+                format!(
+                    "expected 30 unique active clubs, received {} rows and {} unique identities",
+                    output.len(),
+                    unique.len()
+                ),
             ));
         }
         Ok(output)

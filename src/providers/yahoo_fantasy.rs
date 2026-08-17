@@ -90,6 +90,13 @@ impl fmt::Display for YahooFantasyError {
 
 impl std::error::Error for YahooFantasyError {}
 
+impl YahooFantasyError {
+    /// Report whether this failure means authenticated access cannot continue.
+    pub fn is_terminal_access(&self) -> bool {
+        matches!(self, Self::Yahoo(error) if error.is_terminal_access())
+    }
+}
+
 impl From<YahooError> for YahooFantasyError {
     fn from(value: YahooError) -> Self {
         Self::Yahoo(value)

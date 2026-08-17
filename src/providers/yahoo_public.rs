@@ -130,12 +130,19 @@ pub struct RedzoneFeed {
 
 /// Unauthenticated client for the public redzone feed.
 pub struct YahooPublicClient {
-    http: HttpClient,
+    http: std::sync::Arc<HttpClient>,
 }
 
 impl YahooPublicClient {
     /// Construct a client around an injected HTTP transport.
     pub fn new(http: HttpClient) -> Self {
+        Self {
+            http: std::sync::Arc::new(http),
+        }
+    }
+
+    /// Construct a client around a shared validated HTTP transport.
+    pub fn shared(http: std::sync::Arc<HttpClient>) -> Self {
         Self { http }
     }
 

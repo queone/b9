@@ -16,7 +16,7 @@ fn root_help_forms_share_the_golden_surface() {
     assert!(default.status.success());
     assert!(default.stderr.is_empty());
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
-    assert_eq!(help, render_root_help("0.21.0", HelpColorMode::Plain));
+    assert_eq!(help, render_root_help("0.22.0", HelpColorMode::Plain));
 
     for form in [
         ["-h"].as_slice(),
@@ -50,7 +50,7 @@ fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
         let output = b9(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.21.0\n");
+        assert_eq!(output.stdout, b"b9 0.22.0\n");
         assert!(output.stderr.is_empty());
     }
 }
