@@ -45,6 +45,24 @@ Audit addresses three classes of slip the session-entry rule cannot cover by its
 
 The session-entry rule shapes what an agent does within a session. Audit keeps the across-session and across-repo picture honest. Both are needed.
 
+## Why Effective Implementation Scope Is Bounded
+
+Implementation and final review can expose deterministic fallout that the settled AC did not name: a test that no longer compiles, a call site that must adopt an approved signature, a generated verification output that must refresh, or an exact documentation reference that became stale. Returning to Refine for those changes asks the Director to repeat a decision already made without adding product judgment.
+
+Effective implementation scope covers only that mechanical band. The omitted artifact must be directly broken by an authorized change, preserve settled behavior and intent, and offer no materially distinct valid outcome. A new verification artifact is allowed only when settled acceptance coverage requires it and no eligible existing artifact can hold that coverage without weakening it. The completion report and closure-audit record make every use visible.
+
+The exception stops wherever judgment starts. New behavior, production files, interfaces, dependency decisions, migrations, architecture, security, destructive effects, external integrations, publication, release, changed expected results, and competing valid outcomes all return to Refine. The same boundary applies during Implement, closure-audit correction, and Ratify's implementation-only correction loop.
+
+## Why Contract Integrity Reporting Is Evidence-Triggered
+
+A governed workflow can contain instructions that are individually reasonable but contradictory, circular, or impossible to execute together. Repeated phase returns can also reveal a contract defect rather than an implementation defect. Reporting these findings gives the Director a chance to repair the operating system instead of repeatedly treating its symptoms.
+
+The evidence threshold prevents governance commentary from becoming ambient opinion. A finding needs repository evidence, an observed consequence, or a directly demonstrable consequence; agents need not execute a broken or unsafe path to prove it. Preferences, harmless duplication, speculative conflicts, and disagreement with settled decisions do not qualify. A repeated loop means the same conflict caused at least two unnecessary phase returns, correction cycles, or Director round-trips, while a directly demonstrated contradiction, circular dependency, or unexecutable instruction needs no repetition.
+
+Classification determines the recommended destination, not editing authority. Consumer-local findings depend on one repository's tools, architecture, release process, content model, or operating preference. Govna-canon findings arise from shared phases, approvals, scope mechanics, role boundaries, referenced canon, or templates. Unclear findings present both destinations for the Director. A blocking canon finding may include a temporary consumer mitigation only when it remains canon-compatible, is marked temporary, and states when it must be removed.
+
+Blocking findings stop unsafe or decision-bearing work; non-blocking findings do not interrupt unaffected authorization. Acknowledged or deferred findings are rechecked silently and reported again only when their evidence, impact, classification, or recommended correction changes. Findings remain in chat and the active session until the Director authorizes a governance edit. Once authorized, the correction belongs in the governance document that owns the topic, never in memory, `feedback.md`, or a session-note artifact.
+
 ## Canon Versus Local Flexibility
 
 govna is intentionally constrained at the canon layer. The base `AGENTS.md` contract — Operator/Director roles, AC-first workflow, approval boundaries, file-change discipline, review style, session-entry rule — is short, imperative, and not negotiable. It is not a flexible framework that consumer repos shape to taste. The fewer primitives govna ships, the less there is to drift against.

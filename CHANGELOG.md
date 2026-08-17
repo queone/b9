@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.22.1 | AC31: adopt Govna v0.16.0 canon |
 | 0.22.0 | AC30: isolate provider sync and improve player-detail parity |
 | 0.21.0 | AC28: close skout runtime parity gaps |
 | 0.20.0 | AC23+AC27: add pp public-feed import and b9 m matchup fallback |

@@ -63,6 +63,43 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Resolve instruction conflicts in this order: user instruction within authorized scope, then AGENTS.md, then referenced govna docs, then model defaults.
 - Stop and ask when a request bypasses a required govna gate or lacks required authorization, scope, or context.
 
+### Contract Integrity
+
+- Apply contract-integrity reporting when governance instructions are contradictory, circular, unexecutable, or repeatedly produce a workflow loop.
+- Define a repeated workflow loop as the same conflict forcing at least two unnecessary phase returns, correction cycles, or Director round-trips.
+- Report a directly demonstrated contradiction, circular dependency, or unexecutable instruction without waiting for repetition.
+- Require repository evidence, an observed workflow consequence, or a directly demonstrable consequence for every finding.
+- Avoid executing a broken or unsafe path solely to produce finding evidence.
+- Exclude wording preferences, harmless redundancy, speculative conflicts, and disagreement with a settled Director decision.
+- Cite each source path, section heading, short targeted instruction snippet, and operational effect.
+- State whether the finding blocks the active authorized work.
+- Recommend one minimal correction when one viable correction exists.
+- Present the best two bounded corrections and a recommendation when multiple viable corrections exist.
+- Classify a finding as `Consumer-local` when it depends on one repository's tools, architecture, release process, content model, or operating preference.
+- Route a `Consumer-local` correction to `## Project Rules` or the repo-owned governance document that owns the topic.
+- Classify a finding as `Govna canon` when it arises from shared phase rules, approval boundaries, scope mechanics, role boundaries, referenced canon, or consumer templates.
+- Route a `Govna canon` correction to the authoritative govna source and every applicable consumer template or rendered-consumer path.
+- Pair a blocking `Govna canon` recommendation with a temporary consumer mitigation only when the mitigation remains compatible with canon.
+- Mark every temporary consumer mitigation explicitly and state its removal condition.
+- Prohibit a temporary consumer mitigation from overriding or contradicting canon.
+- Classify a finding as `Unclear` when repository evidence supports both destinations.
+- Present both candidate destinations and defer an `Unclear` classification to the Director.
+- Report a newly observed blocking finding before further direction-changing work.
+- Stop when a finding prevents safe compliance or requires a Director-owned decision.
+- Continue unaffected authorized work when a finding is non-blocking.
+- Report a non-blocking finding in the next substantive response.
+- Avoid repeating an unchanged finding after the Director acknowledges or defers it.
+- Recheck only new or unresolved contract-integrity findings during Audit completion, Implement completion, closure audit, and Ratify.
+- Recheck an acknowledged or deferred finding silently while its evidence, impact, classification, and recommended correction remain unchanged.
+- Report an acknowledged or deferred finding again only when one of those elements changes.
+- Apply the existing phase-routing rules when a finding affects the active AC.
+- Keep an unauthorized finding in chat and the active session.
+- Record an authorized correction in the governance document that owns the topic.
+- Prevent the governance-record rule from bypassing authorization for a governance edit.
+- Continue prohibiting memory entries, `feedback.md`, and session-note artifacts for repository-behavior corrections.
+- Require explicit Director authorization before changing consumer-local governance or govna canon.
+- Prevent contract-integrity reporting from authorizing a new AC phase, governance edit, delegation, commit, publication, or release action.
+
 ## Approval Boundaries
 
 ### General Gates
@@ -71,6 +108,7 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Require explicit approval for: create, delete, rename, publish, release, or any destructive change.
 - Require explicit approval for: governance files, CI/release config, secrets handling, external integrations.
 - Edit only the files listed in the AC's `## In Scope` section, even after the user has authorized implementation.
+- Apply the effective-scope exception in `### Effective Implementation Scope` during Implement, closure-audit correction, and Ratify correction.
 - Apply the audit effective-scope exception in `### Audit Adoption` when a Director resolves any routing action.
 - Apply the same effective-implementation-scope principle to any other emitted-AC tool with Director-resolved routing decisions (e.g., `rm`'s Routing Decisions) — the named target is in scope once resolved, even when absent from `## In Scope`.
 - Stop and ask when a request is ambiguous, or when the change is hard to reverse.
@@ -78,6 +116,32 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - **Leave every `git commit` for the user to execute. No EXCEPTION.**
 - Treat an explicit standalone `Package`, `package`, `pack`, or `prep` request in an active Ratified AC context as the trigger for release-prep bookkeeping (CHANGELOG row insertion, release-tag drafting, commit-command drafting, release-command presentation).
 - Follow the Pre-Release Checklist in `govna/build-release.md` when executing release-prep bookkeeping.
+
+### Effective Implementation Scope
+
+- Apply these rules during Implement, closure-audit correction, and Ratify's implementation-only correction loop.
+- Change an omitted existing artifact only when an authorized in-scope change directly breaks it.
+- Require the omitted artifact to fail compilation, execution, rendering, regeneration, settled-behavior verification, or exact-fact accuracy without the change.
+- Limit verification artifacts to tests, fixtures, snapshots, golden files, mocks, test data, test helpers, and deterministic generated verification outputs.
+- Update an omitted production reference only to conform mechanically to a settled interface.
+- Preserve behavior in every omitted production-reference change.
+- Require every omitted production-reference change to have no materially distinct valid outcome.
+- Update an omitted lockfile only as deterministic output from an explicitly in-scope dependency decision.
+- Return to Refine when lockfile resolution exposes an unexpected dependency, source, version, feature, or graph choice.
+- Update an omitted documentation reference only for an exact settled identifier, signature, command, path, or output.
+- Preserve the documentation's editorial intent.
+- Create a verification artifact only when a settled acceptance test requires its coverage.
+- Create that verification artifact only when no eligible existing artifact can contain the coverage without weakening it.
+- Exempt only that eligible verification artifact from a second file-creation authorization.
+- Preserve settled product behavior, contract meaning, acceptance requirements, and verification intent.
+- Prohibit new production behavior, production files, interfaces, dependency decisions, migrations, or architectural choices.
+- Prohibit security decisions, destructive actions, external integrations, publication decisions, or release decisions.
+- Return to Refine when an adjustment changes or interprets a Director-owned decision.
+- Return to Refine when an adjustment expands production scope, changes expected results, or adds a requirement.
+- Return to Refine when more than one materially distinct valid outcome exists.
+- Record each effective-scope path, triggering in-scope change, and eligibility rule in the applicable Implement or Ratify completion report.
+- Record the same evidence in the closure-audit record when applicable.
+- Require no second Director authorization for an eligible effective-scope adjustment.
 
 ### Delegation and sub-agent use
 
@@ -103,6 +167,7 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Treat standalone `Draft` or `draft` as the Director-authorized pre-cycle action that creates the active AC; Draft is not an AC phase.
 - Start each governed AC cycle in Audit when the AC is ready for adversarial review.
 - Challenge the AC, repository behavior, referenced documentation, scope, edge cases, omissions, and testability during Audit.
+- Recheck new or unresolved contract-integrity findings before completing Audit.
 - Keep Audit non-mutating; do not edit the AC or repository during Audit.
 - Pause after Audit and await explicit Director instruction to Refine.
 - Resolve Audit findings and incorporate settled Director decisions during Refine.
@@ -113,6 +178,8 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Return to Refine when Implement reveals a contract, scope, or Director decision change.
 - Return to Implement when Implement reveals an implementation-only correction.
 - Include tests, adversarial verification, and defect correction in Implement.
+- Apply `### Effective Implementation Scope` to eligible omitted artifacts during Implement and closure-audit correction.
+- Recheck new or unresolved contract-integrity findings before completing Implement and during the closure audit.
 - Run one exhaustive, non-mutating closure audit after Implement, validation, adversarial verification, and defect correction.
 - Keep the closure-audit working record in the active agent's session.
 - Do not create a separate closure-audit artifact.
@@ -132,10 +199,12 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Pause after Implement and await Ratify.
 - Treat standalone `Ratify` or `ratify` after successful Implement completion as the Director's acceptance action.
 - Perform the final review during the same Ratify turn.
+- Recheck new or unresolved contract-integrity findings during Ratify.
 - Complete Ratify in that turn when the review finds no issue.
 - Apply the Approval Boundaries > General Gates and roles.md `What the Operator Must Defer` boundaries to classify any other Director-owned Ratify finding.
 - Return Ratify feedback to Refine, without completing Ratify, for a contract, scope, product, security, destructive, publication, or release finding.
 - Auto-correct an implementation-only finding inline during Ratify.
+- Apply `### Effective Implementation Scope` to eligible omitted artifacts during Ratify correction.
 - Rerun applicable validation after an inline Ratify correction.
 - Skip `./build.sh` in that revalidation only when the correction is documentation-only and not covered by this repo's own build validation.
 - Run the applicable document, render, or diff check in place of a skipped `./build.sh`.
@@ -238,7 +307,7 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Record follow-on improvements in `plan.md` (or note them to the user if no planning artifact exists); keep the current task strictly within its authorized scope.
 - Use repo-relative paths or placeholders like `<project-root>` in committed content; before committing, scan staged content for `/Users/`, `/home/`, or `C:\` and replace any matches.
 - **Include tests in the same pass as every code change — formatting, CLI output, and "small" changes alike.**
-- **Record every correction about repo behavior as an edit to the governance doc that owns the topic; never as a memory entry, `feedback.md`, or session note.**
+- **Record every authorized correction about repo behavior as an edit to the governance doc that owns the topic; never as a memory entry, `feedback.md`, or session note.**
 
 ## Review Style
 

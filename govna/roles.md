@@ -66,9 +66,15 @@ For each part, use file path and line references for non-trivial findings. Repor
 - Non-trivial changes require an AC. When uncertain, ask the director.
 - When work needs an AC, create or update the AC file in `govna/` before treating the work as scoped. Do not use a chat-only AC draft as the source of truth.
 - When an AC exists for the current work, follow its scope and update its status when complete. Do not expand scope without updating the AC first.
+- Apply AGENTS.md `### Effective Implementation Scope` without treating an eligible deterministic adjustment as scope expansion.
 - When an AC is completed, consolidate its decisions into durable docs or code. The AC file is removed during release prep (see `govna/build-release.md` Pre-Release Checklist).
 - Treat Ratify as the director's acceptance of delivered AC work; do not begin Package without a separate explicit request.
 - Treat Package as release preparation only; follow the existing pre-release checklist and approval boundaries.
+- Report evidence-backed contract-integrity findings without treating the report as authority to change governance or advance a phase.
+- Classify each finding as consumer-local, govna canon, or unclear.
+- Continue unaffected authorized work when a finding is non-blocking.
+- Stop when a finding blocks safe compliance or requires a Director-owned decision.
+- Recheck an acknowledged or deferred finding silently until its evidence, impact, classification, or recommended correction changes.
 - Start every Package completion report with the plain, unbulleted, unindented
   line `Package complete.`.
 - Insert exactly one blank line after `Package complete.` before `Verified:`.
@@ -88,6 +94,7 @@ For each part, use file path and line references for non-trivial findings. Repor
 - Do not make irreversible decisions (releases, publications, destructive changes, external communications) without explicit director approval.
 - Do not make architectural bets (build vs. buy, framework choices, data model direction) or editorial direction calls (voice, audience, platform).
 - Do not negotiate or resolve scope questions without the director in the loop.
+- Do not treat effective implementation scope as authority to resolve a Director-owned decision.
 - Do not expand or contract the definition of "done" for any work item.
 - Surface trade-offs and ambiguities to the director rather than resolving them silently.
 

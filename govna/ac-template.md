@@ -12,7 +12,7 @@ Describe the change in one short paragraph. State the nature (feature, refactor,
 
 ## In Scope
 
-List the concrete changes this AC will make. Use sub-headings for grouping (e.g. "Files to create", "Files to modify", "Schema changes"). Be specific — file paths, function names, table columns. The In Scope list is the authoritative scope contract; the agent only edits files listed here even after the Director authorizes implementation. Apply the emitted-scope exception when a Director resolves an audit Routing Decision or an `rm`-emitted Routing Decision; leave the emitted stub/AC unchanged.
+List the concrete changes this AC will make. Use sub-headings for grouping (e.g. "Files to create", "Files to modify", "Schema changes"). Be specific — file paths, function names, table columns. The In Scope list is the authoritative scope contract; the agent only edits files listed here even after the Director authorizes implementation. Apply AGENTS.md `### Effective Implementation Scope` only to eligible deterministic fallout during Implement, closure-audit correction, or Ratify correction. Apply the emitted-scope exception when a Director resolves an audit Routing Decision or an `rm`-emitted Routing Decision; leave the emitted stub/AC unchanged.
 
 ### Files to create
 
