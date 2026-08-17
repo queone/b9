@@ -1,0 +1,221 @@
+{
+  "service": {
+    "xml:lang": "en-US",
+    "user": { "guid": false, "nickName": false },
+    "leagues": {
+      "170874": {
+        "id": "170874",
+        "gameCode": "mlb",
+        "editorialSportCode": "mlb",
+        "hasDrafted": true,
+        "lastUpdatedDate": "2026-08-15",
+        "weekFinalScored": false,
+        "teamIds": ["1", "2"],
+        "name": "Yahoo Prize H2H-Cat 170874",
+        "irisGroupChatId": "",
+        "includeTodaysGames": true,
+        "scoringType": "head",
+        "usesFractionalPoints": true,
+        "usesNegativePoints": false,
+        "pointsPrecision": {},
+        "seasonOver": false,
+        "positions": ["C", "1B", "BN", "IL"],
+        "positionsToTypes": { "C": "B", "1B": "B" },
+        "stats": [
+          { "id": "7", "isScoring": true, "isNegative": false, "group": "batting" },
+          { "id": "12", "isScoring": true, "isNegative": false, "group": "batting" },
+          { "id": "13", "isScoring": true, "isNegative": false, "group": "batting" },
+          { "id": "16", "isScoring": true, "isNegative": false, "group": "batting" },
+          { "id": "3", "isScoring": true, "isNegative": false, "group": "batting" },
+          { "id": "28", "isScoring": true, "isNegative": false, "group": "pitching" },
+          { "id": "32", "isScoring": true, "isNegative": false, "group": "pitching" },
+          { "id": "42", "isScoring": true, "isNegative": false, "group": "pitching" },
+          { "id": "26", "isScoring": true, "isNegative": true, "group": "pitching" },
+          { "id": "27", "isScoring": true, "isNegative": true, "group": "pitching" }
+        ],
+        "divisions": null,
+        "usesMedianScore": false,
+        "usesSecondOpponent": false,
+        "weekInfo": { "week": 20, "start": "2026-08-10", "end": "2026-08-16" },
+        "matchupGroups": [{ "type": null, "matchups": [["1", "2"]] }],
+        "teams": {
+          "1": {
+            "id": "1",
+            "name": "New York Yankees",
+            "isOwned": false,
+            "imageUrl": "https://example.test/logo1.jpg",
+            "rank": "1",
+            "wins": 85,
+            "losses": 92,
+            "ties": 13,
+            "divisionWins": null,
+            "divisionLosses": null,
+            "divisionTies": null,
+            "pf": 0,
+            "pfWeek": 19,
+            "pa": 0,
+            "paWeek": 19,
+            "streak": "-",
+            "managers": { "1": { "id": "1", "nickName": "--hidden--" } },
+            "remainingGames": { "1": { "remaining_games": 2, "live_games": 9, "completed_games": 100 } },
+            "players": [
+              {
+                "id": "10395",
+                "position": "C",
+                "eligiblePositionSlots": ["C", "Util"],
+                "positionType": "B",
+                "status": "",
+                "stats": { "7": 5, "12": 2, "13": 8, "16": 1, "6": 20, "8": 10, "3": 0.5 }
+              },
+              {
+                "id": "60129",
+                "position": "IL",
+                "eligiblePositionSlots": ["1B", "2B", "3B", "Util"],
+                "positionType": "B",
+                "status": "IL",
+                "stats": { "7": 99, "12": 99, "13": 99, "16": 99, "6": 99, "8": 99, "3": 0.99 }
+              },
+              {
+                "id": "70001",
+                "position": "SP",
+                "eligiblePositionSlots": ["SP", "P"],
+                "positionType": "P",
+                "status": "",
+                "stats": { "28": 1, "32": 0, "42": 10, "26": 3.0, "27": 1.33, "33": 18, "37": 2, "39": 3, "34": 5, "50": 6.0 }
+              },
+              {
+                "id": null,
+                "position": "BN",
+                "eligiblePositionSlots": [],
+                "positionType": false,
+                "status": "",
+                "stats": [],
+                "invalid": true
+              }
+            ]
+          },
+          "2": {
+            "id": "2",
+            "name": "Stuntin' Like My Vladdy",
+            "isOwned": false,
+            "imageUrl": "https://example.test/logo2.jpg",
+            "rank": "2",
+            "wins": 70,
+            "losses": 104,
+            "ties": 16,
+            "divisionWins": null,
+            "divisionLosses": null,
+            "divisionTies": null,
+            "pf": 0,
+            "pfWeek": 19,
+            "pa": 0,
+            "paWeek": 19,
+            "streak": "-",
+            "managers": { "2": { "id": "2", "nickName": "--hidden--" } },
+            "remainingGames": { "2": { "remaining_games": 2, "live_games": 9, "completed_games": 100 } },
+            "players": [
+              {
+                "id": "8658",
+                "position": "1B",
+                "eligiblePositionSlots": ["1B", "Util"],
+                "positionType": "B",
+                "status": "",
+                "stats": { "7": 3, "12": 1, "13": 4, "16": 0, "6": 20, "8": 6, "3": 0.3 }
+              },
+              {
+                "id": "70002",
+                "position": "RP",
+                "eligiblePositionSlots": ["RP", "P"],
+                "positionType": "P",
+                "status": "",
+                "stats": { "28": 0, "32": 1, "42": 6, "26": 4.5, "27": 1.0, "33": 18, "37": 3, "39": 2, "34": 4, "50": 6.0 }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "players": {
+      "10395": {
+        "id": "10395",
+        "name": "Carson Kelly",
+        "firstName": "Carson",
+        "lastName": "Kelly",
+        "position": "C",
+        "positionType": "B",
+        "team": "CHC",
+        "teamId": "16",
+        "hasPlayerNotes": true,
+        "hasNewPlayerNotes": true,
+        "imageUrl": "https://example.test/10395.png",
+        "isStarting": false
+      },
+      "60129": {
+        "id": "60129",
+        "name": "Angel Genao",
+        "firstName": "Angel",
+        "lastName": "Genao",
+        "position": "2B",
+        "positionType": "B",
+        "team": "CLE",
+        "teamId": "5",
+        "hasPlayerNotes": false,
+        "hasNewPlayerNotes": false,
+        "imageUrl": "https://example.test/60129.png",
+        "isStarting": false
+      },
+      "70001": {
+        "id": "70001",
+        "name": "Jesus Test Pitcher",
+        "firstName": "Jesus",
+        "lastName": "Test Pitcher",
+        "position": "SP",
+        "positionType": "P",
+        "team": "NYY",
+        "teamId": "10",
+        "hasPlayerNotes": false,
+        "hasNewPlayerNotes": false,
+        "imageUrl": "https://example.test/70001.png",
+        "isStarting": true
+      },
+      "8658": {
+        "id": "8658",
+        "name": "Freddie Freeman",
+        "firstName": "Freddie",
+        "lastName": "Freeman",
+        "position": "1B",
+        "positionType": "B",
+        "team": "LAD",
+        "teamId": "19",
+        "hasPlayerNotes": true,
+        "hasNewPlayerNotes": true,
+        "imageUrl": "https://example.test/8658.png",
+        "isStarting": true
+      },
+      "70002": {
+        "id": "70002",
+        "name": "Sean Test Reliever",
+        "firstName": "Sean",
+        "lastName": "Test Reliever",
+        "position": "RP",
+        "positionType": "P",
+        "team": "SEA",
+        "teamId": "20",
+        "hasPlayerNotes": false,
+        "hasNewPlayerNotes": false,
+        "imageUrl": "https://example.test/70002.png",
+        "isStarting": true
+      }
+    },
+    "injuryStatuses": { "SUSP": "Suspended", "O": "Out", "IL": "Injured List", "DTD": "Day-to-Day", "COVID-19": "Covid-19", "NA": "Not Active" },
+    "inactivePositions": ["BN", "--", "NA", "IL"],
+    "groupLabels": {},
+    "fantasyToEditorialPlayers": {
+      "10395": { "id": "10395", "editorialPlayerId": "10395" },
+      "60129": { "id": "60129", "editorialPlayerId": "60129" },
+      "70001": { "id": "70001", "editorialPlayerId": "70001" },
+      "8658": { "id": "8658", "editorialPlayerId": "8658" },
+      "70002": { "id": "70002", "editorialPlayerId": "70002" }
+    }
+  }
+}

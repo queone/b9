@@ -92,6 +92,49 @@ impl Store {
         row.map(|row| snapshot_from_row(OPERATION, row)).transpose()
     }
 
+    /// Read every source's snapshot for one dataset/scope, freshest first —
+    /// lets a caller prefer whichever source is freshest and not stale
+    /// without hard-coding which source that is (used where multiple
+    /// sources can legitimately produce the same dataset/scope, e.g. OAuth
+    /// vs. the public feed for `b9 m`'s default weekly view).
+    pub fn command_snapshots_by_scope(
+        &self,
+        dataset: &str,
+        scope: &str,
+    ) -> Result<Vec<CommandSnapshot>, StoreError> {
+        const OPERATION: &str = "read command snapshots by scope";
+        validate_identity(OPERATION, "dataset", dataset)?;
+        type Row = (String, String, String, String, String, i64, i64, String);
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT dataset, source, scope, snapshot_version, payload, last_successful_at,
+                 stale, error_message FROM command_snapshots
+                 WHERE dataset = ?1 AND scope = ?2
+                 ORDER BY last_successful_at DESC",
+            )
+            .map_err(|error| StoreError::operation(OPERATION, &self.path, error))?;
+        let rows = statement
+            .query_map((dataset, scope), |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            })
+            .map_err(|error| StoreError::operation(OPERATION, &self.path, error))?
+            .collect::<Result<Vec<Row>, _>>()
+            .map_err(|error| StoreError::operation(OPERATION, &self.path, error))?;
+        rows.into_iter()
+            .map(|row| snapshot_from_row(OPERATION, row))
+            .collect()
+    }
+
     /// Mark an existing snapshot stale without replacing its successful payload.
     pub fn mark_command_snapshot_stale(
         &mut self,
@@ -241,5 +284,43 @@ mod tests {
             .unwrap();
         assert_eq!(snapshot.snapshot_version, "v1");
         assert_eq!(snapshot.payload, "{\"old\":1}");
+    }
+
+    #[test]
+    fn snapshots_by_scope_return_every_source_freshest_first() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("state.db");
+        let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock)).unwrap();
+        store
+            .save_command_snapshot("match_scoreboard", "yahoo", "l:1", "v1", "{\"a\":1}")
+            .unwrap();
+        store
+            .save_command_snapshot_inner(
+                SnapshotWrite {
+                    dataset: "match_scoreboard",
+                    source: "public_pull",
+                    scope: "l:1",
+                    snapshot_version: "v1",
+                    payload: "{\"b\":2}",
+                    now: 200,
+                },
+                |_| Ok(()),
+            )
+            .unwrap();
+
+        let snapshots = store
+            .command_snapshots_by_scope("match_scoreboard", "l:1")
+            .unwrap();
+        assert_eq!(snapshots.len(), 2);
+        // Freshest (public_pull, written at 200) first.
+        assert_eq!(snapshots[0].source, "public_pull");
+        assert_eq!(snapshots[1].source, "yahoo");
+
+        assert!(
+            store
+                .command_snapshots_by_scope("match_scoreboard", "l:missing")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

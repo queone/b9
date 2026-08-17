@@ -17,6 +17,7 @@ pub mod operations;
 pub mod player_commands;
 pub mod player_display;
 pub mod providers;
+pub mod public_pull;
 pub mod store;
 pub mod strategy;
 pub mod sync;

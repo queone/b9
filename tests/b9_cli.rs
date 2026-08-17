@@ -15,7 +15,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(
         help,
-        "b9 v0.19.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m                            Show a daily or weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
+        "b9 v0.20.0\nFantasy Baseball Advisor\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  pp                           Fetch public Yahoo league data without login\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n"
     );
 
     for form in [
@@ -50,7 +50,7 @@ fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
         let output = b9(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.19.0\n");
+        assert_eq!(output.stdout, b"b9 0.20.0\n");
         assert!(output.stderr.is_empty());
     }
 }
@@ -111,8 +111,22 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
     for command in [
-        "login", "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "fetch", "lm",
-        "m", "i", "whatis",
+        "login",
+        "logout",
+        "st",
+        "sync",
+        "pp",
+        "pull-public",
+        "start",
+        "stop",
+        "restart",
+        "log",
+        "reset",
+        "fetch",
+        "lm",
+        "m",
+        "i",
+        "whatis",
     ] {
         let output = b9(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
@@ -172,6 +186,52 @@ fn status_is_local_first_and_has_no_yahoo_attribution() {
     assert!(stdout.contains("Yahoo: not checked (run b9 login or b9 sync)"));
     assert!(stdout.contains("No local snapshot; run b9 sync."));
     assert!(!stderr.contains("Data provided by Yahoo Fantasy Sports."));
+}
+
+#[test]
+fn pp_fails_noninteractively_with_actionable_guidance_when_nothing_is_configured() {
+    let home = tempfile::tempdir().expect("temporary HOME");
+    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+        .args(["pp"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run pp without a configured league");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 pp diagnostics");
+    assert!(stderr.contains("b9 pp -l"));
+    assert!(!stderr.contains("Data provided by Yahoo Fantasy Sports."));
+}
+
+#[test]
+fn pull_public_alias_reaches_the_same_command_as_pp() {
+    let home = tempfile::tempdir().expect("temporary HOME");
+    let alias = Command::new(env!("CARGO_BIN_EXE_b9"))
+        .args(["pull-public"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run pull-public alias");
+    let primary = Command::new(env!("CARGO_BIN_EXE_b9"))
+        .args(["pp"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run pp");
+    assert_eq!(alias.status.code(), primary.status.code());
+    assert_eq!(alias.stderr, primary.stderr);
+}
+
+#[test]
+fn m_team_argument_fails_noninteractively_with_actionable_guidance_when_no_league_is_selected() {
+    let home = tempfile::tempdir().expect("temporary HOME");
+    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+        .args(["m", "Yankees"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run m with a team argument and no configured league");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 m diagnostics");
+    assert!(stderr.contains("b9 st -l"));
 }
 
 #[test]

@@ -93,6 +93,7 @@ pub enum SyncOrigin {
     Manual,
     Automatic,
     Startup,
+    PublicPull,
 }
 
 impl SyncOrigin {
@@ -101,6 +102,7 @@ impl SyncOrigin {
             Self::Manual => "manual",
             Self::Automatic => "automatic",
             Self::Startup => "startup",
+            Self::PublicPull => "public_pull",
         }
     }
 
@@ -109,6 +111,7 @@ impl SyncOrigin {
             "manual" => Ok(Self::Manual),
             "automatic" => Ok(Self::Automatic),
             "startup" => Ok(Self::Startup),
+            "public_pull" => Ok(Self::PublicPull),
             _ => Err(StoreError::invalid(
                 operation,
                 format!("unknown sync origin {value:?}"),
@@ -241,6 +244,21 @@ impl Store {
              ORDER BY id DESC LIMIT 1",
             (mode.as_str(), Some(origin.as_str())),
         )
+    }
+
+    /// Read the origin of the data currently reflected in the durable
+    /// fantasy tables: the `origin` of the most recent **completed** run,
+    /// not merely the most recent run regardless of status. A failed `sync`
+    /// or `pp` attempt never changes this answer, since it never wrote
+    /// anything durable.
+    pub fn current_data_origin(&self, mode: SyncMode) -> Result<Option<SyncOrigin>, StoreError> {
+        self.query_latest_sync_run(
+            "read current data origin",
+            "SELECT id, mode, started_at, ended_at, status, counts, origin
+             FROM sync_runs WHERE mode = ?1 AND status = 'complete' ORDER BY id DESC LIMIT 1",
+            (mode.as_str(), None),
+        )
+        .map(|run| run.map(|run| run.origin))
     }
 
     fn query_latest_sync_run(

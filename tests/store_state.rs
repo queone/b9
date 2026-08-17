@@ -613,6 +613,56 @@ fn corrupt_enum_json_timestamp_and_sqlite_reads_are_errors() {
 }
 
 #[test]
+fn current_data_origin_reflects_the_latest_complete_run_not_the_latest_run() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("state.db");
+    let clock = AdjustableClock::at(1_000);
+    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
+
+    // Nothing has completed yet.
+    assert_eq!(store.current_data_origin(SyncMode::Live).unwrap(), None);
+
+    // A public pull completes.
+    let run = store
+        .start_sync_run(SyncMode::Live, SyncOrigin::PublicPull)
+        .unwrap();
+    store.complete_sync_run(run, &BTreeMap::new()).unwrap();
+    assert_eq!(
+        store.current_data_origin(SyncMode::Live).unwrap(),
+        Some(SyncOrigin::PublicPull)
+    );
+
+    // A later official sync attempt fails — origin must NOT flip to Manual,
+    // since nothing durable actually changed.
+    clock.set(1_100);
+    let failed_run = store
+        .start_sync_run(SyncMode::Live, SyncOrigin::Manual)
+        .unwrap();
+    store.fail_sync_run(failed_run).unwrap();
+    assert_eq!(
+        store.current_data_origin(SyncMode::Live).unwrap(),
+        Some(SyncOrigin::PublicPull),
+        "a failed run must never change the reported data origin"
+    );
+
+    // A later official sync succeeds — origin now flips to Manual.
+    clock.set(1_200);
+    let succeeded_run = store
+        .start_sync_run(SyncMode::Live, SyncOrigin::Manual)
+        .unwrap();
+    store
+        .complete_sync_run(succeeded_run, &BTreeMap::new())
+        .unwrap();
+    assert_eq!(
+        store.current_data_origin(SyncMode::Live).unwrap(),
+        Some(SyncOrigin::Manual)
+    );
+
+    // A different mode is tracked independently.
+    assert_eq!(store.current_data_origin(SyncMode::History).unwrap(), None);
+}
+
+#[test]
 fn dashboard_status_persists_daemon_provider_and_schedule_fields_across_reopen() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("state.db");

@@ -9,6 +9,7 @@ pub mod mlb;
 pub mod oddsshark;
 pub mod yahoo;
 pub mod yahoo_fantasy;
+pub mod yahoo_public;
 
 /// A contextual provider acquisition failure.
 #[derive(Debug)]

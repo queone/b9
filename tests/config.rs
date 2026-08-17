@@ -11,6 +11,7 @@ fn private_atomic_configuration_round_trips_and_rejects_malformed_state() {
     let expected = Config {
         current_league: "mlb.l.1".into(),
         current_team_key: "mlb.l.1.t.1".into(),
+        pull_public_league_id: "1".into(),
         advisory_provider: "openai".into(),
         advisory_model: "gpt-4.1-mini".into(),
         strategy_punts: vec!["ERA".into()],
@@ -61,6 +62,20 @@ fn legacy_selections_fill_only_empty_b9_fields() {
     assert_eq!(adopted.current_league, "b9.l.1");
     assert_eq!(adopted.current_team_key, "legacy.l.1.t.2");
     assert_eq!(read_at(&target).unwrap(), adopted);
+}
+
+#[test]
+fn pull_public_league_id_round_trips_independently_of_current_league() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("config.json");
+    let config = Config {
+        pull_public_league_id: "170874".into(),
+        ..Config::default()
+    };
+    write_at(&path, &config).unwrap();
+    let read = read_at(&path).unwrap();
+    assert_eq!(read.pull_public_league_id, "170874");
+    assert!(read.current_league.is_empty());
 }
 
 #[test]

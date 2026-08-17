@@ -258,6 +258,14 @@ No crate, framework, or compatibility change is selected.
 - Persist the daemon's next scheduled synchronization time to the durable store at startup and after every reschedule so `b9 st` can report it without contacting the running daemon process.
 - Read an unmigrated, older-schema database without erroring: report its actual schema version and fall back to default dashboard fields rather than requiring a migration to read status.
 
+### b9 public feed boundary
+
+- Keep `b9 pp` (long alias `pull-public`) a standalone, permanent command, independent of `b9 login`/`b9 sync` — not a temporary bridge.
+- `pp` is b9's first *visible* command alias. The skout parity baseline's "no production command declares an alias" holds only for the ported skout command set (see Command Matrix above) and the existing hidden `whatis` compatibility alias on `i`; it does not extend to new, b9-only commands. `pp`/`pull-public` are both shown in `b9 --help`.
+- Never read the Yahoo credential, refresh OAuth, or access the macOS Keychain from `pp`.
+- Resolve the operator's league without prompting when it's already known: an explicit `-l/--league` override; the league already selected via `login`/`sync`; a previously saved `pp`-only selection; only then an interactive prompt, whose answer is saved for next time. Fail with actionable guidance rather than hanging when none of those resolve and the session isn't interactive.
+- Send one request per explicit `pp` invocation — no automatic retry loop, no daemon/scheduled integration.
+
 ## Proposed Rust Implementation Slices
 
 | Slice | Prerequisites | Delivered contracts | Required tests | Explicit exclusions |

@@ -77,6 +77,14 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
+        name: "pp",
+        display_label: "pp",
+        description: "Fetch public Yahoo league data without login",
+        argument: None,
+        aliases: &["pull-public"],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
         name: "start",
         display_label: "start",
         description: "Start the background sync daemon",
@@ -137,9 +145,12 @@ const COMMANDS: &[CommandDescriptor] = &[
     },
     CommandDescriptor {
         name: "m",
-        display_label: "m",
+        display_label: "m [team]",
         description: "Show a daily or weekly matchup",
-        argument: None,
+        argument: Some(ArgumentDescriptor {
+            id: "team",
+            value_name: "NAME",
+        }),
         aliases: &[],
         routes_to_root_help: false,
     },
@@ -331,6 +342,10 @@ where
             ),
             true,
         ),
+        Some(("pp", _)) => run_result(
+            crate::public_pull::pull(matches.get_one::<String>("league").map(String::as_str)),
+            true,
+        ),
         Some(("start", _)) => run_result(crate::daemon::start(), false),
         Some(("stop", _)) => run_result(crate::daemon::stop(), false),
         Some(("restart", _)) => run_result(crate::daemon::restart(), false),
@@ -397,8 +412,9 @@ where
         }
         Some(("lm", _)) => run_result(crate::model_config::configure(), false),
         Some(("m", subcommand)) => run_result(
-            crate::matchup::show_with_options(
+            crate::matchup::show_with_team_options(
                 matches.get_one::<String>("league").map(String::as_str),
+                subcommand.get_one::<String>("team").map(String::as_str),
                 crate::matchup::MatchupOptions {
                     week: subcommand.get_one::<i32>("week").copied(),
                     weekly: subcommand.get_flag("weekly"),
@@ -606,6 +622,7 @@ fn root_command(version: &'static str) -> Command {
                 | "logout"
                 | "st"
                 | "sync"
+                | "pp"
                 | "start"
                 | "stop"
                 | "restart"

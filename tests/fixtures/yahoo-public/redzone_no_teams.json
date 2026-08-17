@@ -1,0 +1,14 @@
+{
+  "service": {
+    "leagues": {
+      "170874": {
+        "id": "170874",
+        "name": "Empty League",
+        "scoringType": "head",
+        "weekInfo": { "week": 20, "start": "2026-08-10", "end": "2026-08-16" },
+        "teams": {}
+      }
+    },
+    "players": {}
+  }
+}
