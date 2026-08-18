@@ -37,6 +37,7 @@ What consumers do when receiving canon updates:
 6. **Canon-above-local-below structure.** Mixed-content files SHOULD use the canon-above-local-below structure: canon sections at the top (govna-maintained, replaced at sync), and a single named project-extension section at the bottom (repo-maintained, untouched at sync). AGENTS.md uses `## Project Rules`; `govna/development-guidelines.md`, `govna/editing-guidelines.md`, and CODE `govna/build-release.md` use `## Project Practices`. DOC `govna/release.md` remains full canon. The named tail makes hunk-merge mechanical: replace canon zone wholesale, leave the tail alone.
 7. **Why hand-merge rather than tool-automated sync.** Mixed-content files (AGENTS.md, development-guidelines.md, editing-guidelines.md) are intended to be merged by hand using the canon-above-local-below boundary because LLM-capable agents (the primary consumers) handle structured doc edits reliably from documented conventions. Documenting the convention is the durable answer; the tool stays focused on the canon-render primitive.
 8. **Baseline completion.** Exclude `govna/canon-baseline.txt` from pre-install rendered-canon comparisons. Install and verify it separately from the same scratch render only after all other applicable acceptance tests, resolved routing outcomes, and the resolved validation disposition pass; do not require an immediate audit rerun.
+9. **Rust evidence refresh.** Refresh validation evidence from that same scratch baseline only after the copy and verification succeed.
 
 ## Canon-owned vs repo-owned handling
 

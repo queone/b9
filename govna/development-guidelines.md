@@ -91,6 +91,7 @@ Sections above ## Project Practices are govna-maintained canon and update via ca
 - Reject `--no-build` release prep when independent utility validation is required.
 - Emit a Git-visible-state validation token after each successful full build.
 - Pass current validation evidence to release prep through `GOVNA_PREP_VALIDATION_TOKEN`.
+- Refresh validation evidence only after an exact baseline-only audit-adoption transition.
 - Run fallback pre-change validation only when evidence is missing or stale.
 - Run post-change validation package-wide.
 - Reuse one prep-owned Cargo target throughout Rust release prep.

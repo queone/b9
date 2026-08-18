@@ -288,6 +288,8 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Run the resolved validation command after all selected sync, migration, and deletion work.
 - Cite repository evidence when resolving validation as `Not applicable`.
 - Install or replace `govna/canon-baseline.txt` from the scratch render only after every other applicable acceptance test, routing outcome, and validation disposition passes.
+- Refresh Rust validation evidence from the same scratch baseline only after installing and verifying `govna/canon-baseline.txt`.
+- Use the refreshed Rust validation token as Package evidence.
 - Do not re-run `govna audit` as an implementation gate for the emitted AC.
 - Verify each resolved sync target against its applicable rendered canon region.
 - Verify each migration source is absent unless the Director explicitly preserves it.

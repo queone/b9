@@ -810,12 +810,8 @@ _hex_stream() {
   od -An -v -tx1 | tr -d ' \n'
 }
 
-_validation_token() {
-  local head records paths path path_hex index mode type content fingerprint
-  head=$(git rev-parse HEAD 2>/dev/null) || {
-    _failure 'build: create validation token: resolve HEAD failed; run inside a git work tree'
-    return 1
-  }
+_validation_fingerprints() {
+  local records reduced paths path path_hex index mode type content
   records=$(mktemp "${TMPDIR:-/tmp}/govna-validation.XXXXXX") || {
     _failure 'build: create validation token: create temporary manifest failed'
     return 1
@@ -825,14 +821,19 @@ _validation_token() {
     _failure 'build: create validation token: create temporary path list failed'
     return 1
   }
-  git ls-files --cached --others --exclude-standard -z >"$paths" || {
+  reduced=$(mktemp "${TMPDIR:-/tmp}/govna-validation-reduced.XXXXXX") || {
     rm -f "$records" "$paths"
+    _failure 'build: create validation token: create reduced manifest failed'
+    return 1
+  }
+  git ls-files --cached --others --exclude-standard -z >"$paths" || {
+    rm -f "$records" "$paths" "$reduced"
     _failure 'build: create validation token: list Git-visible paths failed'
     return 1
   }
   while IFS= read -r -d '' path; do
     path_hex=$(printf '%s' "$path" | _hex_stream) || {
-      rm -f "$records" "$paths"
+      rm -f "$records" "$paths" "$reduced"
       return 1
     }
     index=$(git ls-files -s -- "$path" | head -n 1)
@@ -850,13 +851,13 @@ _validation_token() {
     if [ -L "$path" ]; then
       type=symlink
       content=$(readlink "$path" | _sha256_stream) || {
-        rm -f "$records" "$paths"
+        rm -f "$records" "$paths" "$reduced"
         return 1
       }
     elif [ -f "$path" ]; then
       type=file
       content=$(_sha256_stream <"$path") || {
-        rm -f "$records" "$paths"
+        rm -f "$records" "$paths" "$reduced"
         return 1
       }
     else
@@ -864,13 +865,109 @@ _validation_token() {
       content='-'
     fi
     printf '%s|%s|%s|%s\n' "$path_hex" "$type" "$mode" "$content" >>"$records"
+    if [ "$path" != 'govna/canon-baseline.txt' ]; then
+      printf '%s|%s|%s|%s\n' "$path_hex" "$type" "$mode" "$content" >>"$reduced"
+    fi
   done <"$paths"
-  fingerprint=$(LC_ALL=C sort "$records" | _sha256_stream) || {
-    rm -f "$records" "$paths"
+  _validation_full=$(LC_ALL=C sort "$records" | _sha256_stream) || {
+    rm -f "$records" "$paths" "$reduced"
     return 1
   }
-  rm -f "$records" "$paths"
-  printf 'v1:%s:%s\n' "$head" "$fingerprint"
+  _validation_without_baseline=$(LC_ALL=C sort "$reduced" | _sha256_stream) || {
+    rm -f "$records" "$paths" "$reduced"
+    return 1
+  }
+  rm -f "$records" "$paths" "$reduced"
+}
+
+_validation_token() {
+  local head
+  head=$(git rev-parse HEAD 2>/dev/null) || {
+    _failure 'build: create validation token: resolve HEAD failed; run inside a git work tree'
+    return 1
+  }
+  _validation_fingerprints || return 1
+  printf 'v2:%s:%s:%s\n' "$head" "$_validation_full" "$_validation_without_baseline"
+}
+
+refresh_validation_token_usage() {
+  cat <<'EOF'
+refresh-validation-token --baseline <scratch-baseline> --token <prior-token>
+
+Refreshes successful full-build evidence after exact audit-adoption baseline installation.
+
+  -h, -?, --help       show this help
+  -b, --baseline PATH  name the external scratch-render baseline
+  -t, --token TOKEN    provide the prior v2 full-build token
+EOF
+}
+
+refresh_validation_token_run() {
+  local scratch="$1" prior="$2" repo scratch_dir scratch_abs head full reduced current_head
+  printf '%s\n' "$prior" | grep -Eq '^v2:[0-9a-f]{40}:[0-9a-f]{64}:[0-9a-f]{64}$' || {
+    _failure 'refresh validation token: prior token is malformed or unsupported; run a full build and retry'
+    return 1
+  }
+  [ -f govna/canon-baseline.txt ] && [ ! -L govna/canon-baseline.txt ] || {
+    _failure 'refresh validation token: installed govna/canon-baseline.txt must be a regular file; reinstall it from the scratch render'
+    return 1
+  }
+  [ -f "$scratch" ] && [ ! -L "$scratch" ] || {
+    _failure 'refresh validation token: scratch baseline must be a regular file; render canon to an external scratch directory and retry'
+    return 1
+  }
+  repo=$(pwd -P) || return 1
+  scratch_dir=$(dirname "$scratch")
+  scratch_abs=$(cd "$scratch_dir" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$(basename "$scratch")") || {
+    _failure 'refresh validation token: resolve scratch baseline failed; check the path and retry'
+    return 1
+  }
+  if _path_is_within "$scratch_abs" "$repo"; then
+    _failure 'refresh validation token: scratch baseline must be outside the repository; use the audit-adoption scratch render'
+    return 1
+  fi
+  cmp -s govna/canon-baseline.txt "$scratch_abs" || {
+    _failure 'refresh validation token: installed baseline differs from the scratch render; reinstall the exact scratch baseline and retry'
+    return 1
+  }
+  IFS=: read -r _ head full reduced <<EOF
+$prior
+EOF
+  current_head=$(git rev-parse HEAD 2>/dev/null) || {
+    _failure 'refresh validation token: resolve HEAD failed; run inside a git work tree'
+    return 1
+  }
+  _validation_fingerprints || return 1
+  if [ "$head" != "$current_head" ] ||
+     [ "$reduced" != "$_validation_without_baseline" ]; then
+    _failure 'refresh validation token: repository state changed beyond govna/canon-baseline.txt; run a full build and retry'
+    return 1
+  fi
+  printf 'v2:%s:%s:%s\n' "$current_head" "$_validation_full" "$_validation_without_baseline"
+}
+
+refresh_validation_token_main() {
+  if [ "$#" -eq 0 ]; then refresh_validation_token_usage; return 0; fi
+  if [ "$#" -eq 1 ]; then
+    case "$1" in -h | -\? | --help) refresh_validation_token_usage; return 0 ;; esac
+  fi
+  local baseline='' token='' baseline_count=0 token_count=0 arg
+  while [ "$#" -gt 0 ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+    -b | --baseline) [ "$#" -gt 0 ] || { _failure 'refresh validation token: baseline value is missing'; return 2; }; baseline="$1"; baseline_count=$((baseline_count + 1)); shift ;;
+    -t | --token) [ "$#" -gt 0 ] || { _failure 'refresh validation token: token value is missing'; return 2; }; token="$1"; token_count=$((token_count + 1)); shift ;;
+    -h | -\? | --help) _failure 'help flags must be used by themselves'; return 2 ;;
+    *) _failure "refresh validation token: unsupported argument $(_quote "$arg")"; return 2 ;;
+    esac
+  done
+  [ -n "$baseline" ] && [ -n "$token" ] &&
+    [ "$baseline_count" -eq 1 ] && [ "$token_count" -eq 1 ] || {
+    _failure 'usage: refresh-validation-token --baseline <scratch-baseline> --token <prior-token>'
+    return 2
+  }
+  refresh_validation_token_run "$baseline" "$token"
 }
 
 build_run() {
@@ -1367,6 +1464,11 @@ main() {
   if [ "${1:-}" = prep ]; then
     shift
     prep_main "$@"
+    return $?
+  fi
+  if [ "${1:-}" = refresh-validation-token ]; then
+    shift
+    refresh_validation_token_main "$@"
     return $?
   fi
   if [ "$#" -ge 1 ] && printf '%s' "$1" |

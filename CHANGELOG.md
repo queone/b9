@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.22.4 | AC33 adopt govna canon v0.18.0 |
 | 0.22.3 | AC32 adopt govna canon v0.17.0 |
 | 0.22.2 | AC26: reconcile Yahoo public-first sync documentation |
 | 0.22.1 | AC31: adopt Govna v0.16.0 canon |

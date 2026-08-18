@@ -43,6 +43,8 @@ Note: Cargo may compile overlapping dependency graphs separately because Clippy,
 
 - Run `GOVNA_PREP_VALIDATION_TOKEN='<token>' ./build.sh prep vX.Y.Z "message"` during Package.
 - Use the token printed by the successful final full build reviewed during Ratify.
+- Run `./build.sh refresh-validation-token -b <scratch-baseline> -t '<token>'` after exact baseline-only audit-adoption completion.
+- Use the refreshed token as Package evidence.
 - Omit the token to require a fallback pre-change full build.
 - Require prep to recompute HEAD and the Git-visible-state fingerprint before writes.
 - Run one post-change full build after prep writes.

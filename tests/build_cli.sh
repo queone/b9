@@ -164,6 +164,7 @@ test_prep_no_build_rejection() {
     _validate_git_state() { return 0; }
     _validate_canon_version_bump() { return 0; }
     _cargo_version_info() { printf '1.0.0\n'; }
+    _govna_program_version_info() { printf '1.0.0\n'; }
     _ac_refs() { printf ''; }
     _matching_ac_files() { printf ''; }
     prep_run 0 1 0 v1.0.1 release 2>&1
@@ -199,7 +200,7 @@ test_validation_token_tracks_git_visible_state() {
   first=$(cd "$fixture" && _validation_token) || fail 'create initial token'
   second=$(cd "$fixture" && _validation_token) || fail 'repeat initial token'
   assert_equal "$second" "$first"
-  case "$first" in v1:*:*) ;; *) fail "malformed token: $first" ;; esac
+  case "$first" in v2:*:*:*) ;; *) fail "malformed token: $first" ;; esac
 
   printf 'changed\n' >"$fixture/tracked"
   second=$(cd "$fixture" && _validation_token)
@@ -231,7 +232,7 @@ test_validation_token_tracks_git_visible_state() {
   assert_equal "$second" "$first"
 
   tree=$(git -C "$fixture" write-tree)
-  parent=${first#v1:}
+  parent=${first#v2:}
   parent=${parent%%:*}
   commit=$(printf 'next\n' | git -C "$fixture" \
     -c user.name=fixture -c user.email=fixture@example.invalid \
@@ -240,6 +241,94 @@ test_validation_token_tracks_git_visible_state() {
   second=$(cd "$fixture" && _validation_token)
   [ "$second" != "$first" ] || fail 'HEAD did not change token'
   rm -rf -- "$fixture"
+  pass
+}
+
+test_baseline_validation_token_refresh() {
+  local fixture scratch first refreshed second output rc first_reduced refreshed_reduced
+  fixture=$(new_git_fixture) || fail 'create refresh fixture'
+  scratch=$(mktemp "${TMPDIR:-/tmp}/canon-baseline.XXXXXX") || fail 'create scratch baseline'
+  printf 'govna-canon-baseline-v1\ncanon_version = v1.0.0\n' >"$scratch"
+  first=$(cd "$fixture" && _validation_token) || fail 'create prior token'
+  mkdir -p "$fixture/govna"
+  cp "$scratch" "$fixture/govna/canon-baseline.txt"
+  refreshed=$(cd "$fixture" && refresh_validation_token_run "$scratch" "$first") ||
+    fail 'refresh baseline-only token'
+  [ "$refreshed" != "$first" ] || fail 'refresh did not update full token'
+  first_reduced=${first##*:}
+  refreshed_reduced=${refreshed##*:}
+  assert_equal "$refreshed_reduced" "$first_reduced"
+  second=$(cd "$fixture" && _validation_token)
+  assert_equal "$second" "$refreshed"
+
+  printf 'changed\n' >"$fixture/tracked"
+  set +e
+  output=$(cd "$fixture" && refresh_validation_token_run "$scratch" "$first" 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 1
+  assert_contains "$output" 'changed beyond govna/canon-baseline.txt'
+  printf 'tracked\n' >"$fixture/tracked"
+
+  printf 'different\n' >"$fixture/govna/canon-baseline.txt"
+  set +e
+  output=$(cd "$fixture" && refresh_validation_token_run "$scratch" "$first" 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 1
+  assert_contains "$output" 'differs from the scratch render'
+
+  cp "$scratch" "$fixture/govna/canon-baseline.txt"
+  cp "$scratch" "$fixture/internal-baseline"
+  set +e
+  output=$(cd "$fixture" && refresh_validation_token_run internal-baseline "$first" 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 1
+  assert_contains "$output" 'must be outside the repository'
+  rm "$fixture/internal-baseline"
+
+  rm "$fixture/govna/canon-baseline.txt"
+  set +e
+  output=$(cd "$fixture" && refresh_validation_token_run "$scratch" "$first" 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 1
+  assert_contains "$output" 'installed govna/canon-baseline.txt must be a regular file'
+  cp "$scratch" "$fixture/govna/canon-baseline.txt"
+
+  rm "$fixture/govna/canon-baseline.txt"
+  second=$(cd "$fixture" && _validation_token)
+  [ "$second" != "$refreshed" ] || fail 'baseline deletion did not stale refreshed token'
+  cp "$scratch" "$fixture/govna/canon-baseline.txt"
+  printf 'replacement\n' >"$scratch"
+  cp "$scratch" "$fixture/govna/canon-baseline.txt"
+  second=$(cd "$fixture" && _validation_token)
+  [ "$second" != "$refreshed" ] || fail 'second baseline replacement did not stale token'
+
+  set +e
+  output=$(cd "$fixture" && refresh_validation_token_run "$scratch" 'v1:old:token' 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 1
+  assert_contains "$output" 'malformed or unsupported'
+  rm -rf -- "$fixture" "$scratch"
+  pass
+}
+
+test_refresh_validation_token_cli_contract() {
+  local output rc
+  refresh_validation_token_run() { printf '%s|%s\n' "$1" "$2"; }
+  output=$(refresh_validation_token_main -b /tmp/baseline -t token)
+  assert_equal "$output" '/tmp/baseline|token'
+  output=$(refresh_validation_token_main --baseline /tmp/baseline --token token)
+  assert_equal "$output" '/tmp/baseline|token'
+  set +e
+  output=$(refresh_validation_token_main -b one -b two -t token 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 2
+  assert_contains "$output" 'usage:'
   pass
 }
 
@@ -276,9 +365,10 @@ test_prep_evidence_routing() {
     _cargo_version_info() { printf '1.0.0\n'; }
     _ac_refs() { printf ''; }
     _matching_ac_files() { printf ''; }
-    _validation_token() { printf 'v1:head:fingerprint\n'; }
+    _govna_program_version_info() { printf '1.0.0\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
-    GOVNA_PREP_VALIDATION_TOKEN='v1:head:fingerprint' \
+    GOVNA_PREP_VALIDATION_TOKEN='v2:head:full:reduced' \
       prep_run 0 0 0 v1.0.1 release
   )
   assert_contains "$output" 'validation evidence: current'
@@ -291,7 +381,8 @@ test_prep_evidence_routing() {
     _cargo_version_info() { printf '1.0.0\n'; }
     _ac_refs() { printf ''; }
     _matching_ac_files() { printf ''; }
-    _validation_token() { printf 'v1:head:fingerprint\n'; }
+    _govna_program_version_info() { printf '1.0.0\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
     GOVNA_PREP_VALIDATION_TOKEN='malformed' prep_run 0 0 0 v1.0.1 release 2>&1
   )
@@ -305,7 +396,8 @@ test_prep_evidence_routing() {
     _cargo_version_info() { printf '1.0.0\n'; }
     _ac_refs() { printf ''; }
     _matching_ac_files() { printf ''; }
-    _validation_token() { printf 'v1:head:fingerprint\n'; }
+    _govna_program_version_info() { printf '1.0.0\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
     GOVNA_PREP_VALIDATION_TOKEN='' prep_run 0 0 0 v1.0.1 release 2>&1
   )
@@ -363,12 +455,12 @@ test_successful_full_build_emits_token() {
     _load_bin_targets() { return 0; }
     _require_cargo() { return 0; }
     _run_isolated() { return 0; }
-    _validation_token() { printf 'v1:head:fingerprint\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
     _next_patch_tag() { return 0; }
     build_run 0
   )
   assert_contains "$output" '==> Validation token:'
-  assert_contains "$output" 'v1:head:fingerprint'
+  assert_contains "$output" 'v2:head:full:reduced'
   pass
 }
 
@@ -379,7 +471,7 @@ test_failed_full_build_omits_token() {
     _load_bin_targets() { return 0; }
     _require_cargo() { return 0; }
     _run_isolated() { return 9; }
-    _validation_token() { printf 'v1:head:fingerprint\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
     build_run 0 2>&1
   )
   rc=$?
@@ -456,6 +548,8 @@ test_manifest_path_mapping
 test_install_reporting
 test_prep_no_build_rejection
 test_validation_token_tracks_git_visible_state
+test_baseline_validation_token_refresh
+test_refresh_validation_token_cli_contract
 test_shared_cargo_target_ownership
 test_prep_evidence_routing
 test_fallback_failure_precedes_mutation
