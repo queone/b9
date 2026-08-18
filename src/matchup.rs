@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, SystemTime};
 
 use serde::{Serialize, de::DeserializeOwned};
@@ -18,8 +19,8 @@ use crate::providers::yahoo_fantasy::YahooFantasySource;
 use crate::providers::yahoo_public::{RedzoneFeed, YahooPublicClient, league_id_from_key};
 use crate::store::{Store, StoredFantasyTeam};
 use crate::terminal::{
-    HelpColorMode, available, detected_help_color_mode, dim, good, injury_status, table_heading,
-    visible_width, warning,
+    HelpColorMode, available, detected_help_color_mode, dim, good, injury_status, lineup_indicator,
+    table_heading, visible_width, warning,
 };
 use crate::transport::HttpClient;
 
@@ -289,16 +290,51 @@ fn apply_daily_stats(
         .fantasy_players(league_key)
         .map_err(|error| contextual("read daily player identities", error))?;
     let identities = required_mlb_identities(&stored_players, mine, opponent)?;
-    let mlb = MlbClient::production(http);
-    let hitting = mlb
-        .fetch_hitting_stats_by_date_range(season, day, day)
+    let hitting_http = http.clone();
+    let day_for_hitting = day.to_owned();
+    let day_for_pitching = day.to_owned();
+    let (hitting, pitching) = parallel_pair(
+        move || {
+            MlbClient::production(hitting_http).fetch_hitting_stats_by_date_range(
+                season,
+                &day_for_hitting,
+                &day_for_hitting,
+            )
+        },
+        move || {
+            MlbClient::production(http).fetch_pitching_stats_by_date_range(
+                season,
+                &day_for_pitching,
+                &day_for_pitching,
+            )
+        },
+    );
+    let hitting = hitting
+        .map_err(|_| MatchupError("match: refresh daily MLB hitting stats: worker failed".into()))?
         .map_err(|error| contextual("refresh daily MLB hitting stats", error))?;
-    let pitching = mlb
-        .fetch_pitching_stats_by_date_range(season, day, day)
+    let pitching = pitching
+        .map_err(|_| MatchupError("match: refresh daily MLB pitching stats: worker failed".into()))?
         .map_err(|error| contextual("refresh daily MLB pitching stats", error))?;
     apply_daily_roster(&mut mine.players, &identities, &hitting, &pitching);
     apply_daily_roster(&mut opponent.players, &identities, &hitting, &pitching);
     Ok(())
+}
+
+fn parallel_pair<A, B, Left, Right>(
+    left: Left,
+    right: Right,
+) -> (thread::Result<A>, thread::Result<B>)
+where
+    A: Send,
+    B: Send,
+    Left: FnOnce() -> A + Send,
+    Right: FnOnce() -> B + Send,
+{
+    thread::scope(|scope| {
+        let left = scope.spawn(left);
+        let right = scope.spawn(right);
+        (left.join(), right.join())
+    })
 }
 
 fn required_mlb_identities(
@@ -1431,10 +1467,9 @@ fn matchup_player_cell(player: &PlayerWeekStats, role: &str, mode: HelpColorMode
             },
         )
     };
-    let row = format!(
-        "{name}{:<17}{stats}",
-        status.chars().take(17).collect::<String>()
-    );
+    let status = format!("{:<17}", status.chars().take(17).collect::<String>());
+    let status = style_matchup_status(&status, role, player.slot_position == Position::Bench, mode);
+    let row = format!("{name}{status}{stats}");
     if player.slot_position == Position::InjuredList || player.injury_status.starts_with("IL") {
         warning(&row, mode)
     } else if player.slot_position == Position::Bench {
@@ -1442,6 +1477,18 @@ fn matchup_player_cell(player: &PlayerWeekStats, role: &str, mode: HelpColorMode
     } else {
         row
     }
+}
+
+fn style_matchup_status(status: &str, role: &str, subdued: bool, mode: HelpColorMode) -> String {
+    let Some(marker) = status.split_whitespace().find(|value| {
+        *value == "●" || matches!(*value, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+    }) else {
+        return status.to_owned();
+    };
+    let favorable = marker != "●" || role == "P";
+    let needle = format!(" {marker} ");
+    let replacement = format!(" {} ", lineup_indicator(marker, favorable, subdued, mode));
+    status.replacen(&needle, &replacement, 1)
 }
 
 fn matchup_player_name(player: &PlayerWeekStats) -> String {
@@ -1474,6 +1521,15 @@ mod tests {
     use super::*;
     use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, HittingStats, PitchingStats};
     use crate::transport::{ExecutorError, HttpExecutor, HttpResponse, ValidatedRequest};
+
+    #[test]
+    fn independent_daily_stat_fetches_run_on_workers() {
+        let caller = thread::current().id();
+        let (left, right) = parallel_pair(|| thread::current().id(), || thread::current().id());
+
+        assert_ne!(left.unwrap(), caller);
+        assert_ne!(right.unwrap(), caller);
+    }
 
     #[test]
     fn odds_include_only_games_with_a_rostered_probable_pitcher() {

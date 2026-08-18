@@ -207,6 +207,52 @@ fn matchup_name_columns_use_first_initial_and_leave_space_before_status() {
 }
 
 #[test]
+fn matchup_colors_batting_order_and_probable_starter_markers_like_skout() {
+    let matchup = Matchup {
+        week: 7,
+        week_start: "2026-05-04".into(),
+        week_end: "2026-05-10".into(),
+        status: "midevent".into(),
+        teams: [
+            team("one", "Operators", true, 5, 4),
+            team("two", "Opponents", false, 4, 5),
+        ],
+    };
+    let mut hitter = player(1, "Ada Hitter NYY", "B", Position::Outfield);
+    hitter.injury_status = "7:10p 3 @ BOS".into();
+    let mut excluded = player(2, "Grace Hitter BOS", "B", Position::Outfield);
+    excluded.injury_status = "7:10p ● v NYY".into();
+    let mut starter = player(3, "Linus Pitcher NYM", "P", Position::StartingPitcher);
+    starter.injury_status = "7:10p ● v SD".into();
+
+    let colored = render_matchup(
+        &MatchupView {
+            matchup,
+            mine: RosterWeekStats {
+                team_key: "one".into(),
+                team_name: "Operators".into(),
+                week: 7,
+                players: vec![hitter, starter],
+            },
+            opponent: RosterWeekStats {
+                team_key: "two".into(),
+                team_name: "Opponents".into(),
+                week: 7,
+                players: vec![excluded],
+            },
+            teams: vec![],
+            stale: false,
+            odds: vec![],
+        },
+        HelpColorMode::Color,
+    );
+
+    assert!(colored.contains("7:10p \u{1b}[38;5;46m3\u{1b}[0m @ BOS"));
+    assert!(colored.contains("7:10p \u{1b}[38;5;196m●\u{1b}[0m v NYY"));
+    assert!(colored.contains("7:10p \u{1b}[38;5;46m●\u{1b}[0m v SD"));
+}
+
+#[test]
 fn matchup_renders_named_category_totals_inline_with_winner_colors() {
     let mut mine = team("one", "Operators", true, 5, 4);
     let mut opponent = team("two", "Opponents", false, 4, 5);

@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.29.0 | Improve matchup status colors and latency |
 | 0.28.3 | AC36 adopt govna v0.20.0 canon |
 | 0.28.2 | Remove unused Rust dependencies |
 | 0.28.1 | Ignore retired Yahoo authentication failures in status |

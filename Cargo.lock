@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "b9"
-version = "0.28.3"
+version = "0.29.0"
 dependencies = [
  "clap",
  "dirs",
