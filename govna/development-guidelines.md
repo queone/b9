@@ -37,6 +37,7 @@ Sections above ## Project Practices are govna-maintained canon and update via ca
 - Fail explicitly rather than silently degrading — a clear error is better than wrong output
 - Static analysis and linting errors are build failures, not warnings
 - Validate installable-target declarations before compiling or installing them.
+- Follow the applicable stack guidance for release-prep evidence, validation ordering, and build-state reuse.
 
 ## Testing Expectations
 
@@ -85,10 +86,14 @@ Sections above ## Project Practices are govna-maintained canon and update via ca
 - Install all Cargo binary targets with tracked installation during a full build.
 - Install selected Cargo binaries with `--no-track --force` during a scoped build.
 - Preserve unselected installed binaries and Cargo tracking metadata during scoped installation.
-- Install binaries only during successful post-change release validation.
-- Skip binary installation during pre-change validation.
+- Install binaries only during successful full builds and post-change release validation.
+- Skip binary installation during fallback pre-change validation.
 - Reject `--no-build` release prep when independent utility validation is required.
-- Run release-prep pre-change and post-change validation package-wide.
+- Emit a Git-visible-state validation token after each successful full build.
+- Pass current validation evidence to release prep through `GOVNA_PREP_VALIDATION_TOKEN`.
+- Run fallback pre-change validation only when evidence is missing or stale.
+- Run post-change validation package-wide.
+- Reuse one prep-owned Cargo target throughout Rust release prep.
 - Set `CARGO_HOME` to an external path when isolating binary installation.
 - Resolve installed-binary name conflicts before rerunning the build.
 - Format Rust code with rustfmt.

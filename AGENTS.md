@@ -214,7 +214,10 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Treat `Package` as the separate post-Ratify name for release preparation, not as a fifth AC phase.
 - Start `Package` only after an explicit Director request; do not infer it from Ratify acceptance.
 - Treat standalone `Package`, `package`, `pack`, and `prep` as equivalent names for `Package` only after Ratify acceptance.
-- Preserve the existing release-prep implementation, behavior, commands, ordering, and approval boundaries during `Package`.
+- Use the successful final full build and clean Ratify review as current pre-change Package evidence.
+- Pass the full build's validation token to Rust prep during `Package`.
+- Fall back to a pre-change full build when Rust prep evidence is missing or stale.
+- Preserve release-prep mutations, release behavior, and approval boundaries during `Package`.
 
 ### Phase-Advancement Rules
 

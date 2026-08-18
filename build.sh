@@ -87,11 +87,16 @@ _path_is_within() {
 }
 
 _cargo_target=''
+_cargo_target_owned=0
 _repo_root=''
 
 _cleanup_cargo_target() {
   local target="${_cargo_target:-}"
   [ -n "$target" ] || return 0
+  if [ "$_cargo_target_owned" -ne 1 ]; then
+    _cargo_target=''
+    return 0
+  fi
   case "$target" in
   / | "${HOME:-}") return 1 ;;
   esac
@@ -103,6 +108,7 @@ _cleanup_cargo_target() {
   esac
   rm -rf -- "$target" || return 1
   _cargo_target=''
+  _cargo_target_owned=0
 }
 
 _cargo_signal() {
@@ -121,6 +127,35 @@ _create_cargo_target() {
     _failure 'build: resolve repository root: failed; check directory access'
     return 1
   }
+  if [ -n "${GOVNA_PREP_CARGO_TARGET_DIR:-}" ]; then
+    candidate="$GOVNA_PREP_CARGO_TARGET_DIR"
+    case "$candidate" in
+    /*) ;;
+    *)
+      _failure 'build: shared Cargo target must be an absolute path outside the repository'
+      return 1
+      ;;
+    esac
+    candidate=$(cd "$candidate" 2>/dev/null && pwd -P) || {
+      _failure 'build: resolve shared Cargo target: failed; verify GOVNA_PREP_CARGO_TARGET_DIR'
+      return 1
+    }
+    if _path_is_within "$candidate" "$_repo_root"; then
+      _failure 'build: shared Cargo target resolves inside the repository; refusing reuse'
+      return 1
+    fi
+    case "$(basename "$candidate")" in
+    govna-rust-target.*) ;;
+    *)
+      _failure 'build: shared Cargo target has an unsafe name; expected govna-rust-target.*'
+      return 1
+      ;;
+    esac
+    _cargo_target="$candidate"
+    _cargo_target_owned=0
+    export CARGO_TARGET_DIR="$_cargo_target"
+    return 0
+  fi
   parent="${TMPDIR:-/tmp}"
   if ! resolved=$(cd "$parent" 2>/dev/null && pwd -P) ||
      [ ! -w "$resolved" ] ||
@@ -163,6 +198,7 @@ _create_cargo_target() {
     ;;
   esac
   _cargo_target="$candidate"
+  _cargo_target_owned=1
   export CARGO_TARGET_DIR="$_cargo_target"
 }
 
@@ -759,6 +795,84 @@ _build_scoped_phases() {
   done
 }
 
+_sha256_stream() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | cut -d ' ' -f 1
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d ' ' -f 1
+  else
+    _failure 'build: create validation token: install shasum or sha256sum and retry'
+    return 1
+  fi
+}
+
+_hex_stream() {
+  od -An -v -tx1 | tr -d ' \n'
+}
+
+_validation_token() {
+  local head records paths path path_hex index mode type content fingerprint
+  head=$(git rev-parse HEAD 2>/dev/null) || {
+    _failure 'build: create validation token: resolve HEAD failed; run inside a git work tree'
+    return 1
+  }
+  records=$(mktemp "${TMPDIR:-/tmp}/govna-validation.XXXXXX") || {
+    _failure 'build: create validation token: create temporary manifest failed'
+    return 1
+  }
+  paths=$(mktemp "${TMPDIR:-/tmp}/govna-validation-paths.XXXXXX") || {
+    rm -f "$records"
+    _failure 'build: create validation token: create temporary path list failed'
+    return 1
+  }
+  git ls-files --cached --others --exclude-standard -z >"$paths" || {
+    rm -f "$records" "$paths"
+    _failure 'build: create validation token: list Git-visible paths failed'
+    return 1
+  }
+  while IFS= read -r -d '' path; do
+    path_hex=$(printf '%s' "$path" | _hex_stream) || {
+      rm -f "$records" "$paths"
+      return 1
+    }
+    index=$(git ls-files -s -- "$path" | head -n 1)
+    if [ -L "$path" ]; then
+      mode=120000
+    elif [ -x "$path" ]; then
+      mode=100755
+    elif [ -f "$path" ]; then
+      mode=100644
+    elif [ -n "$index" ]; then
+      mode="${index%% *}"
+    else
+      mode=100644
+    fi
+    if [ -L "$path" ]; then
+      type=symlink
+      content=$(readlink "$path" | _sha256_stream) || {
+        rm -f "$records" "$paths"
+        return 1
+      }
+    elif [ -f "$path" ]; then
+      type=file
+      content=$(_sha256_stream <"$path") || {
+        rm -f "$records" "$paths"
+        return 1
+      }
+    else
+      type=missing
+      content='-'
+    fi
+    printf '%s|%s|%s|%s\n' "$path_hex" "$type" "$mode" "$content" >>"$records"
+  done <"$paths"
+  fingerprint=$(LC_ALL=C sort "$records" | _sha256_stream) || {
+    rm -f "$records" "$paths"
+    return 1
+  }
+  rm -f "$records" "$paths"
+  printf 'v1:%s:%s\n' "$head" "$fingerprint"
+}
+
 build_run() {
   local verbose="$1"
   shift
@@ -766,9 +880,12 @@ build_run() {
   _load_bin_targets || return 1
   _require_cargo || return 1
   if [ "${#targets[@]}" -eq 0 ]; then
-    _run_isolated _build_all_phases "$verbose" 1
+    _run_isolated _build_all_phases "$verbose" 1 || return $?
+    local validation_token
+    validation_token=$(_validation_token) || return 1
+    printf '\n%s\n    %s\n' "$(yel7 '==> Validation token:')" "$validation_token"
   else
-    _run_isolated _build_scoped_phases "$verbose" "${targets[@]}"
+    _run_isolated _build_scoped_phases "$verbose" "${targets[@]}" || return $?
   fi
   local next_tag
   if next_tag=$(_next_patch_tag) && [ -n "$next_tag" ]; then
@@ -1016,20 +1133,71 @@ _remove_plan_pointers() {
 
 prep_usage() {
   cat <<'EOF'
-prep vX.Y.Z "release message" [--dry-run|-n] [--no-build|-B]
+prep vX.Y.Z "release message" [--verbose|-v] [--dry-run|-n] [--no-build|-B]
 
 Stages a release by updating the root Cargo package version and Cargo.lock,
 inserting a CHANGELOG row, deleting completed AC files, and validating.
 
   -h, -?, --help  show this help
+  -v, --verbose   stream complete phase command output
   --dry-run, -n   print intended writes without modifying the working tree
-  --no-build, -B  skip pre-change and post-change ./build.sh validation
+  --no-build, -B  skip post-change validation when the stack permits it
 EOF
 }
 
+_prep_verbose=0
+_prep_phase_index=0
+
+_prep_phase() {
+  local label="$1" log rc=0
+  shift
+  printf '%s\n' "$(yel7 "prep: $label")"
+  if [ "$_prep_verbose" -eq 1 ]; then
+    "$@" || rc=$?
+  else
+    _prep_phase_index=$((_prep_phase_index + 1))
+    log="$_cargo_target/prep-phase-$_prep_phase_index.log"
+    "$@" >"$log" 2>&1 || rc=$?
+    if [ "$rc" -ne 0 ]; then cat "$log" >&2; fi
+    rm -f "$log"
+  fi
+  if [ "$rc" -ne 0 ]; then
+    _failure "prep: $label failed with exit status $rc; resolve the reported error and retry"
+    return "$rc"
+  fi
+  printf '%s\n' "$(grn3 "prep: $label: passed")"
+}
+
+_prep_apply() {
+  local stripped="$1" message="$2" refs="$3" acfiles="$4" fallback="$5"
+  local file
+  if [ "$fallback" -eq 1 ]; then
+    _prep_phase 'fallback pre-change build' _build_all_phases 0 0 || return 1
+  fi
+
+  _replace_cargo_version Cargo.toml "$stripped" || return 1
+  printf '%s %s\n' "$(yel7 'prep: updated Cargo.toml [package].version to')" "$(grn3 "$stripped")"
+
+  _require_cargo || return 1
+  _prep_phase 'refresh Cargo.lock' _refresh_cargo_lock || return 1
+
+  _insert_changelog_row CHANGELOG.md "$stripped" "$message" || return 1
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    rm -- "$file"
+    printf '%s %s\n' "$(yel7 'prep: deleted')" "$file"
+  done <<EOF
+$acfiles
+EOF
+  _remove_plan_pointers "$refs"
+
+  _prep_phase 'post-change build' env \
+    GOVNA_PREP_CARGO_TARGET_DIR="$_cargo_target" ./build.sh || return 1
+}
+
 prep_run() {
-  local dry="$1" nobuild="$2" version="$3" message="$4"
-  local stripped="${version#v}" current refs acfiles file
+  local dry="$1" nobuild="$2" verbose="$3" version="$4" message="$5"
+  local stripped="${version#v}" current refs acfiles file expected fallback=1
   _validate_release_inputs prep "$version" "$message" || return 1
   _validate_git_state prep "$version" || return 1
   current=$(_cargo_version_info Cargo.toml) || {
@@ -1060,37 +1228,19 @@ EOF
     return 0
   fi
 
-  if [ "$nobuild" -ne 1 ]; then
-    printf '%s\n' "$(yel7 'prep: running pre-change build')"
-    _load_bin_targets || return 1
-    _require_cargo || return 1
-    _run_isolated _build_all_phases 0 0 || return 1
+  expected=$(_validation_token) || return 1
+  if [ -n "${GOVNA_PREP_VALIDATION_TOKEN:-}" ] &&
+    [ "$GOVNA_PREP_VALIDATION_TOKEN" = "$expected" ]; then
+    fallback=0
+    printf '%s\n' "$(grn3 'prep: validation evidence: current')"
+  else
+    printf '%s\n' \
+      'prep: validation evidence is missing or stale; running fallback pre-change build' >&2
   fi
-
-  _replace_cargo_version Cargo.toml "$stripped" || return 1
-  printf '%s %s\n' "$(yel7 'prep: updated Cargo.toml [package].version to')" "$(grn3 "$stripped")"
-
-  _require_cargo || return 1
-  printf '%s\n' "$(yel7 'prep: refreshing Cargo.lock')"
-  _run_isolated _refresh_cargo_lock || {
-    _failure 'prep: refresh Cargo.lock with cargo check: failed'
-    return 1
-  }
-
-  _insert_changelog_row CHANGELOG.md "$stripped" "$message" || return 1
-  while IFS= read -r file; do
-    [ -n "$file" ] || continue
-    rm -- "$file"
-    printf '%s %s\n' "$(yel7 'prep: deleted')" "$file"
-  done <<EOF
-$acfiles
-EOF
-  _remove_plan_pointers "$refs"
-
-  if [ "$nobuild" -ne 1 ]; then
-    printf '%s\n' "$(yel7 'prep: running post-change build')"
-    ./build.sh || return 1
-  fi
+  _prep_verbose="$verbose"
+  _prep_phase_index=0
+  GOVNA_PREP_CARGO_TARGET_DIR='' _run_isolated \
+    _prep_apply "$stripped" "$message" "$refs" "$acfiles" "$fallback" || return 1
   printf '%s\n' "$(grn3 "$(printf './build.sh %s %s' "$version" "$(_quote "$message")")")"
 }
 
@@ -1099,9 +1249,10 @@ prep_main() {
   if [ "$#" -eq 1 ]; then
     case "$1" in -h | -\? | --help) prep_usage; return 0 ;; esac
   fi
-  local dry=0 nobuild=0 positional=() arg
+  local dry=0 nobuild=0 verbose=0 positional=() arg
   for arg in "$@"; do
     case "$arg" in
+    -v | --verbose) verbose=1 ;;
     --dry-run | -n) dry=1 ;;
     --no-build | -B) nobuild=1 ;;
     -h | -\? | --help)
@@ -1116,7 +1267,7 @@ prep_main() {
     _failure 'usage: prep vX.Y.Z "release message"'
     return 2
   fi
-  prep_run "$dry" "$nobuild" "$(_trim "${positional[0]}")" \
+  prep_run "$dry" "$nobuild" "$verbose" "$(_trim "${positional[0]}")" \
     "$(_trim "${positional[1]}")"
 }
 
