@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{MlbRosterPlayer, MlbSlateRow, MlbStanding, MlbTeamTotals};
+use crate::player_display::display_positions;
 use crate::terminal::{HelpColorMode, dim, good, roster_row, table_heading, warning};
 
 /// Render grouped 40-man rosters in the established skout information shape.
@@ -69,14 +70,12 @@ pub fn render_rosters(
                 );
                 let position_value = if player.eligible_positions.is_empty() {
                     player.position.clone()
-                } else if player.is_closer && role == "P" {
-                    format!("{}*", player.eligible_positions)
                 } else {
-                    player.eligible_positions.clone()
+                    display_positions(&player.eligible_positions, player.is_closer)
                 };
                 let position = fit(&position_value, 5);
                 let status_value = if is_unavailable(&player.injury_status) {
-                    player.injury_status.clone()
+                    status_with_injury(&player.game_status, &player.injury_status)
                 } else if !player.game_status.is_empty() {
                     player.game_status.clone()
                 } else {
@@ -130,6 +129,15 @@ pub fn render_rosters(
         }
     }
     output
+}
+
+fn status_with_injury(game_status: &str, injury_status: &str) -> String {
+    for marker in [" @ ", " v "] {
+        if let Some((prefix, _)) = game_status.rsplit_once(marker) {
+            return format!("{prefix}{marker}{injury_status}");
+        }
+    }
+    injury_status.to_owned()
 }
 
 /// Render league and division grouped standings with inline season totals.

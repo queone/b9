@@ -71,9 +71,47 @@ fn player_header(
     let advanced = if roster {
         ""
     } else if player == "HITTER" {
-        "  xwOBA     EV   BRL%    HH%     K%    BB%    SPD    OPS"
+        return format!(
+            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>3}  {:>3}  {:>4}  {:>4}  {:>5}  OWNER",
+            "POS",
+            "STATUS",
+            "YR",
+            "xwOBA",
+            "EV",
+            "BRL%",
+            "HH%",
+            "K%",
+            "BB%",
+            "SPD",
+            "PA",
+            "OBP",
+            "OPS",
+            "R",
+            "HR",
+            "RBI",
+            "SB",
+            "AVG"
+        );
     } else {
-        "    FBV  WHIFF%    CH%    GB%     K%    BB%"
+        return format!(
+            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>5}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>4}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}  OWNER",
+            "POS",
+            "STATUS",
+            "YR",
+            "FBV",
+            "WHIFF%",
+            "CH%",
+            "GB%",
+            "K%",
+            "BB%",
+            "IP",
+            "QS",
+            "W",
+            "SV",
+            "K",
+            "ERA",
+            "WHIP"
+        );
     };
     let owner = if roster { "" } else { "  OWNER" };
     format!(
@@ -83,6 +121,13 @@ fn player_header(
 }
 
 fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -> String {
+    if !roster {
+        return if player.role == "P" {
+            pitcher_pool_row(player, mode)
+        } else {
+            hitter_pool_row(player, mode)
+        };
+    }
     let uniform_row =
         matches!(player.slot.as_deref(), Some("BN" | "IL")) || player.status.starts_with("IL");
     let cell_mode = if uniform_row {
@@ -171,6 +216,151 @@ fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -
     }
 }
 
+fn hitter_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
+    fn advanced(value: Option<f64>, width: usize, precision: usize, percent: bool) -> String {
+        value.map_or_else(
+            || format!("{:>width$}", "—"),
+            |value| {
+                let mut rendered = format!("{value:.precision$}");
+                if precision == 3 {
+                    rendered = rendered.trim_start_matches('0').to_owned();
+                }
+                if percent {
+                    rendered.push('%');
+                }
+                format!("{rendered:>width$}")
+            },
+        )
+    }
+
+    let identity = fit(&format!("{} {}", player.name, player.team), PLAYER_WIDTH);
+    let position = display_positions(&player.positions, player.is_closer);
+    let status_value = if player.status.is_empty() || player.status == "A" {
+        if player.game_status.is_empty() {
+            "NoGame"
+        } else {
+            &player.game_status
+        }
+    } else {
+        &player.status
+    };
+    let status = fit(status_value, 8);
+    let hand = if player.hand.is_empty() {
+        "-"
+    } else {
+        &player.hand
+    };
+    let rank = player
+        .rank
+        .map_or_else(|| "—".into(), |rank| rank.to_string());
+    let advanced = format!(
+        "{}  {}  {}  {}  {}  {}  {}",
+        advanced(player.hitting_advanced[0], 6, 3, false),
+        advanced(player.hitting_advanced[1], 5, 1, false),
+        advanced(player.hitting_advanced[2], 5, 1, true),
+        advanced(player.hitting_advanced[3], 5, 1, true),
+        advanced(player.hitting_advanced[4], 5, 1, true),
+        advanced(player.hitting_advanced[5], 5, 1, true),
+        advanced(player.hitting_advanced[6], 5, 1, false)
+    );
+    let ops = player.hitting_advanced[7]
+        .map(|value| rate(value, 3))
+        .unwrap_or_else(|| "—".into());
+    let context = format!(
+        "{:>5.0}  {:>5}  {ops:>5}",
+        player.batting[0],
+        rate(player.batting[1], 3)
+    );
+    let stats = format!(
+        "{:>3.0}  {:>3.0}  {:>4.0}  {:>4.0}  {:>5}",
+        player.batting[2],
+        player.batting[3],
+        player.batting[4],
+        player.batting[5],
+        rate(player.batting[6], 3)
+    );
+    let owner = match &player.owner {
+        Some(owner) => dim(&fit(owner, 20), mode),
+        None if player.yahoo_player_id.is_some() => available(&fit("<available>", 20), mode),
+        None => dim(&fit("<not yet in Yahoo>", 20), mode),
+    };
+    format!(
+        "{identity}  {position}  {status}  {}  {}  {}  {}  {stats}  {owner}",
+        dim(hand, mode),
+        dim(&format!("{rank:>4}"), mode),
+        dim(&advanced, mode),
+        dim(&context, mode)
+    )
+}
+
+fn pitcher_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String {
+    fn advanced(value: Option<f64>, width: usize, percent: bool) -> String {
+        value.map_or_else(
+            || format!("{:>width$}", "—"),
+            |value| {
+                if percent {
+                    format!("{value:>precision$.1}%", precision = width - 1)
+                } else {
+                    format!("{value:>width$.1}")
+                }
+            },
+        )
+    }
+
+    let identity = fit(&format!("{} {}", player.name, player.team), PLAYER_WIDTH);
+    let position = display_positions(&player.positions, player.is_closer);
+    let status_value = if player.status.is_empty() || player.status == "A" {
+        if player.game_status.is_empty() {
+            "NoGame"
+        } else {
+            &player.game_status
+        }
+    } else {
+        &player.status
+    };
+    let status = fit(status_value, 8);
+    let hand = if player.hand.is_empty() {
+        "-"
+    } else {
+        &player.hand
+    };
+    let rank = player
+        .rank
+        .map_or_else(|| "—".into(), |rank| rank.to_string());
+    let advanced = format!(
+        "{}  {}  {}  {}  {}  {}",
+        advanced(player.pitching_advanced[0], 5, false),
+        advanced(player.pitching_advanced[1], 6, true),
+        advanced(player.pitching_advanced[2], 5, true),
+        advanced(player.pitching_advanced[3], 5, true),
+        advanced(player.pitching_advanced[4], 5, true),
+        advanced(player.pitching_advanced[5], 5, true)
+    );
+    let stats = format!(
+        "{:>5.1}  {:>4.0}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}",
+        player.pitching[0],
+        player.pitching[1],
+        player.pitching[2],
+        player.pitching[3],
+        player.pitching[4],
+        player.pitching[5],
+        player.pitching[6]
+    );
+    let owner = match &player.owner {
+        Some(owner) => dim(&fit(owner, 20), mode),
+        None if player.yahoo_player_id.is_some() => available(&fit("<available>", 20), mode),
+        None => dim(&fit("<not yet in Yahoo>", 20), mode),
+    };
+    let styled_stats = format!("{}{}", dim(&stats[..11], mode), &stats[11..]);
+    format!(
+        "{identity}  {position}  {status}  {}  {}  {}  {}  {owner}",
+        dim(hand, mode),
+        dim(&format!("{rank:>4}"), mode),
+        dim(&advanced, mode),
+        styled_stats
+    )
+}
+
 fn style_game_indicator(
     status: &str,
     indicator: GameIndicator,
@@ -220,7 +410,7 @@ fn advanced_values(player: &StoredFantasyPlayer) -> String {
     }
 }
 
-fn display_positions(value: &str, is_closer: bool) -> String {
+pub(crate) fn display_positions(value: &str, is_closer: bool) -> String {
     let all_values = value
         .split(',')
         .map(str::trim)

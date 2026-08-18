@@ -59,10 +59,7 @@ pub fn show_teams(query: Option<&str>, force: bool) -> Result<String, MlbCommand
         },
     )?;
     let selected = resolve_teams_interactively(&teams, query)?;
-    let game_statuses = mlb
-        .fetch_schedule(&date)
-        .map(|games| team_game_statuses(&games, &teams))
-        .unwrap_or_default();
+    let games = mlb.fetch_schedule(&date).unwrap_or_default();
     let (records, records_refreshed) = match cached(
         &mut store,
         "mlb_team_records",
@@ -177,40 +174,46 @@ pub fn show_teams(query: Option<&str>, force: bool) -> Result<String, MlbCommand
                     .mlb_roster(&club.abbreviation)
                     .map_err(|failure| error("team", "read enriched roster", failure))?
                     .into_iter()
-                    .map(|row| MlbRosterPlayer {
-                        team_abbreviation: club.abbreviation.clone(),
-                        mlbam_id: row.mlbam_id,
-                        name: row.name,
-                        position: row.position,
-                        primary_type: row.primary_type,
-                        status: row.status,
-                        injury_status: row.injury_status,
-                        game_status: game_statuses
-                            .get(&club.abbreviation)
-                            .cloned()
-                            .unwrap_or_default(),
-                        is_closer: row.is_closer,
-                        jersey_number: row.jersey_number,
-                        eligible_positions: row.eligible_positions,
-                        bat_side: row.bat_side,
-                        pitch_hand: row.pitch_hand,
-                        yahoo_rank: row.yahoo_rank,
-                        owner: row.owner,
-                        in_yahoo_pool: row.in_yahoo_pool,
-                        plate_appearances: row.plate_appearances,
-                        on_base_percentage: row.on_base_percentage,
-                        runs: row.runs,
-                        home_runs: row.home_runs,
-                        runs_batted_in: row.runs_batted_in,
-                        stolen_bases: row.stolen_bases,
-                        batting_average: row.batting_average,
-                        innings_pitched: row.innings_pitched,
-                        quality_starts: row.quality_starts,
-                        wins: row.wins,
-                        saves: row.saves,
-                        strikeouts: row.strikeouts,
-                        earned_run_average: row.earned_run_average,
-                        whip: row.whip,
+                    .map(|row| {
+                        let game_status = team_player_game_status(
+                            row.mlbam_id,
+                            &row.primary_type,
+                            club.id,
+                            &games,
+                            &teams,
+                        );
+                        MlbRosterPlayer {
+                            team_abbreviation: club.abbreviation.clone(),
+                            mlbam_id: row.mlbam_id,
+                            name: row.name,
+                            position: row.position,
+                            primary_type: row.primary_type,
+                            status: row.status,
+                            injury_status: row.injury_status,
+                            game_status,
+                            is_closer: row.is_closer,
+                            jersey_number: row.jersey_number,
+                            eligible_positions: row.eligible_positions,
+                            bat_side: row.bat_side,
+                            pitch_hand: row.pitch_hand,
+                            yahoo_rank: row.yahoo_rank,
+                            owner: row.owner,
+                            in_yahoo_pool: row.in_yahoo_pool,
+                            plate_appearances: row.plate_appearances,
+                            on_base_percentage: row.on_base_percentage,
+                            runs: row.runs,
+                            home_runs: row.home_runs,
+                            runs_batted_in: row.runs_batted_in,
+                            stolen_bases: row.stolen_bases,
+                            batting_average: row.batting_average,
+                            innings_pitched: row.innings_pitched,
+                            quality_starts: row.quality_starts,
+                            wins: row.wins,
+                            saves: row.saves,
+                            strikeouts: row.strikeouts,
+                            earned_run_average: row.earned_run_average,
+                            whip: row.whip,
+                        }
                     })
                     .collect();
                 let record = records
@@ -467,29 +470,78 @@ fn production(command: &str) -> Result<(Arc<HttpClient>, Store, String), MlbComm
     Ok((http, store, date))
 }
 
-fn team_game_statuses(games: &[ScheduleGame], teams: &[MlbTeam]) -> HashMap<String, String> {
+fn team_player_game_status(
+    mlbam_id: i64,
+    primary_type: &str,
+    team_id: i64,
+    games: &[ScheduleGame],
+    teams: &[MlbTeam],
+) -> String {
     let abbreviations = teams
         .iter()
         .map(|team| (team.id, team.abbreviation.as_str()))
         .collect::<HashMap<_, _>>();
-    let mut statuses = HashMap::new();
-    for game in games {
-        let Some(away) = abbreviations.get(&game.away_team_id) else {
-            continue;
-        };
-        let Some(home) = abbreviations.get(&game.home_team_id) else {
-            continue;
-        };
-        statuses.insert(
-            (*away).to_owned(),
-            format!("{} @ {}", game.detailed_state, home),
-        );
-        statuses.insert(
-            (*home).to_owned(),
-            format!("{} v {}", game.detailed_state, away),
-        );
+    let Some(game) = games
+        .iter()
+        .find(|game| game.away_team_id == team_id || game.home_team_id == team_id)
+    else {
+        return String::new();
+    };
+    let away = game.away_team_id == team_id;
+    let opponent_id = if away {
+        game.home_team_id
+    } else {
+        game.away_team_id
+    };
+    let opponent = abbreviations.get(&opponent_id).copied().unwrap_or("—");
+    let marker = if away { "@" } else { "v" };
+    let state = game.detailed_state.to_ascii_lowercase();
+    if state == "final" {
+        return format!("Final {marker} {opponent}");
     }
-    statuses
+    if !matches!(
+        state.as_str(),
+        "scheduled" | "pre-game" | "pregame" | "warmup"
+    ) {
+        return format!("Live {marker} {opponent}");
+    }
+    let indicator = if primary_type == "P" {
+        let probable = if away {
+            game.away_probable_pitcher_id
+        } else {
+            game.home_probable_pitcher_id
+        };
+        if probable == Some(mlbam_id) {
+            "●".to_owned()
+        } else {
+            String::new()
+        }
+    } else {
+        let lineup = if away {
+            game.away_lineup.as_deref()
+        } else {
+            game.home_lineup.as_deref()
+        };
+        lineup.map_or_else(String::new, |lineup| {
+            lineup
+                .iter()
+                .position(|entry| entry.person_id == mlbam_id)
+                .map_or_else(
+                    || {
+                        if lineup.is_empty() {
+                            String::new()
+                        } else {
+                            "●".to_owned()
+                        }
+                    },
+                    |index| (index + 1).to_string(),
+                )
+        })
+    };
+    format!(
+        "{} {indicator:1} {marker} {opponent}",
+        host_local_game_time(&game.game_date)
+    )
 }
 
 fn cached<T, E, F>(
@@ -1190,6 +1242,19 @@ mod tests {
             club(1, "LAD", "Los Angeles", "Dodgers"),
             club(2, "COL", "Colorado", "Rockies"),
         ];
+        let pitcher: MlbRosterPlayer = serde_json::from_str(
+            r#"{"team_abbreviation":"LAD","mlbam_id":10,"name":"Eric Lauer","position":"P","primary_type":"P","status":"A","jersey_number":""}"#,
+        )
+        .unwrap();
+        let status = team_player_game_status(
+            pitcher.mlbam_id,
+            &pitcher.primary_type,
+            1,
+            std::slice::from_ref(&game),
+            &teams,
+        );
+        assert!(status.contains("● @ COL"));
+        assert!(!status.contains("Scheduled"));
         let official_dates = HashMap::from([(1, "2026-08-18".to_owned())]);
         let rows = slate_rows(
             &[game],

@@ -377,9 +377,55 @@ fn pitcher_pool_does_not_emit_an_empty_hitter_section() {
     let output = render_players("PITCHERS", &pitchers, HelpColorMode::Plain);
     assert!(output.starts_with("PITCHER"));
     assert!(!output.contains("HITTER"));
+    assert!(output.contains("YR    FBV  WHIFF%    CH%    GB%     K%    BB%     IP"));
 
     let colored = render_players("PITCHERS", &pitchers, HelpColorMode::Color);
-    assert!(colored.contains("\u{1b}[38;5;245m  10.0      1\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;245m 10.0     1\u{1b}[0m"));
+}
+
+#[test]
+fn pitcher_pool_formats_statcast_percentages_and_ignores_active_status_marker() {
+    let mut pitcher = hitter();
+    pitcher.role = "P".into();
+    pitcher.positions = "SP".into();
+    pitcher.status = "A".into();
+    pitcher.game_status = "7:40p ● @ COL".into();
+    pitcher.pitching_advanced = [
+        Some(96.1),
+        Some(25.9),
+        Some(32.6),
+        Some(47.4),
+        Some(24.5),
+        Some(6.1),
+    ];
+
+    let output = render_players("PITCHERS", &[pitcher], HelpColorMode::Plain);
+    assert!(output.contains("7:40p"));
+    assert!(!output.contains("  A  "));
+    assert!(output.contains("96.1   25.9%  32.6%  47.4%  24.5%   6.1%"));
+}
+
+#[test]
+fn hitter_pool_places_statcast_first_and_formats_percentages() {
+    let mut player = hitter();
+    player.status = "A".into();
+    player.game_status = "6:40p 2 v MIA".into();
+    player.hitting_advanced = [
+        Some(0.401),
+        Some(94.2),
+        Some(20.0),
+        Some(52.1),
+        Some(28.7),
+        Some(11.0),
+        Some(29.5),
+        Some(0.950),
+    ];
+
+    let output = render_players("HITTERS", &[player], HelpColorMode::Plain);
+    assert!(output.contains("YR   xwOBA     EV   BRL%    HH%     K%    BB%    SPD     PA"));
+    assert!(output.contains("6:40p"));
+    assert!(!output.contains("  A  "));
+    assert!(output.contains(".401   94.2  20.0%  52.1%  28.7%  11.0%   29.5"));
 }
 
 #[test]

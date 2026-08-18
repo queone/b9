@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.31.0 | Improve player pool and MLB team roster parity |
 | 0.30.0 | Improve glossary, status, reset, and probable-pitcher displays |
 | 0.29.0 | Improve matchup status colors and latency |
 | 0.28.3 | AC36 adopt govna v0.20.0 canon |

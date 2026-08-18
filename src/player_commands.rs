@@ -189,7 +189,10 @@ fn apply_game_statuses(
     players: &mut [StoredFantasyPlayer],
     games: &[crate::providers::mlb::ScheduleGame],
 ) {
-    for player in players.iter_mut().filter(|player| player.status.is_empty()) {
+    for player in players
+        .iter_mut()
+        .filter(|player| player.status.is_empty() || player.status == "A")
+    {
         let Some(game) = games.iter().find(|game| {
             mlb_team_matches(&player.team, game.away_team_id)
                 || mlb_team_matches(&player.team, game.home_team_id)
@@ -527,6 +530,8 @@ pub fn show_pool(
     let mut players = store
         .fantasy_players(&league)
         .map_err(|failure| error(role, failure))?;
+    let identities = players.clone();
+    populate_game_statuses(&mut players, &identities);
     if let Some(query) = argument.filter(|value| value.parse::<usize>().is_err()) {
         let matches = players
             .iter()
@@ -1403,7 +1408,7 @@ mod tests {
             home_lineup: None,
         };
         let hitter = stored_player("");
-        let mut pitcher = stored_player("");
+        let mut pitcher = stored_player("A");
         pitcher.mlbam_id = Some(2);
         pitcher.role = "P".into();
         let mut excluded = stored_player("");
