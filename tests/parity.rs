@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -46,46 +45,6 @@ fn retained_command_inventory_is_visible_and_help_is_reachable() {
 }
 
 #[test]
-fn final_matrix_assigns_one_settled_disposition_to_every_retained_entry() {
-    let document = repository_file("docs/skout-parity.md");
-    let rows = document
-        .lines()
-        .filter(|line| line.starts_with("| `"))
-        .filter_map(|line| {
-            let cells = line.split('|').map(str::trim).collect::<Vec<_>>();
-            let command = cells.get(1)?.strip_prefix('`')?.strip_suffix('`')?;
-            PUBLIC_COMMANDS
-                .contains(&command)
-                .then(|| (command, *cells.get(2).unwrap_or(&"")))
-                .or_else(|| (command == "whatis").then(|| (command, *cells.get(2).unwrap_or(&""))))
-        })
-        .collect::<Vec<_>>();
-    let expected = PUBLIC_COMMANDS
-        .iter()
-        .copied()
-        .chain(["whatis"])
-        .collect::<BTreeSet<_>>();
-    let actual = rows
-        .iter()
-        .map(|(command, _)| *command)
-        .collect::<BTreeSet<_>>();
-    assert_eq!(actual, expected);
-    assert_eq!(rows.len(), expected.len(), "duplicate retained matrix row");
-    for (command, disposition) in rows {
-        assert!(
-            matches!(
-                disposition,
-                "Exact parity"
-                    | "Tested Rust improvement"
-                    | "Required live verification"
-                    | "Unsupported gap"
-            ),
-            "unsettled disposition for {command}: {disposition}"
-        );
-    }
-}
-
-#[test]
 fn runtime_product_naming_is_b9_owned() {
     for path in [
         "src/cli.rs",
@@ -113,11 +72,6 @@ fn closure_documents_reject_stale_delivery_claims() {
         "README.md",
         "arch.md",
         "plan.md",
-        "docs/skout-parity-checklist.md",
-        "docs/skout-parity.md",
-        "docs/skout-cli-operations.md",
-        "docs/skout-providers-storage.md",
-        "docs/skout-analysis-display-advisory.md",
         "docs/api-espn.md",
         "docs/api-mlbam.md",
         "docs/api-oddsshark.md",

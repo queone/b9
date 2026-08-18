@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.31.1 | Retire completed skout parity documentation |
 | 0.31.0 | Improve player pool and MLB team roster parity |
 | 0.30.0 | Improve glossary, status, reset, and probable-pitcher displays |
 | 0.29.0 | Improve matchup status colors and latency |

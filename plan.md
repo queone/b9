@@ -2,9 +2,7 @@
 
 ## Product Direction
 
-Port `skout` from Go to Rust across multiple releases. Treat feature parity and readiness to supplant `skout` as verification outcomes rather than schedule assumptions.
-
-See [`docs/skout-parity-checklist.md`](docs/skout-parity-checklist.md) for the active command parity tracker and historical reference map.
+Maintain b9 as an independent Rust fantasy-baseball utility. Use skout only as a historical behavior reference when useful.
 
 ## Ideas To Explore
 

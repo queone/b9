@@ -351,13 +351,4 @@ fn automated_provider_policy_allows_rotowire_only_through_public_lineup_acquisit
         assert!(!commands.contains(rejected));
         assert!(!synchronization.contains(rejected));
     }
-    let policy = include_str!("../docs/skout-providers-storage.md");
-    for official in [
-        "mlb.com",
-        "fangraphs.com",
-        "fantasypros.com",
-        "rotowire.com",
-    ] {
-        assert!(policy.contains(official));
-    }
 }

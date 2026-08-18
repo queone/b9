@@ -2,9 +2,9 @@
 
 Canonical definitions for baseball, fantasy, and b9-specific terms. This file is the single source of truth — other docs reference it, never redefine terms in their own words. Computation and API docs may add implementation-specific detail; prompts may compress wording; nothing may contradict definitions here.
 
-Historical `internal/...` entries in **Where** fields identify the pinned Go source evidence from which the definition was ported; they are not claims about Rust module paths. Delivered and deferred Rust ownership is recorded in the parity documents.
+Historical `internal/...` entries in **Where** fields identify the pinned Go source evidence from which the definition was ported; they are not claims about Rust module paths.
 
-Definitions describe the shared baseball vocabulary, including source-baseline signals that remain deferred in Rust. A definition is not an implementation-readiness claim; `docs/skout-analysis-display-advisory.md` records delivered displays and residual gaps.
+Definitions describe the shared baseball vocabulary, including source-baseline signals that remain deferred in Rust. A definition is not an implementation-readiness claim.
 
 When a change introduces or redefines a domain term, update this file in the same pass.
 
