@@ -2,8 +2,9 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, IsTerminal, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -35,13 +36,6 @@ impl fmt::Display for WorkflowError {
 }
 
 impl std::error::Error for WorkflowError {}
-
-/// Remove the retired Yahoo credential idempotently without reading it.
-pub fn logout() -> Result<String, WorkflowError> {
-    crate::providers::yahoo_credential_cleanup::delete_legacy_yahoo_credential()
-        .map_err(|error| WorkflowError::context("logout", error))?;
-    Ok("Legacy Yahoo credential removed. The logout command is deprecated.\n".into())
-}
 
 /// Render local-first status without accessing Yahoo or the operating-system credential store.
 pub fn status(requested_league: Option<&str>) -> Result<String, WorkflowError> {
@@ -75,45 +69,21 @@ pub fn status(requested_league: Option<&str>) -> Result<String, WorkflowError> {
     ))
 }
 
-/// Format elapsed seconds as a fixed `HhMmSs` uptime string.
-fn format_duration(seconds: u64) -> String {
-    format!(
-        "{}h {}m {}s",
-        seconds / 3600,
-        (seconds % 3600) / 60,
-        seconds % 60
-    )
-}
-
 /// Render the settled, fixed-order `b9 st` dashboard.
 ///
-/// Field order is contracted by AT3/AT8: service state and uptime, last/next
-/// run and completion state, database path/size/schema, MLB/Yahoo identity
-/// counts, provider freshness, circuit state and bounded last error,
-/// unmatched-player count, then selected league/config paths.
+/// Field order is contracted: last run and completion state, database
+/// path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit
+/// state and bounded last error, unmatched-player count, then selected
+/// league/config paths.
 pub fn render_dashboard(
     database_path: &Path,
     config_path: &Path,
     config: &config::Config,
     status: &StoreStatus,
-    now: i64,
+    _now: i64,
     mode: HelpColorMode,
 ) -> String {
     let has_snapshot = status.mlb_identity_count > 0 || status.unmatched_player_count > 0;
-    let daemon_running = status.daemon_started_at.is_some() && status.daemon_stopped_at.is_none();
-
-    let service = if daemon_running {
-        let uptime = status
-            .daemon_started_at
-            .map_or(0, |started| (now - started).max(0) as u64);
-        terminal::good(
-            &format!("running (uptime {})", format_duration(uptime)),
-            mode,
-        )
-    } else {
-        terminal::dim("stopped", mode)
-    };
-
     let last_run = match (&status.last_run_status, status.last_run_at) {
         (Some(run_status), Some(at)) if run_status == "success" => {
             terminal::good(&format!("{run_status} at unix {at}"), mode)
@@ -123,15 +93,6 @@ pub fn render_dashboard(
         }
         _ => terminal::dim("none", mode),
     };
-    let next_run = if !daemon_running {
-        terminal::dim("not scheduled (daemon stopped)", mode)
-    } else {
-        status.next_run_at.map_or_else(
-            || terminal::dim("unavailable", mode),
-            |at| format!("unix {at}"),
-        )
-    };
-
     let database = format!(
         "{} ({}, schema {})",
         database_path.display(),
@@ -189,9 +150,7 @@ pub fn render_dashboard(
 
     let mut output = format!(
         "Yahoo: public endpoints\n\
-         Service: {service}\n\
          Last run: {last_run}\n\
-         Next run: {next_run}\n\
          Database: {database}\n\
          Identities: {identities}\n\
          Provider freshness: {provider_freshness}\n\
@@ -227,9 +186,9 @@ mod tests {
             HelpColorMode::Plain,
         );
         assert!(output.contains("Yahoo: public endpoints"));
-        assert!(output.contains("Service: stopped"));
         assert!(output.contains("Last run: none"));
-        assert!(output.contains("Next run: not scheduled (daemon stopped)"));
+        assert!(!output.contains("Service:"));
+        assert!(!output.contains("Next run:"));
         assert!(output.contains("Database: /absent/b9.db (absent, schema unknown)"));
         assert!(output.contains("Identities: unavailable"));
         assert!(output.contains("Provider freshness: unavailable"));
@@ -249,10 +208,8 @@ mod tests {
             yahoo_identity_count: 480,
             unmatched_player_count: 6,
             provider_freshness_at: Some(100),
-            daemon_started_at: Some(40),
             last_run_status: Some("success".into()),
             last_run_at: Some(100),
-            next_run_at: Some(200),
             database_bytes: Some(1024),
             schema_version: Some(3),
             ..StoreStatus::default()
@@ -269,9 +226,9 @@ mod tests {
             160,
             HelpColorMode::Plain,
         );
-        assert!(output.contains("Service: running (uptime 0h 2m 0s)"));
         assert!(output.contains("Last run: success at unix 100"));
-        assert!(output.contains("Next run: unix 200"));
+        assert!(!output.contains("Service:"));
+        assert!(!output.contains("Next run:"));
         assert!(output.contains("Database: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)"));
         assert!(output.contains("Identities: 512 MLB, 480 Yahoo"));
         assert!(output.contains("Provider freshness: unix 100"));
@@ -373,6 +330,63 @@ pub struct SyncSummary {
     pub players: usize,
     pub roster_slots: usize,
     pub mlb_identities: usize,
+}
+
+/// A held cross-process synchronization boundary.
+struct SyncGuard {
+    _claim: File,
+}
+
+impl SyncGuard {
+    fn acquire() -> Result<Self, WorkflowError> {
+        let directory = sync_runtime_directory()?;
+        Self::acquire_at(&directory)
+    }
+
+    fn acquire_at(directory: &Path) -> Result<Self, WorkflowError> {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(directory)
+            .map_err(|error| WorkflowError::context("create synchronization runtime", error))?;
+        let path = directory.join("sync.lock");
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let claim = options
+            .open(&path)
+            .map_err(|error| WorkflowError::context("open synchronization lock", error))?;
+        claim.try_lock().map_err(|_| {
+            WorkflowError::context(
+                "start synchronization",
+                "another synchronization is running",
+            )
+        })?;
+        Ok(Self { _claim: claim })
+    }
+}
+
+fn sync_runtime_directory() -> Result<PathBuf, WorkflowError> {
+    let config = config::config_path()
+        .map_err(|error| WorkflowError::context("resolve synchronization runtime", error))?;
+    config
+        .parent()
+        .map(|parent| parent.join("runtime"))
+        .ok_or_else(|| {
+            WorkflowError::context(
+                "resolve synchronization runtime",
+                "configuration has no parent",
+            )
+        })
 }
 
 /// Synchronize through injected provider, store, and optional identity boundaries.
@@ -523,14 +537,6 @@ pub fn synchronize_with_options_streaming(
     )
 }
 
-/// Synchronize the selected league through the shared production service.
-pub fn synchronize_for_origin(
-    league_override: Option<&str>,
-    origin: SyncOrigin,
-) -> Result<String, WorkflowError> {
-    synchronize_for_origin_reporting(league_override, origin, &mut |_| Ok(()), true, None)
-}
-
 fn synchronize_for_origin_reporting(
     league_override: Option<&str>,
     origin: SyncOrigin,
@@ -538,8 +544,7 @@ fn synchronize_for_origin_reporting(
     include_step_lines: bool,
     team_override: Option<&str>,
 ) -> Result<String, WorkflowError> {
-    let _guard = crate::daemon::SyncGuard::acquire()
-        .map_err(|error| WorkflowError::context("start synchronization", error))?;
+    let _guard = SyncGuard::acquire()?;
     let mut config =
         config::read().map_err(|error| WorkflowError::context("read configuration", error))?;
     let original_config = config.clone();
@@ -1367,6 +1372,16 @@ mod provider_cycle_tests {
     use std::cell::Cell;
     use std::io;
     use tempfile::tempdir;
+
+    #[test]
+    fn foreground_sync_lock_is_exclusive_and_persistent() {
+        let directory = tempdir().unwrap();
+        let first = SyncGuard::acquire_at(directory.path()).unwrap();
+        assert!(SyncGuard::acquire_at(directory.path()).is_err());
+        drop(first);
+        assert!(directory.path().join("sync.lock").exists());
+        assert!(SyncGuard::acquire_at(directory.path()).is_ok());
+    }
 
     #[derive(Default)]
     struct FlushWriter {

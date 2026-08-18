@@ -36,7 +36,6 @@ fn root_help_lists_every_command_specific_flag() {
     let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
     for (command, flags) in [
         ("sync", &["-f, --force", "-T, --team"][..]),
-        ("log", &["-n, --lines", "-f, --follow", "-p, --path"]),
         (
             "m",
             &["-w, --week", "-W, --weekly", "-D, --day", "-a, --advise"],
@@ -150,10 +149,7 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
-    for command in [
-        "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "lm", "m", "i",
-        "whatis",
-    ] {
+    for command in ["st", "sync", "stop", "reset", "lm", "m", "i", "whatis"] {
         let output = b9(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
@@ -162,9 +158,7 @@ fn fantasy_commands_have_help_without_side_effects() {
 }
 
 #[test]
-fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
-    let negative_lines = b9(&["log", "--lines", "-1"]);
-    assert_eq!(negative_lines.status.code(), Some(2));
+fn noninteractive_model_selection_fails_cleanly() {
     let model = b9(&["lm"]);
     assert_eq!(model.status.code(), Some(1));
     let stderr = String::from_utf8(model.stderr).unwrap();
@@ -173,15 +167,11 @@ fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
 }
 
 #[test]
-fn operational_help_exposes_settled_short_and_long_flags() {
+fn sync_help_exposes_settled_short_and_long_flags() {
     let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
     assert!(sync.contains("-f, --force"));
     assert!(sync.contains("-T, --team"));
     assert!(sync.contains("Select the primary fantasy team"));
-    let log = String::from_utf8(b9(&["log", "--help"]).stdout).unwrap();
-    for flag in ["-n, --lines", "-f, --follow", "-p, --path"] {
-        assert!(log.contains(flag), "missing {flag}");
-    }
 }
 
 #[test]
@@ -215,13 +205,38 @@ fn status_is_local_first_and_has_no_yahoo_attribution() {
 #[test]
 fn retired_oauth_surfaces_are_absent() {
     let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
-    for retired in ["login", "pp", "pull-public", "fetch", "--oauth"] {
+    for retired in [
+        "login",
+        "logout",
+        "pp",
+        "pull-public",
+        "fetch",
+        "start",
+        "restart",
+        "log",
+        "_daemon",
+    ] {
         assert!(
-            !root.contains(retired),
+            !root.lines().any(|line| {
+                line.strip_prefix("  ")
+                    .and_then(|value| value.split_whitespace().next())
+                    == Some(retired)
+            }),
             "retired surface remains: {retired}"
         );
     }
-    for command in ["login", "pp", "pull-public", "fetch"] {
+    assert!(!root.contains("--oauth"));
+    for command in [
+        "login",
+        "logout",
+        "pp",
+        "pull-public",
+        "fetch",
+        "start",
+        "restart",
+        "log",
+        "_daemon",
+    ] {
         assert_eq!(b9(&[command]).status.code(), Some(2), "{command}");
     }
 }

@@ -45,14 +45,6 @@ struct FlagDescriptor {
 
 const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
-        name: "logout",
-        display_label: "logout",
-        description: "Remove the retired Yahoo credential",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
         name: "st",
         display_label: "st",
         description: "Show status and select a league",
@@ -69,33 +61,9 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
-        name: "start",
-        display_label: "start",
-        description: "Start the background sync daemon",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
         name: "stop",
         display_label: "stop",
-        description: "Stop the running daemon",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
-        name: "restart",
-        display_label: "restart",
-        description: "Restart the daemon",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
-        name: "log",
-        display_label: "log",
-        description: "Show or follow the daemon log",
+        description: "Stop a daemon started by an older b9 release",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -266,13 +234,6 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
         "-T, --team <TEAM>",
         "Select the primary fantasy team",
     ),
-    (
-        "log",
-        "-n, --lines <N>",
-        "Show the last N log lines (default 50)",
-    ),
-    ("log", "-f, --follow", "Follow new log output"),
-    ("log", "-p, --path", "Print only the log path"),
     ("m", "-w, --week <WEEK>", "Show a specific matchup week"),
     ("m", "-W, --weekly", "Show weekly running totals"),
     (
@@ -344,7 +305,6 @@ where
 
     match matches.subcommand() {
         Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
-        Some(("logout", _)) => run_result(crate::sync::logout()),
         Some(("st", _)) => run_result(crate::sync::status(
             matches.get_one::<String>("league").map(String::as_str),
         )),
@@ -359,44 +319,11 @@ where
             drop(output);
             run_result(result)
         }
-        Some(("start", _)) => run_result(crate::daemon::start()),
-        Some(("stop", _)) => run_result(crate::daemon::stop()),
-        Some(("restart", _)) => run_result(crate::daemon::restart()),
-        Some(("_daemon", _)) => run_result(crate::daemon::run()),
+        Some(("stop", _)) => run_result(crate::operations::stop_retired_daemon()),
         Some(("reset", _)) => {
             let mut input = std::io::BufReader::new(std::io::stdin().lock());
             let mut output = std::io::stdout();
             run_result(crate::operations::reset(&mut input, &mut output))
-        }
-        Some(("log", subcommand)) => {
-            let path = match crate::operations::log_path() {
-                Ok(path) => path,
-                Err(error) => {
-                    return run_result::<crate::operations::OperationsError>(Err(error));
-                }
-            };
-            if subcommand.get_flag("path_only") {
-                println!("{}", path.display());
-                ExitCode::SUCCESS
-            } else {
-                let lines = subcommand.get_one::<usize>("lines").copied().unwrap_or(50);
-                match crate::operations::tail_log(&path, lines) {
-                    Ok(output) => {
-                        print!("{output}");
-                        if subcommand.get_flag("follow") {
-                            let mut stdout = std::io::stdout();
-                            let mut cancelled = || false;
-                            run_result(
-                                crate::operations::follow_log(&path, &mut stdout, &mut cancelled)
-                                    .map(|()| String::new()),
-                            )
-                        } else {
-                            ExitCode::SUCCESS
-                        }
-                    }
-                    Err(error) => run_result::<crate::operations::OperationsError>(Err(error)),
-                }
-            }
         }
         Some(("lm", _)) => run_result(crate::model_config::configure()),
         Some(("m", subcommand)) => run_result(crate::matchup::show_with_team_options(
@@ -565,38 +492,10 @@ fn root_command(version: &'static str) -> Command {
                         .help("Select the primary fantasy team"),
                 );
         }
-        if descriptor.name == "log" {
-            subcommand = subcommand
-                .arg(
-                    Arg::new("lines")
-                        .short('n')
-                        .long("lines")
-                        .value_name("N")
-                        .default_value("50")
-                        .value_parser(clap::value_parser!(usize)),
-                )
-                .arg(
-                    Arg::new("follow")
-                        .short('f')
-                        .long("follow")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("path_only")
-                        .short('p')
-                        .long("path")
-                        .action(ArgAction::SetTrue),
-                );
-        }
         if matches!(
             descriptor.name,
-            "logout"
-                | "st"
-                | "sync"
-                | "start"
+            "st" | "sync"
                 | "stop"
-                | "restart"
-                | "log"
                 | "reset"
                 | "lm"
                 | "m"
@@ -618,7 +517,6 @@ fn root_command(version: &'static str) -> Command {
         }
         command = command.subcommand(subcommand);
     }
-    command = command.subcommand(Command::new("_daemon").hide(true));
     for descriptor in FLAGS {
         let action = match descriptor.action {
             FlagAction::Help => ArgAction::Help,

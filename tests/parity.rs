@@ -4,8 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 const PUBLIC_COMMANDS: &[&str] = &[
-    "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "lm", "m", "t", "tt", "sp",
-    "r", "rt", "h", "p", "i",
+    "st", "sync", "stop", "reset", "lm", "m", "t", "tt", "sp", "r", "rt", "h", "p", "i",
 ];
 
 fn repository_file(path: &str) -> String {
@@ -58,16 +57,13 @@ fn final_matrix_assigns_one_settled_disposition_to_every_retained_entry() {
             PUBLIC_COMMANDS
                 .contains(&command)
                 .then(|| (command, *cells.get(2).unwrap_or(&"")))
-                .or_else(|| {
-                    matches!(command, "_daemon" | "whatis")
-                        .then(|| (command, *cells.get(2).unwrap_or(&"")))
-                })
+                .or_else(|| (command == "whatis").then(|| (command, *cells.get(2).unwrap_or(&""))))
         })
         .collect::<Vec<_>>();
     let expected = PUBLIC_COMMANDS
         .iter()
         .copied()
-        .chain(["_daemon", "whatis"])
+        .chain(["whatis"])
         .collect::<BTreeSet<_>>();
     let actual = rows
         .iter()
@@ -94,7 +90,6 @@ fn runtime_product_naming_is_b9_owned() {
     for path in [
         "src/cli.rs",
         "src/config.rs",
-        "src/daemon.rs",
         "src/model_config.rs",
         "src/operations.rs",
         "src/sync.rs",

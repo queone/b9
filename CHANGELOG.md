@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.27.0 | AC35: Retire background sync daemon and Yahoo logout |
 | 0.26.0 | AC34: replace Yahoo OAuth with public-only fantasy acquisition |
 | 0.25.1 | Match command flags to skout help layout |
 | 0.25.0 | Improve matchup parity and public Yahoo data |

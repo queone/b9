@@ -663,14 +663,12 @@ fn current_data_origin_reflects_the_latest_complete_run_not_the_latest_run() {
 }
 
 #[test]
-fn dashboard_status_persists_daemon_provider_and_schedule_fields_across_reopen() {
+fn dashboard_status_persists_provider_fields_across_reopen() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("state.db");
     let clock = AdjustableClock::at(1_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
-    store.record_daemon_started().unwrap();
     store.record_provider_success().unwrap();
-    store.record_next_run_at(1_500).unwrap();
     store.close().unwrap();
 
     let reopened = Store::open_at_with_clock(&path, Arc::new(clock)).unwrap();
@@ -678,7 +676,6 @@ fn dashboard_status_persists_daemon_provider_and_schedule_fields_across_reopen()
     assert_eq!(dashboard.provider_last_success_at, Some(1_000));
     assert_eq!(dashboard.provider_freshness_at, Some(1_000));
     assert_eq!(dashboard.last_run_status.as_deref(), Some("success"));
-    assert_eq!(dashboard.next_run_at, Some(1_500));
     assert!(!dashboard.circuit_open);
 }
 
@@ -696,32 +693,6 @@ fn stale_fallback_preserves_last_success_and_freshness_through_a_later_failure()
     assert_eq!(dashboard.provider_freshness_at, Some(2_000));
     assert_eq!(dashboard.provider_last_failure_at, Some(2_600));
     assert_eq!(dashboard.last_run_status.as_deref(), Some("failed"));
-}
-
-#[test]
-fn daemon_restart_clears_the_stale_stopped_timestamp() {
-    let directory = tempdir().unwrap();
-    let path = directory.path().join("state.db");
-    let clock = AdjustableClock::at(1_000);
-    let mut store = Store::open_at_with_clock(&path, Arc::new(clock.clone())).unwrap();
-    store.record_daemon_started().unwrap();
-    clock.set(1_100);
-    store.record_daemon_stopped().unwrap();
-    clock.set(1_200);
-    store.record_daemon_started().unwrap();
-    let raw = Connection::open(&path).unwrap();
-    let (started_at, stopped_at): (i64, Option<i64>) = raw
-        .query_row(
-            "SELECT daemon_started_at, daemon_stopped_at FROM dashboard_status WHERE id=1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap();
-    assert_eq!(started_at, 1_200);
-    assert_eq!(
-        stopped_at, None,
-        "a restart must clear the prior stop timestamp"
-    );
 }
 
 #[test]

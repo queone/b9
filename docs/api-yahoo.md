@@ -50,13 +50,13 @@ Ambiguous, missing, or stale selections fail without guessing. Synchronization f
 
 ## Command behavior
 
-- Use public Yahoo data for foreground, startup, and scheduled `sync`.
+- Use public Yahoo data for foreground `sync`.
 - Use public Yahoo scoreboards and weekly team statistics for `m` and `rt --weekly`, including explicit weeks and ISO dates.
 - Require MLBAM identity reconciliation before daily matchup overlays; report unresolved players instead of silently applying an empty overlay.
 - Populate waiver candidates from the complete public free-agent snapshot.
 - Keep `st` local-only.
 - Remove `login`, `pp`, `pull-public`, authenticated `fetch`, and Yahoo `-o/--oauth` flags.
-- Retain `logout` for one released cleanup window only; it can delete the exact retired `b9` / `yahoo-oauth-token` keychain entry but cannot read, refresh, or use it.
+- Keep Yahoo authentication and credential-cleanup commands absent.
 
 ## Response contracts
 

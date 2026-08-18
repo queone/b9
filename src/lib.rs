@@ -5,7 +5,6 @@ pub mod advisory_credentials;
 pub mod cache;
 pub mod cli;
 pub mod config;
-pub mod daemon;
 pub mod domain;
 pub mod evaluation;
 pub mod glossary;

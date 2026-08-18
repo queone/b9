@@ -9,7 +9,6 @@ pub mod mlb;
 pub mod oddsshark;
 pub mod rotowire;
 pub mod savant;
-pub mod yahoo_credential_cleanup;
 pub mod yahoo_fantasy;
 pub mod yahoo_public;
 

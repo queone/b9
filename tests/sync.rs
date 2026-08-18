@@ -396,7 +396,7 @@ fn local_status_reports_real_identities_once_a_league_has_synced() {
 }
 
 #[test]
-fn all_callers_record_the_shared_synchronization_service_origin() {
+fn injected_sync_origins_remain_durably_decodable() {
     let directory = tempdir().unwrap();
     let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
     let mut identities = |_| Vec::new();

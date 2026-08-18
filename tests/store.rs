@@ -202,9 +202,7 @@ fn inspect_status_at_reads_a_pre_dashboard_status_database_without_migrating() {
     assert_eq!(status.provider_failure_count, 0);
     assert!(!status.circuit_open);
     assert_eq!(status.provider_last_error, None);
-    assert_eq!(status.daemon_started_at, None);
     assert_eq!(status.last_run_status, None);
-    assert_eq!(status.next_run_at, None);
 
     let connection = Connection::open(&path).unwrap();
     let version: i64 = connection

@@ -52,11 +52,8 @@ pub struct StoreStatus {
     pub provider_failure_count: i64,
     pub provider_last_error: Option<String>,
     pub provider_freshness_at: Option<i64>,
-    pub daemon_started_at: Option<i64>,
-    pub daemon_stopped_at: Option<i64>,
     pub last_run_at: Option<i64>,
     pub last_run_status: Option<String>,
-    pub next_run_at: Option<i64>,
     pub schema_version: Option<i64>,
     pub database_bytes: Option<u64>,
     pub mlb_identity_count: i64,
@@ -64,7 +61,7 @@ pub struct StoreStatus {
     pub unmatched_player_count: i64,
 }
 
-/// Durable provider and daemon fields used by the local status dashboard.
+/// Durable provider fields used by the local status dashboard.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DashboardStatus {
     pub provider_last_success_at: Option<i64>,
@@ -75,7 +72,6 @@ pub struct DashboardStatus {
     pub provider_freshness_at: Option<i64>,
     pub last_run_at: Option<i64>,
     pub last_run_status: Option<String>,
-    pub next_run_at: Option<i64>,
 }
 
 /// Inspect an existing database without creating, migrating, or changing it.
@@ -117,31 +113,28 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
         // Older, not-yet-migrated databases predate the dashboard_status table.
         // `inspect_status_at` never migrates, so fall back to defaults instead
         // of failing a local read on a schema this connection won't upgrade.
-        (0, false, None, None, None, None, None, None, None)
+        (0, false, None, None, None, None)
     } else {
         connection
             .query_row(
-                "SELECT provider_failure_count, circuit_open, last_error, provider_freshness_at, daemon_started_at, daemon_stopped_at, last_run_at, last_run_status, next_run_at FROM dashboard_status WHERE id=1",
+                "SELECT provider_failure_count, circuit_open, last_error, provider_freshness_at, last_run_at, last_run_status FROM dashboard_status WHERE id=1",
                 [],
                 |row| {
                     let error = row.get::<_, String>(2)?;
-                    let status = row.get::<_, Option<String>>(7)?;
+                    let status = row.get::<_, Option<String>>(5)?;
                     Ok((
                         row.get(0)?,
                         row.get::<_, i64>(1)? != 0,
                         (!error.is_empty()).then_some(error),
                         row.get(3)?,
                         row.get(4)?,
-                        row.get(5)?,
-                        row.get(6)?,
                         status.filter(|value| !value.is_empty()),
-                        row.get(8)?,
                     ))
                 },
             )
             .optional()
             .map_err(|error| StoreError::operation("read dashboard status", path, error))?
-            .unwrap_or((0, false, None, None, None, None, None, None, None))
+            .unwrap_or((0, false, None, None, None, None))
     };
     let schema_version = connection
         .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
@@ -177,11 +170,8 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
         circuit_open: dashboard.1,
         provider_last_error: dashboard.2,
         provider_freshness_at: dashboard.3,
-        daemon_started_at: dashboard.4,
-        daemon_stopped_at: dashboard.5,
-        last_run_at: dashboard.6,
-        last_run_status: dashboard.7,
-        next_run_at: dashboard.8,
+        last_run_at: dashboard.4,
+        last_run_status: dashboard.5,
         schema_version,
         database_bytes,
         mlb_identity_count,
@@ -401,7 +391,7 @@ impl Store {
     pub fn dashboard_status(&self) -> Result<DashboardStatus, StoreError> {
         self.connection()
             .query_row(
-                "SELECT provider_last_success_at, provider_last_failure_at, provider_failure_count, circuit_open, last_error, provider_freshness_at, last_run_at, last_run_status, next_run_at FROM dashboard_status WHERE id=1",
+                "SELECT provider_last_success_at, provider_last_failure_at, provider_failure_count, circuit_open, last_error, provider_freshness_at, last_run_at, last_run_status FROM dashboard_status WHERE id=1",
                 [],
                 |row| {
                     let last_run_status = row.get::<_, Option<String>>(7)?;
@@ -417,7 +407,6 @@ impl Store {
                         provider_freshness_at: row.get(5)?,
                         last_run_at: row.get(6)?,
                         last_run_status: last_run_status.filter(|value| !value.is_empty()),
-                        next_run_at: row.get(8)?,
                     })
                 },
             )
@@ -451,52 +440,6 @@ impl Store {
                     rusqlite::params![now, bounded],
                 )
                 .map_err(|error| StoreError::operation("record provider failure", &path, error))?;
-            Ok(())
-        })
-    }
-
-    /// Record the daemon's next scheduled synchronization cycle.
-    pub fn record_next_run_at(&mut self, next_run_at: i64) -> Result<(), StoreError> {
-        let path = self.path.clone();
-        self.transaction(|transaction| {
-            transaction
-                .execute(
-                    "UPDATE dashboard_status SET next_run_at=?1 WHERE id=1",
-                    [next_run_at],
-                )
-                .map_err(|error| {
-                    StoreError::operation("record next scheduled run", &path, error)
-                })?;
-            Ok(())
-        })
-    }
-
-    /// Record daemon publication in the local dashboard state.
-    pub fn record_daemon_started(&mut self) -> Result<(), StoreError> {
-        let (_, now) = self.captured_time("record daemon start")?;
-        let path = self.path.clone();
-        self.transaction(|transaction| {
-            transaction
-                .execute(
-                    "UPDATE dashboard_status SET daemon_started_at=?1, daemon_stopped_at=NULL WHERE id=1",
-                    [now],
-                )
-                .map_err(|error| StoreError::operation("record daemon start", &path, error))?;
-            Ok(())
-        })
-    }
-
-    /// Record daemon shutdown in the local dashboard state.
-    pub fn record_daemon_stopped(&mut self) -> Result<(), StoreError> {
-        let (_, now) = self.captured_time("record daemon stop")?;
-        let path = self.path.clone();
-        self.transaction(|transaction| {
-            transaction
-                .execute(
-                    "UPDATE dashboard_status SET daemon_stopped_at=?1 WHERE id=1",
-                    [now],
-                )
-                .map_err(|error| StoreError::operation("record daemon stop", &path, error))?;
             Ok(())
         })
     }
@@ -1017,17 +960,5 @@ mod tests {
         assert_eq!(recovered.provider_failure_count, 0);
         assert_eq!(recovered.last_error, None);
         assert_eq!(recovered.last_run_status.as_deref(), Some("success"));
-    }
-
-    #[test]
-    fn next_run_persists_and_a_later_success_preserves_it() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("state.db");
-        let mut store = Store::open_at_with_clock(&path, Arc::new(SystemClock)).unwrap();
-        assert_eq!(store.dashboard_status().unwrap().next_run_at, None);
-        store.record_next_run_at(500).unwrap();
-        assert_eq!(store.dashboard_status().unwrap().next_run_at, Some(500));
-        store.record_provider_success().unwrap();
-        assert_eq!(store.dashboard_status().unwrap().next_run_at, Some(500));
     }
 }

@@ -8,5 +8,5 @@ See [`docs/skout-parity-checklist.md`](docs/skout-parity-checklist.md) for the a
 
 ## Ideas To Explore
 
-- Remove transitional `logout` after one released cleanup window, once users have had an opportunity to delete the retired Yahoo credential.
-- Monitor the unofficial public Yahoo fantasy paths for denial or payload drift while preserving atomic replacement and last-complete-snapshot fallback.
+- IE1: Monitor the unofficial public Yahoo fantasy paths for denial or payload drift while preserving atomic replacement and last-complete-snapshot fallback.
+- IE2: Remove transitional `stop` after one released cleanup window.

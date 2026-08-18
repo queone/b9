@@ -33,14 +33,10 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 
 | b9 surface | Disposition | Deterministic evidence | Live or residual gap |
 |---|---|---|---|
-| `logout` | Tested Rust improvement | Deletion-only retired-credential cleanup and idempotence tests | Transitional command; keychain observation pending |
 | `st` | Required live verification | League selection, status, and CLI tests | Live Yahoo league formats pending |
-| `sync` | Tested Rust improvement | Shared synchronization, execution-lock, atomic snapshot, and failure-retention tests | Live Yahoo pending |
-| `start` | Tested Rust improvement | Explicit daemon startup and exclusive-ownership tests | Supported-host lifecycle check pending |
-| `stop` | Tested Rust improvement | Private control and clean-shutdown tests | Supported-host lifecycle check pending |
-| `restart` | Tested Rust improvement | Private control and lifecycle tests | Supported-host lifecycle check pending |
-| `log` | Exact parity | Bounded tail/follow and truncation tests | Final terminal comparison pending |
-| `reset` | Tested Rust improvement | Scoped, confirmed, idempotent deletion tests | Reset-safe-cancel live path pending |
+| `sync` | Tested Rust improvement | Foreground synchronization, persistent execution-lock, atomic snapshot, and failure-retention tests | Live Yahoo pending |
+| `stop` | Tested Rust improvement | Transitional prior-daemon control and narrow cleanup tests | Remove after one released cleanup window |
+| `reset` | Tested Rust improvement | Scoped, confirmed, transitional-shutdown, and idempotent deletion tests | Reset-safe-cancel live path pending |
 | `lm` | Required live verification | Model configuration, credential, model-list, and fake-transport tests | Keychain, model list, and provider protocols pending |
 | `i` | Tested Rust improvement | Embedded glossary, lookup, suggestion, help, and no-checkout tests | TTY ambiguity selector pending |
 | `m` | Unsupported gap | Daily/weekly/day flags, stale/local fallback, advisory, column, and color tests | Live providers plus richer source-baseline status/totals details pending |
@@ -51,10 +47,9 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 | `sp` | Required live verification | MLB/ESPN/OddsShark fixtures, fallback, and rendering tests | Live unofficial endpoints pending |
 | `h` | Unsupported gap | Browse/detail, filters, sorts, waiver gates, columns, and color tests | Deferred analytical columns, live Yahoo, and TTY ambiguity pending |
 | `p` | Unsupported gap | Browse/detail, filters, sorts, waiver gates, columns, and color tests | Deferred analytical columns, live Yahoo, and TTY ambiguity pending |
-| `_daemon` | Tested Rust improvement | Hidden entry, private control, and lifecycle tests | Supported-host lifecycle check pending |
 | `whatis` | Exact parity | Compatibility-alias and help tests | None |
 
-Intentional Rust improvements are direct foreground synchronization, explicit daemon startup, private control without PID signaling, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells. Bounded on-demand RotoWire lineup acquisition supports roster status parity.
+Intentional Rust improvements are foreground-only synchronization, a persistent cross-process execution lock, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Yahoo authentication, credential cleanup, and background daemon surfaces are intentionally retired; transitional `stop` only shuts down an older daemon. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells. Bounded on-demand RotoWire lineup acquisition supports roster status parity.
 
 Roster totals follow the predecessor's shared-MLBAM aggregation for Yahoo split identities, including two-way players such as Shohei Ohtani. MLB innings retain the source's display notation (`6.1`/`6.2`) for aggregate parity; rate calculations still use true thirds internally.
 

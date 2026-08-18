@@ -251,13 +251,12 @@ dependencies = [
 
 [[package]]
 name = "b9"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "clap",
  "dirs",
  "getrandom 0.4.3",
  "keyring",
- "libc",
  "reqwest",
  "rusqlite",
  "serde",

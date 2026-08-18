@@ -2,7 +2,7 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
-Current b9 intentionally diverges from this inventory: Yahoo reads are public-only; `login`, `pp`, `pull-public`, authenticated `fetch`, and Yahoo OAuth flags are removed; `sync -l/--league -T/--team` owns setup; and transitional `logout` can only delete the retired Yahoo credential.
+Current b9 intentionally diverges from this inventory: Yahoo reads are public-only; Yahoo authentication and credential-cleanup surfaces are removed; `sync -l/--league -T/--team` owns setup; synchronization is foreground-only; and transitional `stop` can only shut down a daemon started by an older b9 release.
 
 ## Source Baseline
 
@@ -43,10 +43,10 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 
 ## Implemented b9 Surface
 
-The Rust command layer implements every retained public command plus hidden `_daemon` and compatibility alias `whatis`. Shared metadata owns registration and root help; every public command exposes command-specific help. The command-specific comparison rows below remain authoritative for exact parity, tested Rust improvements, live checks, and explicit gaps.
+The Rust command layer implements the retained public commands and compatibility alias `whatis`. Shared metadata owns registration and root help; every public command exposes command-specific help. The command-specific comparison rows below remain authoritative historical skout evidence for exact parity, tested Rust improvements, live checks, and explicit gaps.
 
-- Preserve `login`, `logout`, `st`, `m`, `r`, `rt`, `t`, `tt`, `sp`, `h`, `p`, `i`, `lm`, `fetch`, `log`, `reset`, `start`, `stop`, and `restart` as public commands.
-- Preserve direct foreground `sync`, explicit daemon startup, private socket control, b9-owned state, and embedded glossary data as tested Rust improvements.
+- Preserve `sync`, `st`, `m`, `r`, `rt`, `t`, `tt`, `sp`, `h`, `p`, `i`, `lm`, `fetch`, `reset`, and transitional `stop` as public commands.
+- Preserve direct foreground `sync`, persistent cross-process synchronization locking, b9-owned state, and embedded glossary data as tested Rust improvements.
 - Preserve skout's compact title, uppercase hierarchy, fixed player and MLB columns, semantic 256-color roles, and automatic plain fallback.
 - Preserve current, explicit-week, weekly, and ISO-day matchup selection with durable stale and local-only fallbacks.
 - Preserve deterministic roster and waiver ordering while leaving PQS, PQT, StartHoldScore, and dependent columns as explicit gaps.
@@ -224,14 +224,10 @@ No crate, framework, or compatibility change is selected.
 
 ## Current b9 Operations Surface
 
-- `b9 fetch <path>` performs one authenticated, bounded Yahoo GET, pretty-prints JSON, preserves other response bytes, and keeps attribution on stderr.
-- `b9 reset` confirms before deleting only b9's database and stale private runtime control state; it preserves configuration, cache, log, credentials, and every skout file.
-- `b9 log` provides bounded tail, follow, and path modes over an owner-only log capped at 5 MiB.
-- `b9 start`, `b9 stop`, and `b9 restart` explicitly manage one detached synchronization daemon through held owner locks and an owner-only Unix control socket.
-- No unrelated command starts the daemon. `b9 sync -f/--force` remains a direct foreground operation and shares its synchronization service with startup and scheduled daemon work.
-- Default `b9 sync`, startup synchronization, and scheduled synchronization to the public Yahoo feed without accessing the credential store.
-- Add authenticated Yahoo supplements only for explicit `b9 sync -o/--oauth` requests.
-- `_daemon` remains hidden; process identity files are diagnostic only and never authorize signaling or shutdown.
+- `b9 sync -f/--force` performs direct foreground synchronization through public Yahoo endpoints and holds a persistent cross-process execution lock.
+- `b9 stop` is transitional and can only shut down a daemon started by an older b9 release through its private Unix control socket.
+- `b9 reset` confirms before stopping an older daemon and deleting only b9's database and verified retired-daemon artifacts; it preserves the foreground lock, configuration, cache, historical log, credentials, and every skout file.
+- `b9 st` reads local status without daemon lifecycle or next-scheduled-run fields.
 - `b9 lm` configures None, Gemini, Groq/Llama, Mistral, Claude, or OpenAI interactively, keeps secrets outside configuration, and uses bounded provider validation and OpenAI model discovery.
 
 ## Verification Strategy
@@ -241,8 +237,8 @@ No crate, framework, or compatibility change is selected.
 - Generate command parsing and help snapshots from the command contract rows.
 - Assert exact version, attribution, stdout, stderr, and exit behavior.
 - Use temporary home/config/database/log paths for configuration, permissions, reset, PID, disabled-marker, and log tests.
-- Use process and signal test doubles for daemon state transitions, escalation, forced sync, and cleanup.
-- Use injected clocks for automatic-sync gates, timeouts, log timestamps, and rotation.
+- Use a private Unix-socket fixture for transitional prior-daemon shutdown and cleanup.
+- Use injected clocks for foreground freshness and timeout behavior.
 - Use terminal and browser adapters for non-live command routing.
 - Convert every explicit gap in the command and operational tables into a named test or a justified later-workstream test.
 
@@ -250,40 +246,35 @@ No crate, framework, or compatibility change is selected.
 
 - Exercise Yahoo OAuth, browser launch, and OS keychain only with Director authorization and non-production credentials.
 - Exercise Yahoo-backed status and fetch only after provider/storage deterministic coverage exists.
-- Exercise real daemon detach, signals, PID lifecycle, and log follow in an isolated temporary profile.
+- Exercise transitional shutdown against a daemon started by the prior release in an isolated temporary profile.
 - Exercise terminal selectors in a supported interactive terminal.
 - Keep live failures from substituting for deterministic pre-release regression coverage.
 
 ### b9 status boundary
 
 - Keep `b9 st` local-first: it reads cached configuration and durable status only.
-- Keep `b9 st` from accessing Yahoo or the macOS Keychain; direct the operator to `b9 login` or an explicit `-o/--oauth` operation when authenticated access is required.
+- Keep `b9 st` from accessing Yahoo or the operating-system keyring; direct the operator to foreground `b9 sync` when fresh public data is required.
 - Render an empty store as unavailable freshness and identity state with `No local snapshot; run b9 sync.` rather than fabricated zero totals.
 - Preserve the last successful snapshot and report bounded provider failures locally.
-- Render the dashboard fields in settled, fixed order: service state and uptime, last/next scheduled run and completion state, database path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit state and bounded last error, unmatched-player count, then selected league and config paths.
-- Persist the daemon's next scheduled synchronization time to the durable store at startup and after every reschedule so `b9 st` can report it without contacting the running daemon process.
+- Render the dashboard fields in settled, fixed order: last-run completion state, database path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit state and bounded last error, unmatched-player count, then selected league and config paths.
 - Read an unmigrated, older-schema database without erroring: report its actual schema version and fall back to default dashboard fields rather than requiring a migration to read status.
 
 ### b9 public feed boundary
 
-- Keep `b9 pp` (long alias `pull-public`) a standalone, permanent command, independent of `b9 login`/`b9 sync` — not a temporary bridge.
-- `pp` is b9's first *visible* command alias. The skout parity baseline's "no production command declares an alias" holds only for the ported skout command set (see Command Matrix above) and the existing hidden `whatis` compatibility alias on `i`; it does not extend to new, b9-only commands. `pp`/`pull-public` are both shown in `b9 --help`.
-- Never read the Yahoo credential, refresh OAuth, or access the macOS Keychain from `pp`.
-- Merge public league, team, roster, and player data during default `sync` without consulting the credential store.
-- Apply authenticated scoring metadata, standings metadata, precise roster metadata, free-agent, and team-identity supplements only during `sync -o/--oauth`.
+- Keep Yahoo reads public-only and free of cookies, authorization headers, browser state, and Yahoo credential access.
+- Acquire settings, standings, rosters, free agents, and primary-team identity during foreground `sync`.
 - Keep transaction-history and roster-move acquisition unimplemented.
-- Keep `b9 st` local-only; never turn status rendering into public or authenticated provider acquisition.
-- Resolve the operator's league without prompting when it's already known: an explicit `-l/--league` override; the league already selected via `login`/`sync`; a previously saved `pp`-only selection; only then an interactive prompt, whose answer is saved for next time. Fail with actionable guidance rather than hanging when none of those resolve and the session isn't interactive.
-- Send one request per explicit `pp` invocation — no automatic retry loop, no daemon/scheduled integration.
+- Keep `b9 st` local-only; never turn status rendering into provider acquisition.
+- Resolve the operator's league from an explicit `-l/--league` override, a saved selection, or an interactive prompt; fail with actionable guidance rather than hanging when none resolve non-interactively.
 
-## Proposed Rust Implementation Slices
+## Historical Rust Implementation Slices
 
 | Slice | Prerequisites | Delivered contracts | Required tests | Explicit exclusions |
 |---|---|---|---|---|
-| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Complete deterministic shell: shared descriptors, global flags, command help, compatibility alias, hidden daemon, streams, and classified exits implemented; live provider outcomes remain separately gated |
+| CLI-1 Command model | Ratified inventory | CMD-ROOT metadata, parsing, help, version, error routing, OP-ATTR | Parser/help/version/stream/exit snapshots | Complete deterministic shell: shared descriptors, global flags, command help, compatibility alias, hidden daemon, streams, and classified exits were proposed; live provider outcomes remained separately gated |
 | CLI-2 Local operations | CLI-1; providers/storage inventory for shared persistence boundaries | OP-CONFIG, CMD-LOG path/tail core, CMD-RESET filesystem core | Temp-profile permissions, atomic config, log, reset/cancel tests | Real keychain/browser/signals/providers |
 | CLI-3 Platform boundaries | CLI-1; explicit implementation design approval | Browser/keychain/terminal/process/signal interfaces preserving macOS behavior | Adapter contract tests and macOS-focused deterministic doubles | New platform support claims |
 | CLI-4 Daemon protocol | CLI-2 and CLI-3; providers/storage sync contract | CMD-START/STOP/RESTART/DAEMON/SYNC and OP-DAEMON/OP-SIGNALS/OP-LOG/OP-SYNC | State-machine, PID, signal, timing, rotation, progress, error tests | Provider pipeline implementation |
 | CLI-5 Command shells | CLI-1; applicable provider/storage and analysis/display/advisory inventories Ratified | Remaining public command parsing, routing, flags, hooks, and exact shell I/O | One contract suite per command plus every recorded gap | Deferred internal algorithms and external calls |
 
-CLI and operations implementation remains blocked until this inventory is Ratified. Each slice still requires its own governed implementation AC.
+These superseded slices preserve the original port plan; the current b9 surface and active parity state are documented above and in `skout-parity-checklist.md`.

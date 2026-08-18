@@ -1,14 +1,22 @@
 //! Bounded local operational commands.
 
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::fs;
+#[cfg(unix)]
+use std::fs::{File, OpenOptions};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{BufRead, Write};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
+#[cfg(unix)]
 use std::thread;
-use std::time::Duration;
+#[cfg(unix)]
+use std::time::{Duration, Instant};
 
-const LOG_LIMIT: u64 = 5 * 1024 * 1024;
-const LINE_LIMIT: usize = 64 * 1024;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 
 /// One contextual operational failure.
 #[derive(Debug)]
@@ -29,6 +37,143 @@ impl fmt::Display for OperationsError {
 }
 
 impl std::error::Error for OperationsError {}
+
+#[cfg(unix)]
+#[derive(Clone, Debug)]
+struct RetiredDaemonPaths {
+    directory: PathBuf,
+    owner: PathBuf,
+    control: PathBuf,
+}
+
+#[cfg(unix)]
+fn retired_daemon_paths() -> Result<RetiredDaemonPaths, OperationsError> {
+    let config = crate::config::config_path()
+        .map_err(|error| OperationsError::new("resolve retired daemon runtime", error))?;
+    let directory = config
+        .parent()
+        .ok_or_else(|| {
+            OperationsError::new(
+                "resolve retired daemon runtime",
+                "configuration has no parent",
+            )
+        })?
+        .join("runtime");
+    Ok(RetiredDaemonPaths {
+        owner: directory.join("daemon.lock"),
+        control: directory.join("daemon.sock"),
+        directory,
+    })
+}
+
+#[cfg(unix)]
+fn request_retired_daemon(command: &str) -> Result<String, OperationsError> {
+    let paths = retired_daemon_paths()?;
+    let mut stream = UnixStream::connect(&paths.control)
+        .map_err(|error| OperationsError::new("connect retired daemon control", error))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(3))))
+        .map_err(|error| OperationsError::new("configure retired daemon control", error))?;
+    stream
+        .write_all(command.as_bytes())
+        .map_err(|error| OperationsError::new("write retired daemon control", error))?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| OperationsError::new("read retired daemon control", error))?;
+    Ok(response)
+}
+
+#[cfg(unix)]
+fn retired_daemon_is_running() -> bool {
+    request_retired_daemon("status\n").is_ok_and(|response| response == "running\n")
+}
+
+#[cfg(unix)]
+fn open_retired_owner(path: &Path) -> Result<Option<File>, OperationsError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let owner = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| OperationsError::new("open retired daemon ownership", error))?;
+    owner.try_lock().map_err(|_| {
+        OperationsError::new(
+            "clean retired daemon runtime",
+            "the prior daemon still owns its lock",
+        )
+    })?;
+    Ok(Some(owner))
+}
+
+#[cfg(unix)]
+fn cleanup_retired_daemon_artifacts() -> Result<(), OperationsError> {
+    if retired_daemon_is_running() {
+        return Err(OperationsError::new(
+            "clean retired daemon runtime",
+            "the prior daemon is still running",
+        ));
+    }
+    let paths = retired_daemon_paths()?;
+    if !paths.directory.exists() {
+        return Ok(());
+    }
+    let owner = open_retired_owner(&paths.owner)?;
+    for path in [&paths.control, &paths.owner] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(OperationsError::new("clean retired daemon runtime", error));
+            }
+        }
+    }
+    drop(owner);
+    Ok(())
+}
+
+#[cfg(unix)]
+fn wait_for_retired_daemon_cleanup(message: &str) -> Result<String, OperationsError> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if !retired_daemon_is_running() && cleanup_retired_daemon_artifacts().is_ok() {
+            return Ok(message.into());
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    match cleanup_retired_daemon_artifacts() {
+        Ok(()) => Ok(message.into()),
+        Err(_) => Err(OperationsError::new(
+            "stop retired daemon",
+            "shutdown timed out",
+        )),
+    }
+}
+
+/// Stop a daemon started by an older b9 release and remove its verified artifacts.
+pub fn stop_retired_daemon() -> Result<String, OperationsError> {
+    #[cfg(not(unix))]
+    {
+        Ok("b9 daemon is not running.\n".into())
+    }
+    #[cfg(unix)]
+    {
+        if !retired_daemon_is_running() {
+            return wait_for_retired_daemon_cleanup("b9 daemon is not running.\n");
+        }
+        let response = request_retired_daemon("stop\n")?;
+        if response != "stopping\n" {
+            return Err(OperationsError::new(
+                "stop retired daemon",
+                "unexpected control response",
+            ));
+        }
+        wait_for_retired_daemon_cleanup("b9 daemon stopped.\n")
+    }
+}
 
 /// Reset an explicit database after confirmation while preserving unrelated files.
 pub fn reset_at(path: &Path, confirmed: bool) -> Result<String, OperationsError> {
@@ -59,135 +204,6 @@ pub fn reset(input: &mut dyn BufRead, output: &mut dyn Write) -> Result<String, 
     if !answer.trim().eq_ignore_ascii_case("y") {
         return Ok("Reset cancelled.\n".into());
     }
-    crate::daemon::stop_if_running()
-        .map_err(|error| OperationsError::new("reset: stop daemon", error))?;
-    let result = reset_at(&path, true)?;
-    crate::daemon::remove_verified_runtime_artifacts()
-        .map_err(|error| OperationsError::new("reset: clean runtime state", error))?;
-    Ok(result)
-}
-
-/// Resolve the private daemon log path.
-pub fn log_path() -> Result<PathBuf, OperationsError> {
-    let config = crate::config::config_path()
-        .map_err(|error| OperationsError::new("resolve daemon log", error))?;
-    Ok(config.with_file_name("svc.log"))
-}
-
-/// Open the private daemon log for append and truncate it above its bound.
-pub fn open_log(path: &Path) -> Result<File, OperationsError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| OperationsError::new("open daemon log", "path has no parent"))?;
-    create_private_directory(parent)?;
-    if fs::metadata(path).is_ok_and(|metadata| metadata.len() >= LOG_LIMIT) {
-        OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(path)
-            .map_err(|error| OperationsError::new("truncate daemon log", error))?;
-    }
-    let mut options = OpenOptions::new();
-    options.create(true).append(true).read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let file = options
-        .open(path)
-        .map_err(|error| OperationsError::new("open daemon log", error))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-            .map_err(|error| OperationsError::new("protect daemon log", error))?;
-    }
-    Ok(file)
-}
-
-/// Read at most the bounded log tail.
-pub fn tail_log(path: &Path, lines: usize) -> Result<String, OperationsError> {
-    let mut file = File::open(path).map_err(|error| {
-        if error.kind() == io::ErrorKind::NotFound {
-            OperationsError::new("daemon log", "not found; run b9 start first")
-        } else {
-            OperationsError::new("open daemon log", error)
-        }
-    })?;
-    let length = file
-        .metadata()
-        .map_err(|error| OperationsError::new("inspect daemon log", error))?
-        .len();
-    file.seek(SeekFrom::Start(length.saturating_sub(LOG_LIMIT)))
-        .map_err(|error| OperationsError::new("seek daemon log", error))?;
-    let mut bytes = Vec::new();
-    file.take(LOG_LIMIT)
-        .read_to_end(&mut bytes)
-        .map_err(|error| OperationsError::new("read daemon log", error))?;
-    let text = String::from_utf8_lossy(&bytes);
-    let rows = text.lines().rev().take(lines).collect::<Vec<_>>();
-    let empty = rows.is_empty();
-    Ok(rows.into_iter().rev().collect::<Vec<_>>().join("\n") + if empty { "" } else { "\n" })
-}
-
-/// Follow a log until the supplied cancellation callback returns true.
-pub fn follow_log(
-    path: &Path,
-    output: &mut dyn Write,
-    cancelled: &mut dyn FnMut() -> bool,
-) -> Result<(), OperationsError> {
-    let mut position = fs::metadata(path)
-        .map_err(|error| OperationsError::new("inspect daemon log", error))?
-        .len();
-    while !cancelled() {
-        let length = fs::metadata(path)
-            .map_err(|error| OperationsError::new("inspect daemon log", error))?
-            .len();
-        if length < position {
-            position = 0;
-        }
-        if length > position {
-            let mut file =
-                File::open(path).map_err(|error| OperationsError::new("open daemon log", error))?;
-            file.seek(SeekFrom::Start(position))
-                .map_err(|error| OperationsError::new("seek daemon log", error))?;
-            let mut reader = BufReader::new(file.take(LOG_LIMIT));
-            let mut line = String::new();
-            while reader
-                .by_ref()
-                .take((LINE_LIMIT + 1) as u64)
-                .read_line(&mut line)
-                .map_err(|error| OperationsError::new("follow daemon log", error))?
-                > 0
-            {
-                if line.len() > LINE_LIMIT || (line.len() == LINE_LIMIT && !line.ends_with('\n')) {
-                    return Err(OperationsError::new(
-                        "follow daemon log",
-                        "line exceeds 65536 bytes",
-                    ));
-                }
-                output
-                    .write_all(line.as_bytes())
-                    .map_err(|error| OperationsError::new("write daemon log", error))?;
-                line.clear();
-            }
-            position = length;
-        }
-        thread::sleep(Duration::from_millis(200));
-    }
-    Ok(())
-}
-
-fn create_private_directory(path: &Path) -> Result<(), OperationsError> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder
-        .create(path)
-        .map_err(|error| OperationsError::new("create b9 runtime directory", error))
+    stop_retired_daemon().map_err(|error| OperationsError::new("reset: stop daemon", error))?;
+    reset_at(&path, true)
 }
