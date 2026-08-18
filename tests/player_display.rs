@@ -238,7 +238,7 @@ fn weekly_totals_follow_league_category_order() {
 }
 
 #[test]
-fn player_table_matches_skout_column_shape_without_deferred_signals() {
+fn player_table_matches_established_column_shape_without_deferred_signals() {
     let output = render_players("HITTERS", &[hitter()], HelpColorMode::Plain);
     assert!(output.contains("HITTER"));
     assert!(output.contains("POS"));
@@ -259,7 +259,7 @@ fn player_table_matches_skout_column_shape_without_deferred_signals() {
 }
 
 #[test]
-fn player_table_preserves_skout_palette_and_visible_column_widths() {
+fn player_table_preserves_palette_and_visible_column_widths() {
     let mut available = hitter();
     available.slot = Some("OF".into());
     let mut bench = hitter();
@@ -296,7 +296,7 @@ fn player_table_preserves_skout_palette_and_visible_column_widths() {
 }
 
 #[test]
-fn roster_status_colors_lineup_indicators_like_skout() {
+fn roster_status_colors_lineup_indicators() {
     let mut starting = hitter();
     starting.slot = Some("OF".into());
     starting.game_status = "7:05p 2 v BOS".into();
@@ -502,7 +502,7 @@ fn pitcher_total_columns_stay_aligned_when_innings_exceed_field_width() {
 }
 
 #[test]
-fn league_totals_match_the_skout_all_team_shape_and_weight_rates() {
+fn league_totals_match_the_all_team_shape_and_weight_rates() {
     let teams = [
         StoredFantasyTeam {
             team_key: "one".into(),

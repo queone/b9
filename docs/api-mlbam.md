@@ -82,22 +82,22 @@ Use namespace `mlb`, logical keys `hitting-range-<season>-<start>-<end>` and `pi
 
 ## Fixture Provenance
 
-The fixtures were derived from the Skout executable contracts, its MLB provider tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
+The fixtures were derived from predecessor executable contracts, MLB provider tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
 
 | Fixture | Exact endpoint or query | Origin |
 |---|---|---|
-| `season.json` | `/seasons/2026?sportId=1` | Skout season test plus API reference |
-| `schedule.json` | `/schedule?sportId=1&date=2026-05-15&hydrate=linescore,probablePitcher,lineups` | Skout schedule models and command fixtures |
-| `boxscore.json` | `/game/800001/boxscore` | Skout boxscore models and enrichment behavior |
-| `standings.json` | `/standings?leagueId=103,104&season=2026` | Skout standings adapter contract |
-| `roster.json` | `/teams/119/roster?rosterType=40Man` | Skout roster tests including two-way compatibility |
-| `people.json` | `/people?personIds=699009,699008` | Skout people identity tests and model contract |
-| `player-hitting.json` | `/people/700001/stats?stats=season&season=2026&group=hitting` | Skout single-player hitting model contract |
-| `player-pitching.json` | `/people/600001/stats?stats=season&season=2026&group=pitching` | Skout single-player pitching model contract |
-| `bulk-hitting.json` | `/stats?stats=season&group=hitting&gameType=S&season=2026&playerPool=All&limit=2000` | Skout bulk hitting model and date-range tests |
-| `bulk-pitching.json` | `/stats?stats=season&group=pitching&gameType=R&season=2026&playerPool=All&limit=2000` | Skout bulk pitching model and date-range tests |
-| `hitter-game-log.json` | `/people/700001/stats?stats=gameLog&season=2026&group=hitting` | Skout hitter game-log contract |
-| `pitcher-game-log.json` | `/people/600001/stats?stats=gameLog&season=2026&group=pitching` | Skout pitcher game-log and quality-start contract |
+| `season.json` | `/seasons/2026?sportId=1` | Season test plus API reference |
+| `schedule.json` | `/schedule?sportId=1&date=2026-05-15&hydrate=linescore,probablePitcher,lineups` | Schedule models and command fixtures |
+| `boxscore.json` | `/game/800001/boxscore` | Boxscore models and enrichment behavior |
+| `standings.json` | `/standings?leagueId=103,104&season=2026` | Standings adapter contract |
+| `roster.json` | `/teams/119/roster?rosterType=40Man` | Roster tests including two-way compatibility |
+| `people.json` | `/people?personIds=699009,699008` | People identity tests and model contract |
+| `player-hitting.json` | `/people/700001/stats?stats=season&season=2026&group=hitting` | Single-player hitting model contract |
+| `player-pitching.json` | `/people/600001/stats?stats=season&season=2026&group=pitching` | Single-player pitching model contract |
+| `bulk-hitting.json` | `/stats?stats=season&group=hitting&gameType=S&season=2026&playerPool=All&limit=2000` | Bulk hitting model and date-range tests |
+| `bulk-pitching.json` | `/stats?stats=season&group=pitching&gameType=R&season=2026&playerPool=All&limit=2000` | Bulk pitching model and date-range tests |
+| `hitter-game-log.json` | `/people/700001/stats?stats=gameLog&season=2026&group=hitting` | Hitter game-log contract |
+| `pitcher-game-log.json` | `/people/600001/stats?stats=gameLog&season=2026&group=pitching` | Pitcher game-log and quality-start contract |
 
 ## Post-Release Verification
 
@@ -105,7 +105,7 @@ Exercise every implemented endpoint live and compare its shape with the committe
 
 ## Fantasy Workflow Integration
 
-Foreground synchronization uses regular-season bulk hitting and pitching identities to reconcile uniquely matching Yahoo players by normalized name, team abbreviation, and role. It stores the current season plus the five completed seasons, independently manifests hitting and pitching completeness, and requires at least 200 hitting or 150 pitching rows before replacing completed-season data. Player cards exclude the current season from AVG162G and compute the rolling pace with skout's cumulative rate formulas.
+Foreground synchronization uses regular-season bulk hitting and pitching identities to reconcile uniquely matching Yahoo players by normalized name, team abbreviation, and role. It stores the current season plus the five completed seasons, independently manifests hitting and pitching completeness, and requires at least 200 hitting or 150 pitching rows before replacing completed-season data. Player cards exclude the current season from AVG162G and compute the rolling pace with cumulative rate formulas.
 
 Sync requires the team directory to contain 30 unique current clubs before dispatching 40-man requests. Each team replaces independently, retains its prior roster on failure, and records a durable team result; foreground output reports one aggregate roster line. Authenticated Yahoo injury status remains primary, with `D7`, `D10`, `D15`, and `D60` roster codes supplying `IL7`, `IL10`, `IL15`, and `IL60` only when precise Yahoo status is unavailable.
 

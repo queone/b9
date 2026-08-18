@@ -6,7 +6,7 @@ use crate::domain::{MlbRosterPlayer, MlbSlateRow, MlbStanding, MlbTeamTotals};
 use crate::player_display::display_positions;
 use crate::terminal::{HelpColorMode, dim, good, roster_row, table_heading, warning};
 
-/// Render grouped 40-man rosters in the established skout information shape.
+/// Render grouped 40-man rosters in b9's established information shape.
 pub fn render_rosters(
     groups: &[(String, Vec<MlbRosterPlayer>)],
     warnings: &[String],

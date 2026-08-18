@@ -93,7 +93,7 @@ fn bulk_stats_preserve_separately_acquired_quality_starts() {
 }
 
 #[test]
-fn completed_hitter_average_excludes_current_and_uses_skout_formulas() {
+fn completed_hitter_average_excludes_current_and_uses_cumulative_formulas() {
     let dir = tempdir().unwrap();
     let mut store =
         Store::open_at_with_clock(dir.path().join("b9.db"), Arc::new(FixedClock)).unwrap();

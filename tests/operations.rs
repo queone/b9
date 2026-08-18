@@ -21,7 +21,7 @@ fn reset_is_idempotent_and_requires_confirmation() {
 }
 
 #[test]
-fn reset_prompt_matches_skout_confirmation_and_recovery_text() {
+fn reset_prompt_matches_confirmation_and_recovery_text() {
     let directory = tempdir().unwrap();
     let database = directory.path().join("b9.db");
     fs::write(&database, b"database").unwrap();

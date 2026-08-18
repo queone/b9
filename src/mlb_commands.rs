@@ -449,12 +449,7 @@ fn production(command: &str) -> Result<(Arc<HttpClient>, Store, String), MlbComm
         HttpClient::production()
             .map_err(|failure| error(command, "initialize HTTP transport", failure))?,
     );
-    let mut store = Store::open().map_err(|failure| error(command, "open database", failure))?;
-    store
-        .bootstrap_legacy()
-        .map_err(|failure| error(command, "import legacy local context", failure))?;
-    crate::config::adopt_legacy()
-        .map_err(|failure| error(command, "adopt legacy selection", failure))?;
+    let store = Store::open().map_err(|failure| error(command, "open database", failure))?;
     let output = Command::new("date")
         .arg("+%Y-%m-%d")
         .output()

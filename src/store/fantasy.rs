@@ -75,6 +75,18 @@ pub struct IdentityCandidate {
 }
 
 impl Store {
+    /// Read the durable Yahoo ownership freshness timestamp.
+    pub fn ownership_synced_at(&self) -> Result<Option<i64>, StoreError> {
+        self.connection()
+            .query_row(
+                "SELECT synced_at FROM sync_log WHERE table_name='rosters'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| StoreError::operation("read ownership freshness", &self.path, error))
+    }
+
     /// Replace one complete source-neutral Yahoo category collection.
     pub fn replace_fantasy_categories(
         &mut self,

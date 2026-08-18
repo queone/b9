@@ -38,10 +38,7 @@ fn context() -> Result<(Store, String, String), PlayerCommandError> {
     if config.current_league.is_empty() {
         return Err(error("player", "no league selected; run b9 st -l <key>"));
     }
-    let mut store = Store::open().map_err(|failure| error("player", failure))?;
-    let _ = store
-        .bootstrap_legacy()
-        .map_err(|failure| error("player", failure))?;
+    let store = Store::open().map_err(|failure| error("player", failure))?;
     Ok((store, config.current_league, config.current_team_key))
 }
 

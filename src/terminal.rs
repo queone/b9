@@ -84,12 +84,12 @@ pub fn section(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;255", mode)
 }
 
-/// Style table and display headings with skout's established blue role.
+/// Style table and display headings with b9's established blue role.
 pub fn table_heading(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;33", mode)
 }
 
-/// Style primary available-player context with skout's green role.
+/// Style primary available-player context with b9's green role.
 pub fn available(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;34", mode)
 }
@@ -142,12 +142,12 @@ pub fn warning(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;100", mode)
 }
 
-/// Style a player-detail injury status using skout's red role.
+/// Style a player-detail injury status using b9's red role.
 pub fn injury_status(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;196", mode)
 }
 
-/// Style a lineup marker with skout's active or subdued green/red ramp.
+/// Style a lineup marker with b9's active or subdued green/red ramp.
 pub fn lineup_indicator(
     value: &str,
     favorable: bool,

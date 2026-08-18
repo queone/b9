@@ -2,15 +2,15 @@
 
 ## MLB utilities
 
-Run `b9 t` to show skout-style 40-man roster tables or `b9 t [team]` to select a club by abbreviation, city, or nickname. The roster rows include season statistics and locally cached Yahoo rank, eligibility, and owner context when available. Run `b9 tt` for division-grouped MLB standings with inline team totals. Run `b9 sp` for three compact host-local slate days with paired probable pitchers, matchup odds bars, and optional local roster context.
+Run `b9 t` to show compact 40-man roster tables or `b9 t [team]` to select a club by abbreviation, city, or nickname. The roster rows include season statistics and locally cached Yahoo rank, eligibility, and owner context when available. Run `b9 tt` for division-grouped MLB standings with inline team totals. Run `b9 sp` for three compact host-local slate days with paired probable pitchers, matchup odds bars, and optional local roster context.
 
-Use `-f` or `--force` with any MLB utility command to bypass its freshness gate. These commands use unauthenticated MLB, ESPN, and OddsShark data and never require or refresh Yahoo authorization. When b9 has no Yahoo-linked local state, the first MLB utility command imports compatible identity, ownership, statistics, freshness, and empty selections once from the read-only legacy database at `~/.config/skout/skout.db`. Complete cached snapshots remain available with a stale warning when a provider refresh fails. OddsShark is an unofficial future-game source and may degrade without failing the MLB slate.
+Use `-f` or `--force` with any MLB utility command to bypass its freshness gate. These commands use unauthenticated MLB, ESPN, and OddsShark data and never require or refresh Yahoo authorization. Complete cached snapshots remain available with a stale warning when a provider refresh fails. OddsShark is an unofficial future-game source and may degrade without failing the MLB slate.
 
-`b9` is the Rust successor to the Go `skout` binary. Retained commands have fixture-backed deterministic behavior and explicit Rust improvements around state isolation, foreground synchronization, transport bounds, and snapshot recovery. Replacement readiness remains conditional on the live Yahoo and terminal gates recorded in the parity documents.
+`b9` is a Rust fantasy-baseball utility with fixture-backed deterministic behavior, isolated state, foreground synchronization, bounded transport, and snapshot recovery.
 
 ## Why
 
-Develop the successor to `skout` in Rust over multiple releases while keeping parity and replacement-readiness claims tied to verified behavior.
+Provide fast, local-first fantasy-baseball decisions from public data sources.
 
 ## Current CLI
 
@@ -18,7 +18,7 @@ Run `b9` or `b9 --help` to see the implemented command surface in b9's compact U
 
 Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout. Ambiguous non-interactive lookups report matching keys and ask for an exact key.
 
-Use `b9 sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic Yahoo setup and foreground refresh. In an interactive terminal, `sync` prompts for a missing league or primary team and saves both selections. Use `st` for local status; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; and `reset` for explicit local-state removal. Yahoo fantasy reads use unauthenticated public endpoints and never consult the Keychain. Background synchronization and Yahoo authentication commands are retired. Tables preserve skout's column order, fixed-width hierarchy, semantic 256-color roles, and plain redirected fallback wherever the available Rust data model supports the corresponding cells.
+Use `b9 sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic Yahoo setup and foreground refresh. In an interactive terminal, `sync` prompts for a missing league or primary team and saves both selections. Use `st` for local status; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; and `reset` for explicit local-state removal. Yahoo fantasy reads use unauthenticated public endpoints and never consult the Keychain. Background synchronization and Yahoo authentication commands are retired. Tables use fixed-width hierarchy, semantic 256-color roles, and an equivalent plain redirected fallback.
 
 `b9 sync` refreshes Yahoo league settings, standings, complete rosters, and free agents alongside MLB and odds data. Yahoo resources are staged and validated before one atomic fantasy-snapshot replacement. Each completed foreground step appears immediately, followed by one aggregate result. A provider failure retains that provider's last complete data and does not block unrelated sources; retry later after checking network access.
 

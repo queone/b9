@@ -2,7 +2,7 @@
 
 ## Product Direction
 
-Maintain b9 as an independent Rust fantasy-baseball utility. Use skout only as a historical behavior reference when useful.
+Maintain b9 as an independent Rust fantasy-baseball utility.
 
 ## Ideas To Explore
 

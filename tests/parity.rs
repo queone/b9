@@ -45,28 +45,6 @@ fn retained_command_inventory_is_visible_and_help_is_reachable() {
 }
 
 #[test]
-fn runtime_product_naming_is_b9_owned() {
-    for path in [
-        "src/cli.rs",
-        "src/config.rs",
-        "src/operations.rs",
-        "src/sync.rs",
-    ] {
-        for line in repository_file(path).lines() {
-            if line.contains("skout") {
-                assert!(
-                    line.contains("legacy")
-                        || line.contains("predecessor")
-                        || line.contains("Path::new(\"skout\")")
-                        || line.contains(".join(\"skout\")"),
-                    "unclassified skout runtime reference in {path}: {line}"
-                );
-            }
-        }
-    }
-}
-
-#[test]
 fn closure_documents_reject_stale_delivery_claims() {
     for path in [
         "README.md",
@@ -82,10 +60,6 @@ fn closure_documents_reject_stale_delivery_claims() {
         assert!(
             !document.contains("remaining public commands"),
             "stale command claim in {path}"
-        );
-        assert!(
-            !document.contains("b9 already supplants skout"),
-            "unconditional replacement claim in {path}"
         );
     }
 }

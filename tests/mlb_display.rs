@@ -78,7 +78,7 @@ fn totals_plain_output_matches_golden() {
 }
 
 #[test]
-fn totals_color_only_context_columns_like_skout() {
+fn totals_color_only_context_columns() {
     let team = yankees();
     let output = render_totals(
         &[MlbStanding {

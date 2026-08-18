@@ -207,7 +207,7 @@ fn matchup_name_columns_use_first_initial_and_leave_space_before_status() {
 }
 
 #[test]
-fn matchup_colors_batting_order_and_probable_starter_markers_like_skout() {
+fn matchup_colors_batting_order_and_probable_starter_markers() {
     let matchup = Matchup {
         week: 7,
         week_start: "2026-05-04".into(),

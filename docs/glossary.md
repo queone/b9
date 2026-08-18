@@ -803,7 +803,7 @@ Average Total Cost — rest-of-season projection system. Weight 0.25 in PP blend
 Per-MLB-team count of players whose joined Yahoo `Owner` is non-empty — i.e. they currently occupy a roster slot (active, BN, IL, or NA) on one of the fantasy teams in the user's league. Two-way players count once per MLB team. Displayed as a dark-gray integer column in `b9 tt`, between `GB` and `PA`.
 
 - **Aliases:** YP
-- **Where:** `cmd/skout/teams_totals.go` — `countYahooRosteredOnMLBTeam`
+- **Where:** historical Go source — `countYahooRosteredOnMLBTeam`
 - **Prompt:** no
 
 ### Age (`age`) [b9]
@@ -824,7 +824,7 @@ The Baseball-Reference-style 162-game pace row at the top of the SPLIT table on 
 
 The per-day (hitter) or per-appearance (pitcher) section below the SPLIT table on the player detail card (AC137). Hitter rows walk the last 10 calendar days, using the player's MLB team schedule + boxscore lineup to surface non-appearance days; the indicator column shows a green batting-order digit when the player started, a red `X` when the team played but he didn't appear, and a blank when the team had no game. Pitcher rows show the last 10 appearances filtered by `mlb.ParseIP(InningsPitched) > 0` so gaps stay invisible; the indicator is a green `●`.
 
-- **Where:** `cmd/skout/playercard_gamelog.go` — `buildHitterGameLog`, `buildPitcherGameLog`; `internal/display/playercard_gamelog.go` — `printHitterGameLog`, `printPitcherGameLog`, `hitterGameLogCells`, `pitcherGameLogCells`
+- **Where:** historical Go source — `buildHitterGameLog`, `buildPitcherGameLog`, `printHitterGameLog`, `printPitcherGameLog`, `hitterGameLogCells`, `pitcherGameLogCells`
 - **Prompt:** no
 
 ### Savant (`savant`) [b9]

@@ -140,49 +140,6 @@ pub fn write(config: &Config) -> Result<(), ConfigError> {
     write_at(config_path()?, config)
 }
 
-/// Adopt legacy selections only where the b9 configuration is still empty.
-pub fn adopt_legacy_at(
-    target: impl AsRef<Path>,
-    legacy: impl AsRef<Path>,
-) -> Result<Config, ConfigError> {
-    let target = target.as_ref();
-    let mut current = read_at(target)?;
-    let legacy_path = legacy.as_ref();
-    let legacy = match read_at(legacy_path) {
-        Ok(value) => value,
-        Err(_error) if !legacy_path.exists() => return Ok(current),
-        Err(error) => return Err(error),
-    };
-    let changed = (current.current_league.is_empty() && !legacy.current_league.is_empty())
-        || (current.current_team_key.is_empty() && !legacy.current_team_key.is_empty());
-    if current.current_league.is_empty() {
-        current.current_league = legacy.current_league;
-    }
-    if current.current_team_key.is_empty() {
-        current.current_team_key = legacy.current_team_key;
-    }
-    if changed {
-        write_at(target, &current)?;
-    }
-    Ok(current)
-}
-
-/// Adopt selections from the established legacy user configuration.
-pub fn adopt_legacy() -> Result<Config, ConfigError> {
-    let home = std::env::var_os("HOME").ok_or_else(|| {
-        ConfigError::new(
-            "resolve legacy configuration path",
-            Path::new("skout"),
-            "HOME is unavailable",
-        )
-    })?;
-    let legacy = PathBuf::from(home)
-        .join(".config")
-        .join("skout")
-        .join("config.json");
-    adopt_legacy_at(config_path()?, legacy)
-}
-
 #[cfg(unix)]
 fn create_private_directory(parent: &Path, path: &Path) -> Result<(), ConfigError> {
     use std::os::unix::fs::DirBuilderExt;

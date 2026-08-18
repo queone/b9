@@ -16,7 +16,6 @@ const SCHEMA: &str = include_str!("store/schema.sql");
 
 mod fantasy;
 mod freshness;
-mod legacy;
 mod mlb;
 mod odds;
 mod seasons;
@@ -31,7 +30,6 @@ pub use fantasy::{
 pub use freshness::{
     ItemRefreshPolicy, RowRefreshPolicy, SyncItemState, SyncRowState, SyncStateStatus,
 };
-pub use legacy::LegacyBootstrap;
 pub use mlb::{RosterWrite, SeasonStatWrite, StoredRosterPlayer, WaiverCandidate};
 pub use odds::{MoneylineQuote, StoredMoneyline};
 pub use seasons::{SeasonState, SeasonSyncStatus};
