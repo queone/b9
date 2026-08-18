@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.28.2 | Remove unused Rust dependencies |
 | 0.28.1 | Ignore retired Yahoo authentication failures in status |
 | 0.28.0 | Simplify CLI and retire daemon and advisory subsystems |
 | 0.27.0 | AC35: Retire background sync daemon and Yahoo logout |

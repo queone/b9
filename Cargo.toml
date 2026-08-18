@@ -1,6 +1,6 @@
 [package]
 name = "b9"
-version = "0.28.1"
+version = "0.28.2"
 edition = "2024"
 
 [[bin]]
@@ -8,9 +8,8 @@ name = "b9"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "=4.5.47", features = ["derive"] }
+clap = "=4.5.47"
 dirs = "=6.0.0"
-getrandom = "=0.4.3"
 reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "rustls"] }
 rusqlite = { version = "=0.40.1", features = ["bundled"] }
 serde = { version = "=1.0.229", features = ["derive"] }
