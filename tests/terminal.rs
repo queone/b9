@@ -228,3 +228,37 @@ fn dashboard_colors_failed_run_and_open_circuit_distinctly() {
     assert!(colored.contains("\u{1b}[38;5;100mfailed at unix 50\u{1b}[0m"));
     assert!(colored.contains("\u{1b}[38;5;100mblocked\u{1b}[0m"));
 }
+
+#[test]
+fn dashboard_suppresses_retired_authenticated_yahoo_recovery() {
+    use b9::config::Config;
+    use b9::store::StoreStatus;
+    use b9::sync::render_dashboard;
+    use std::path::Path;
+
+    let status = StoreStatus {
+        mlb_identity_count: 1,
+        circuit_open: true,
+        provider_failure_count: 5,
+        provider_last_error: Some(
+            "fetch authenticated Yahoo settings: acquire Yahoo fantasy data: Yahoo API returned HTTP 403; Yahoo denied authorization for this app — run b9 login to reauthorize"
+                .into(),
+        ),
+        last_run_status: Some("failed".into()),
+        last_run_at: Some(50),
+        ..StoreStatus::default()
+    };
+
+    let plain = render_dashboard(
+        Path::new("/db"),
+        Path::new("/config.json"),
+        &Config::default(),
+        &status,
+        60,
+        HelpColorMode::Plain,
+    );
+    assert!(plain.contains("Last run: none"));
+    assert!(plain.contains("Provider failures: ready (0)"));
+    assert!(plain.contains("Last provider error: none"));
+    assert!(!plain.contains("b9 login"));
+}

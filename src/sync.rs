@@ -84,7 +84,21 @@ pub fn render_dashboard(
     mode: HelpColorMode,
 ) -> String {
     let has_snapshot = status.mlb_identity_count > 0 || status.unmatched_player_count > 0;
-    let last_run = match (&status.last_run_status, status.last_run_at) {
+    let legacy_authenticated_yahoo_failure = status
+        .provider_last_error
+        .as_deref()
+        .is_some_and(is_legacy_authenticated_yahoo_error);
+    let last_run_status = if legacy_authenticated_yahoo_failure {
+        None
+    } else {
+        status.last_run_status.as_deref()
+    };
+    let last_run_at = if legacy_authenticated_yahoo_failure {
+        None
+    } else {
+        status.last_run_at
+    };
+    let last_run = match (last_run_status, last_run_at) {
         (Some(run_status), Some(at)) if run_status == "success" => {
             terminal::good(&format!("{run_status} at unix {at}"), mode)
         }
@@ -121,20 +135,26 @@ pub fn render_dashboard(
             .map_or_else(|| terminal::dim("none", mode), |at| format!("unix {at}"))
     };
 
+    let circuit_open = status.circuit_open && !legacy_authenticated_yahoo_failure;
+    let provider_failure_count = if legacy_authenticated_yahoo_failure {
+        0
+    } else {
+        status.provider_failure_count
+    };
     let provider_failures = format!(
         "{} ({})",
-        if status.circuit_open {
+        if circuit_open {
             terminal::warning("blocked", mode)
         } else {
             terminal::good("ready", mode)
         },
-        status.provider_failure_count
+        provider_failure_count
     );
-    let last_error = status
-        .provider_last_error
-        .as_deref()
-        .unwrap_or("none")
-        .to_owned();
+    let last_error = if legacy_authenticated_yahoo_failure {
+        "none"
+    } else {
+        status.provider_last_error.as_deref().unwrap_or("none")
+    };
 
     let unmatched = if has_snapshot {
         status.unmatched_player_count.to_string()
@@ -165,6 +185,13 @@ pub fn render_dashboard(
         output.push_str("No local snapshot; run b9 sync.\n");
     }
     output
+}
+
+fn is_legacy_authenticated_yahoo_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("fetch authenticated yahoo")
+        || error.contains("run b9 login")
+        || error.contains("reauthorize")
 }
 
 #[cfg(test)]
@@ -235,6 +262,37 @@ mod tests {
         assert!(output.contains("Unmatched players: 6"));
         assert!(output.contains("League: 431.l.12345"));
         assert!(!output.contains("No local snapshot"));
+    }
+
+    #[test]
+    fn legacy_authenticated_yahoo_failure_is_not_rendered_as_current_state() {
+        let status = StoreStatus {
+            mlb_identity_count: 8_835,
+            yahoo_identity_count: 2_507,
+            circuit_open: true,
+            provider_failure_count: 5,
+            provider_last_error: Some(
+                "fetch authenticated Yahoo settings: Yahoo API returned HTTP 403; run b9 login to reauthorize"
+                    .into(),
+            ),
+            last_run_status: Some("failed".into()),
+            last_run_at: Some(1_787_067_588),
+            ..StoreStatus::default()
+        };
+        let output = render_dashboard(
+            Path::new("/db"),
+            Path::new("/config.json"),
+            &Config::default(),
+            &status,
+            0,
+            HelpColorMode::Plain,
+        );
+        assert!(output.contains("Yahoo: public endpoints"));
+        assert!(output.contains("Last run: none"));
+        assert!(output.contains("Provider failures: ready (0)"));
+        assert!(output.contains("Last provider error: none"));
+        assert!(!output.contains("login"));
+        assert!(!output.contains("reauthorize"));
     }
 }
 
