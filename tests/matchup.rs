@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use b9::advisory::{AdvisoryAction, AdvisoryResponse};
-use b9::domain::{Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats};
+use b9::domain::{
+    GameIndicator, Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats,
+    StoredFantasyPlayer,
+};
 use std::time::{Duration, SystemTime};
 
 use b9::matchup::{
@@ -25,6 +28,32 @@ fn team(key: &str, name: &str, mine: bool, wins: i32, losses: i32) -> MatchupTea
         completed_games: 4,
         live_games: 1,
         remaining_games: 5,
+    }
+}
+
+fn stored_hitter() -> StoredFantasyPlayer {
+    StoredFantasyPlayer {
+        yahoo_player_id: Some(1),
+        mlbam_id: Some(2),
+        name: "Ada Hitter".into(),
+        team: "NYY".into(),
+        role: "B".into(),
+        positions: "OF".into(),
+        is_closer: false,
+        status: String::new(),
+        injury_note: String::new(),
+        birth_date: String::new(),
+        game_status: "7:05p   v BOS".into(),
+        game_indicator: GameIndicator::None,
+        hand: "R".into(),
+        rank: Some(12),
+        percent_owned: None,
+        owner: Some("Operators".into()),
+        slot: Some("OF".into()),
+        batting: [100.0, 0.35, 20.0, 5.0, 18.0, 3.0, 0.275],
+        pitching: [0.0; 7],
+        hitting_advanced: [None; 8],
+        pitching_advanced: [None; 6],
     }
 }
 
@@ -56,8 +85,8 @@ fn player(id: i64, name: &str, role: &str, position: Position) -> PlayerWeekStat
 fn baseline_matchup_is_deterministic_and_marks_stale_data() {
     let matchup = Matchup {
         week: 7,
-        week_start: String::new(),
-        week_end: String::new(),
+        week_start: "2026-05-04".into(),
+        week_end: "2026-05-10".into(),
         status: "midevent".into(),
         teams: [
             team("one", "Operators", true, 5, 4),
@@ -81,6 +110,7 @@ fn baseline_matchup_is_deterministic_and_marks_stale_data() {
             matchup: matchup.clone(),
             mine: mine.clone(),
             opponent: opponent.clone(),
+            teams: vec![],
             stale: false,
             odds: vec![],
         },
@@ -92,6 +122,7 @@ fn baseline_matchup_is_deterministic_and_marks_stale_data() {
             matchup,
             mine,
             opponent,
+            teams: vec![],
             stale: true,
             odds: vec![],
         },
@@ -122,15 +153,117 @@ fn baseline_matchup_is_deterministic_and_marks_stale_data() {
                 week: 7,
                 players: vec![],
             },
+            teams: vec![],
             stale: false,
             odds: vec![],
         },
         HelpColorMode::Color,
     );
-    assert!(colored.contains("\u{1b}[1;38;5;231mMATCHUP WEEK 7\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;33mMATCHUP WEEK:\u{1b}[0m"));
     assert!(colored.contains("\u{1b}[38;5;33mHITTER"));
     assert!(colored.contains("\u{1b}[38;5;245m  H/AB\u{1b}[0m"));
     assert!(colored.contains("\u{1b}[38;5;245mSLOT\u{1b}[0m"));
+}
+
+#[test]
+fn matchup_name_columns_use_first_initial_and_leave_space_before_status() {
+    let matchup = Matchup {
+        week: 7,
+        week_start: "2026-05-04".into(),
+        week_end: "2026-05-10".into(),
+        status: "midevent".into(),
+        teams: [
+            team("one", "Operators", true, 5, 4),
+            team("two", "Opponents", false, 4, 5),
+        ],
+    };
+    let mut hitter = player(1, "Fernando Tatis Jr. SD", "B", Position::Outfield);
+    hitter.injury_status = "7:10p   v BOS".into();
+    let mut pitcher = player(2, "Braxton Ashcraft PIT", "P", Position::StartingPitcher);
+    pitcher.injury_status = "6:40p   v DET".into();
+    let output = render_matchup(
+        &MatchupView {
+            matchup,
+            mine: RosterWeekStats {
+                team_key: "one".into(),
+                team_name: "Operators".into(),
+                week: 7,
+                players: vec![hitter, pitcher],
+            },
+            opponent: RosterWeekStats {
+                team_key: "two".into(),
+                team_name: "Opponents".into(),
+                week: 7,
+                players: vec![],
+            },
+            teams: vec![],
+            stale: false,
+            odds: vec![],
+        },
+        HelpColorMode::Plain,
+    );
+
+    assert!(output.contains("F Tatis Jr. SD      7:10p   v BOS"));
+    assert!(output.contains("B Ashcraft PIT      6:40p   v DET"));
+}
+
+#[test]
+fn matchup_renders_named_category_totals_inline_with_winner_colors() {
+    let mut mine = team("one", "Operators", true, 5, 4);
+    let mut opponent = team("two", "Opponents", false, 4, 5);
+    for (name, mine_value, opponent_value) in [
+        ("H/AB", "8/20", "7/20"),
+        ("R", "6", "4"),
+        ("HR", "2", "2"),
+        ("RBI", "8", "5"),
+        ("SB", "1", "3"),
+        ("AVG", ".400", ".350"),
+        ("IP", "11.0", "9.0"),
+        ("W", "1", "0"),
+        ("SV", "1", "1"),
+        ("K", "9", "10"),
+        ("ERA", "6.55", "3.00"),
+        ("WHIP", "1.55", "1.20"),
+    ] {
+        mine.stats.insert(name.into(), mine_value.into());
+        opponent.stats.insert(name.into(), opponent_value.into());
+    }
+    let roster = |key: &str, name: &str| RosterWeekStats {
+        team_key: key.into(),
+        team_name: name.into(),
+        week: 7,
+        players: vec![],
+    };
+    let view = MatchupView {
+        matchup: Matchup {
+            week: 7,
+            week_start: String::new(),
+            week_end: String::new(),
+            status: String::new(),
+            teams: [mine, opponent],
+        },
+        mine: roster("one", "Operators"),
+        opponent: roster("two", "Opponents"),
+        teams: vec![],
+        stale: false,
+        odds: vec![b9::matchup::MatchupOdds {
+            mine: true,
+            line: "Cole             v Bello             NYY@BOS  ██████░░░░ 55%".into(),
+        }],
+    };
+    let plain = render_matchup(&view, HelpColorMode::Plain);
+    assert!(!plain.contains("CATEGORIES"));
+    assert!(plain.contains("8/20   6   2   8    1   .400"));
+    assert!(plain.contains("11.0   1   1   9  6.55  1.55"));
+    assert!(plain.find("PITCHER").unwrap() < plain.find("SUMMARY").unwrap());
+    assert!(plain.contains("MY ODDS"));
+    assert!(!plain.contains("Games:"));
+
+    let colored = render_matchup(&view, HelpColorMode::Color);
+    assert!(colored.contains("\u{1b}[1;38;5;34m   6\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[1;38;5;196m  6.55\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[1;38;5;231m   2\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;34m██████░░░░ 55%\u{1b}[0m"));
 }
 
 #[test]
@@ -156,12 +289,13 @@ fn matchup_surfaces_strip_team_name_emoji_from_cached_views() {
             matchup,
             mine: roster("one", "💎 Operators"),
             opponent: roster("two", "⚾ Opponents"),
+            teams: vec![],
             stale: true,
             odds: vec![],
         },
         HelpColorMode::Plain,
     );
-    assert!(output.contains("Operators  5–4–1    Opponents  4–5–1"));
+    assert!(output.contains("Operators (5-4-1 | —)"));
     assert!(!output.contains('💎'));
     assert!(!output.contains('⚾'));
 
@@ -172,7 +306,8 @@ fn matchup_surfaces_strip_team_name_emoji_from_cached_views() {
         },
         HelpColorMode::Plain,
     );
-    assert!(local.starts_with("Operators\n"));
+    assert!(local.starts_with("YAHOO UNAVAILABLE"));
+    assert!(local.contains("ROSTER: Operators"));
 }
 
 #[test]
@@ -213,6 +348,7 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
     assert!(
         MatchupOptions {
             day: Some("2026-04-01".into()),
+            oauth: true,
             ..MatchupOptions::default()
         }
         .validate()
@@ -235,6 +371,23 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
         .validate()
         .is_err()
     );
+    let oauth_required = MatchupOptions {
+        week: Some(2),
+        ..MatchupOptions::default()
+    }
+    .validate()
+    .unwrap_err()
+    .to_string();
+    assert!(oauth_required.contains("add -o/--oauth"));
+    assert!(
+        MatchupOptions {
+            week: Some(2),
+            oauth: true,
+            ..MatchupOptions::default()
+        }
+        .validate()
+        .is_ok()
+    );
 }
 
 #[test]
@@ -242,11 +395,13 @@ fn local_fallback_omits_opponent_categories_and_advisory() {
     let output = render_local_matchup(
         &LocalMatchupView {
             team_name: "Operators".into(),
-            players: vec![player(1, "Ada Hitter", "B", Position::Outfield)],
+            players: vec![stored_hitter()],
         },
         HelpColorMode::Plain,
     );
-    assert!(output.contains("LOCAL ROSTER"));
+    assert!(output.contains("showing local roster"));
+    assert!(output.contains("SLOT  HITTER"));
+    assert!(output.contains("Ada Hitter NYY"));
     assert!(!output.contains("CATEGORIES"));
     assert!(!output.contains("ADVIS"));
     assert!(!output.contains("|"));

@@ -16,7 +16,7 @@ use crate::domain::{
     FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, MatchupTeam, PlayerWeekStats,
     Position, RosterWeekStats, ScoringType,
 };
-use crate::providers::yahoo_fantasy::RosterPosition;
+use crate::providers::yahoo_fantasy::{RosterPosition, parse_scoreboard};
 use crate::transport::{HttpClient, HttpHeader, HttpMethod, HttpRequest};
 
 /// Yahoo stat ids observed to be counting stats — safe to sum directly
@@ -196,6 +196,49 @@ impl YahooPublicClient {
             YahooPublicError::Malformed("response is not the expected JSON shape".into())
         })?;
         raw.into_feed(league_id, league_key)
+    }
+
+    /// Fetch Yahoo's authoritative weekly matchup totals without OAuth.
+    pub fn fetch_scoreboard(
+        &self,
+        league_key: &str,
+        week: i32,
+    ) -> Result<Vec<Matchup>, YahooPublicError> {
+        let response = self
+            .http
+            .execute(HttpRequest {
+                method: HttpMethod::Get,
+                url: format!(
+                    "{PUBLIC_FANTASY_URL}/league/{league_key}/scoreboard;week={week}?format=json"
+                ),
+                headers: vec![HttpHeader {
+                    name: "Accept".into(),
+                    value: "application/json".into(),
+                }],
+                body: Vec::new(),
+                timeout: REQUEST_TIMEOUT,
+                body_limit: BODY_LIMIT,
+            })
+            .map_err(|error| YahooPublicError::Request(error.to_string()))?;
+        if response.status != 200 {
+            return Err(YahooPublicError::Blocked {
+                status: response.status,
+            });
+        }
+        let value: serde_json::Value = serde_json::from_slice(&response.body).map_err(|_| {
+            YahooPublicError::Malformed("public scoreboard is not valid JSON".into())
+        })?;
+        let matchups = parse_scoreboard(&value).map_err(|error| {
+            YahooPublicError::Malformed(format!(
+                "public scoreboard has an unexpected shape: {error}"
+            ))
+        })?;
+        if matchups.is_empty() {
+            return Err(YahooPublicError::Incomplete(
+                "public scoreboard has no matchups",
+            ));
+        }
+        Ok(matchups)
     }
 
     /// Supplement public roster players with Yahoo's unauthenticated season rank.
@@ -581,6 +624,7 @@ fn team_stats_display(sums: &HashMap<&'static str, f64>) -> HashMap<String, Stri
             "0.000".to_owned()
         },
     );
+    display.insert("H/AB".to_owned(), format!("{batting_h:.0}/{ab:.0}"));
     display.insert(
         ERA_ID.to_owned(),
         if true_innings > 0.0 {

@@ -38,7 +38,7 @@ Use this table as the working source of truth for ad hoc skout-to-b9 command com
 | `tt` | MLB standings and team totals | — | Not assessed | Compare standings, totals, Yahoo-player counts, sorting, formatting, and freshness. |
 | `sp` | Probable-pitcher slate and odds | — | Not assessed | Compare dates, starters, ownership, odds sources, degradation, sorting, and colors. |
 | `r` | Fantasy roster display | 99% | Functionally complete | Continue logging minor live-data, status, color, position, and alignment discrepancies. |
-| `rt` | Fantasy roster totals | — | Not assessed | Compare season and weekly modes, category order, aggregation, alignment, and flags. |
+| `rt` | Fantasy roster totals | 99% | Functionally complete | Continue logging minor live-data, aggregation, color, and alignment discrepancies. |
 | `h` | Hitter pool and hitter detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
 | `p` | Pitcher pool and pitcher detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
 | `i` | Glossary lookup | — | Not assessed | Compare full glossary, exact lookup, ambiguity, suggestions, selection, and formatting. |

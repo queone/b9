@@ -537,27 +537,41 @@ pub fn synchronize_with_origin(
 
 /// Synchronize the selected league's stable normalized Yahoo data in the foreground.
 pub fn synchronize(league_override: Option<&str>) -> Result<String, WorkflowError> {
-    synchronize_with_options(league_override, false)
+    synchronize_with_options(league_override, false, false)
 }
 
 /// Synchronize manually, optionally bypassing all application freshness gates.
 pub fn synchronize_with_options(
     league_override: Option<&str>,
     _force: bool,
+    include_authenticated: bool,
 ) -> Result<String, WorkflowError> {
     // Stable Yahoo synchronization currently always acquires a complete snapshot. Keeping force
     // explicit here preserves manual execution semantics when freshness gates are introduced.
-    synchronize_for_origin(league_override, SyncOrigin::Manual)
+    synchronize_for_origin_reporting(
+        league_override,
+        SyncOrigin::Manual,
+        &mut |_| Ok(()),
+        true,
+        include_authenticated,
+    )
 }
 
 /// Synchronize manually while writing and flushing each completed step immediately.
 pub fn synchronize_with_options_streaming(
     league_override: Option<&str>,
     _force: bool,
+    include_authenticated: bool,
     output: &mut dyn Write,
 ) -> Result<String, WorkflowError> {
     let mut reporter = |line: &str| write_sync_progress(output, line);
-    synchronize_for_origin_reporting(league_override, SyncOrigin::Manual, &mut reporter, false)
+    synchronize_for_origin_reporting(
+        league_override,
+        SyncOrigin::Manual,
+        &mut reporter,
+        false,
+        include_authenticated,
+    )
 }
 
 /// Synchronize the selected league through the shared production service.
@@ -565,7 +579,7 @@ pub fn synchronize_for_origin(
     league_override: Option<&str>,
     origin: SyncOrigin,
 ) -> Result<String, WorkflowError> {
-    synchronize_for_origin_reporting(league_override, origin, &mut |_| Ok(()), true)
+    synchronize_for_origin_reporting(league_override, origin, &mut |_| Ok(()), true, false)
 }
 
 fn synchronize_for_origin_reporting(
@@ -573,6 +587,7 @@ fn synchronize_for_origin_reporting(
     origin: SyncOrigin,
     reporter: &mut dyn FnMut(&str) -> Result<(), WorkflowError>,
     include_step_lines: bool,
+    include_authenticated: bool,
 ) -> Result<String, WorkflowError> {
     let _guard = crate::daemon::SyncGuard::acquire()
         .map_err(|error| WorkflowError::context("start synchronization", error))?;
@@ -650,7 +665,9 @@ fn synchronize_for_origin_reporting(
     record_outcome(&mut outcomes, public, reporter)?;
 
     let mut authenticated_outcomes = Vec::new();
-    if league_key.is_empty() {
+    if !include_authenticated {
+        // Public Yahoo is the default and does not consult Keychain.
+    } else if league_key.is_empty() {
         record_outcome(
             &mut authenticated_outcomes,
             failed_sync_item(
@@ -842,14 +859,16 @@ fn synchronize_for_origin_reporting(
             }
         }
     }
-    if authenticated_outcomes
-        .iter()
-        .all(|outcome| outcome.succeeded)
+    if include_authenticated
+        && authenticated_outcomes
+            .iter()
+            .all(|outcome| outcome.succeeded)
     {
         let _ = store.record_provider_success();
-    } else if let Some(failure) = authenticated_outcomes
-        .iter()
-        .find(|outcome| !outcome.succeeded)
+    } else if include_authenticated
+        && let Some(failure) = authenticated_outcomes
+            .iter()
+            .find(|outcome| !outcome.succeeded)
     {
         let _ = store.record_provider_failure(&failure.detail);
     }

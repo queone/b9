@@ -615,16 +615,16 @@ pub fn parse_free_agents(value: &Value) -> Result<Vec<FantasyPlayer>, YahooFanta
 pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError> {
     let root = parsed_root(value)?;
     let mut output = Vec::new();
-    for map in entity_maps(root, "week") {
+    for map in scoreboard_matchup_maps(root) {
         let week = integer(&map, "week") as i32;
         let team_maps = map
             .get("teams")
-            .map(|value| entity_maps(value, "team_key"))
+            .map(scoreboard_team_maps)
             .unwrap_or_default();
         if week <= 0 || team_maps.len() != 2 {
             continue;
         }
-        let teams = team_maps
+        let mut teams = team_maps
             .into_iter()
             .map(|team| MatchupTeam {
                 team_key: text(&team, "team_key"),
@@ -640,6 +640,18 @@ pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError
                 remaining_games: integer(&team, "remaining_games") as i32,
             })
             .collect::<Vec<_>>();
+        if teams
+            .iter()
+            .all(|team| team.wins == 0 && team.losses == 0 && team.ties == 0)
+        {
+            let (wins, losses, ties) = matchup_category_record(&teams[0], &teams[1]);
+            teams[0].wins = wins;
+            teams[0].losses = losses;
+            teams[0].ties = ties;
+            teams[1].wins = losses;
+            teams[1].losses = wins;
+            teams[1].ties = ties;
+        }
         output.push(Matchup {
             week,
             week_start: text(&map, "week_start"),
@@ -649,6 +661,94 @@ pub fn parse_scoreboard(value: &Value) -> Result<Vec<Matchup>, YahooFantasyError
         });
     }
     Ok(output)
+}
+
+fn matchup_category_record(mine: &MatchupTeam, opponent: &MatchupTeam) -> (i32, i32, i32) {
+    const CATEGORIES: [(&str, bool); 10] = [
+        ("7", false),
+        ("12", false),
+        ("13", false),
+        ("16", false),
+        ("3", false),
+        ("28", false),
+        ("32", false),
+        ("42", false),
+        ("26", true),
+        ("27", true),
+    ];
+    let mut record = (0, 0, 0);
+    for (id, lower_wins) in CATEGORIES {
+        let values = mine
+            .stats
+            .get(id)
+            .and_then(|value| value.parse::<f64>().ok())
+            .zip(
+                opponent
+                    .stats
+                    .get(id)
+                    .and_then(|value| value.parse::<f64>().ok()),
+            );
+        match values {
+            Some((mine, opponent)) if mine != opponent => {
+                if (mine > opponent) != lower_wins {
+                    record.0 += 1;
+                } else {
+                    record.1 += 1;
+                }
+            }
+            _ => record.2 += 1,
+        }
+    }
+    record
+}
+
+fn scoreboard_team_maps(value: &Value) -> Vec<Map<String, Value>> {
+    fn visit(value: &Value, output: &mut Vec<Map<String, Value>>) {
+        match value {
+            Value::Array(values) => values.iter().for_each(|value| visit(value, output)),
+            Value::Object(values) => {
+                if let Some(team) = values.get("team") {
+                    let map = flattened(team);
+                    if !text(&map, "team_key").is_empty() {
+                        output.push(map);
+                        return;
+                    }
+                }
+                values.values().for_each(|value| visit(value, output));
+            }
+            _ => {}
+        }
+    }
+
+    let mut output = Vec::new();
+    visit(value, &mut output);
+    if output.is_empty() {
+        entity_maps(value, "team_key")
+    } else {
+        output
+    }
+}
+
+fn scoreboard_matchup_maps(value: &Value) -> Vec<Map<String, Value>> {
+    fn visit(value: &Value, output: &mut Vec<Map<String, Value>>) {
+        match value {
+            Value::Array(values) => values.iter().for_each(|value| visit(value, output)),
+            Value::Object(values) => {
+                if values.contains_key("week")
+                    && values.contains_key("week_start")
+                    && values.contains_key("week_end")
+                {
+                    output.push(flattened(value));
+                }
+                values.values().for_each(|value| visit(value, output));
+            }
+            _ => {}
+        }
+    }
+
+    let mut output = Vec::new();
+    visit(value, &mut output);
+    output
 }
 
 fn team_statistics(team: &Map<String, Value>) -> std::collections::HashMap<String, String> {

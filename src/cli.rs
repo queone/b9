@@ -339,6 +339,7 @@ where
             let result = crate::sync::synchronize_with_options_streaming(
                 matches.get_one::<String>("league").map(String::as_str),
                 subcommand.get_flag("force"),
+                subcommand.get_flag("oauth"),
                 &mut output,
             );
             drop(output);
@@ -416,6 +417,7 @@ where
                 weekly: subcommand.get_flag("weekly"),
                 day: subcommand.get_one::<String>("day").cloned(),
                 advise: subcommand.get_flag("advise"),
+                oauth: subcommand.get_flag("oauth"),
             },
         )),
         Some(("t", subcommand)) => run_result(crate::mlb_commands::show_teams(
@@ -433,6 +435,7 @@ where
         )),
         Some(("rt", subcommand)) => run_result(crate::player_commands::show_totals(
             subcommand.get_one::<String>("weekly").map(String::as_str),
+            subcommand.get_flag("oauth"),
         )),
         Some(("h", subcommand)) => run_result(crate::player_commands::show_pool(
             "B",
@@ -524,17 +527,32 @@ fn root_command(version: &'static str) -> Command {
                         .short('a')
                         .long("advise")
                         .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("oauth")
+                        .short('o')
+                        .long("oauth")
+                        .help("Use authenticated Yahoo data")
+                        .action(ArgAction::SetTrue),
                 );
         }
         if descriptor.name == "rt" {
-            subcommand = subcommand.arg(
-                Arg::new("weekly")
-                    .short('w')
-                    .long("weekly")
-                    .value_name("WEEK|DATE")
-                    .num_args(0..=1)
-                    .default_missing_value("true"),
-            );
+            subcommand = subcommand
+                .arg(
+                    Arg::new("weekly")
+                        .short('w')
+                        .long("weekly")
+                        .value_name("WEEK|DATE")
+                        .num_args(0..=1)
+                        .default_missing_value("true"),
+                )
+                .arg(
+                    Arg::new("oauth")
+                        .short('o')
+                        .long("oauth")
+                        .help("Use authenticated Yahoo data")
+                        .action(ArgAction::SetTrue),
+                );
         }
         if matches!(descriptor.name, "h" | "p") {
             subcommand = subcommand
@@ -562,13 +580,21 @@ fn root_command(version: &'static str) -> Command {
             );
         }
         if descriptor.name == "sync" {
-            subcommand = subcommand.arg(
-                Arg::new("force")
-                    .short('f')
-                    .long("force")
-                    .help("Bypass synchronization freshness gates")
-                    .action(ArgAction::SetTrue),
-            );
+            subcommand = subcommand
+                .arg(
+                    Arg::new("force")
+                        .short('f')
+                        .long("force")
+                        .help("Bypass synchronization freshness gates")
+                        .action(ArgAction::SetTrue),
+                )
+                .arg(
+                    Arg::new("oauth")
+                        .short('o')
+                        .long("oauth")
+                        .help("Include authenticated Yahoo supplements")
+                        .action(ArgAction::SetTrue),
+                );
         }
         if descriptor.name == "log" {
             subcommand = subcommand

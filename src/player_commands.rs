@@ -73,7 +73,10 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
     yahoo_result_notice(&store, output)
 }
 
-fn populate_game_statuses(players: &mut [StoredFantasyPlayer], identities: &[StoredFantasyPlayer]) {
+pub(crate) fn populate_game_statuses(
+    players: &mut [StoredFantasyPlayer],
+    identities: &[StoredFantasyPlayer],
+) {
     let Ok(http) = HttpClient::production() else {
         return;
     };
@@ -304,7 +307,7 @@ fn utc_date(now: SystemTime) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-fn mlb_team_abbreviation(team_id: i64) -> &'static str {
+pub(crate) fn mlb_team_abbreviation(team_id: i64) -> &'static str {
     match team_id {
         108 => "LAA",
         109 => "AZ",
@@ -404,7 +407,16 @@ fn select_roster_team<'a>(
 }
 
 /// Render configured roster totals from durable state.
-pub fn show_totals(weekly: Option<&str>) -> Result<String, PlayerCommandError> {
+pub fn show_totals(
+    weekly: Option<&str>,
+    include_authenticated: bool,
+) -> Result<String, PlayerCommandError> {
+    if weekly.is_some() && !include_authenticated {
+        return Err(error(
+            "rt",
+            "weekly totals require authenticated Yahoo data; add -o/--oauth and retry",
+        ));
+    }
     let (mut store, league, selected) = context()?;
     if let Some(requested) = weekly {
         return show_weekly_totals(&mut store, &league, &selected, requested);

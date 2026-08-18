@@ -1,6 +1,6 @@
 //! Lazy Yahoo matchup acquisition, durable fallback, view assembly, and rendering.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -17,14 +17,16 @@ use crate::domain::{
     Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats, StoredFantasyPlayer,
     clean_fantasy_team_name, is_valid_iso_date,
 };
+use crate::player_display::render_players as render_roster_players;
 use crate::providers::advisory::{AdvisoryClient, AdvisoryProvider};
-use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, MlbClient};
+use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, MlbClient, ScheduleGame};
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
 use crate::providers::yahoo_public::{RedzoneFeed, YahooPublicClient, league_id_from_key};
 use crate::store::{Store, StoredFantasyTeam};
 use crate::terminal::{
-    HelpColorMode, detected_help_color_mode, dim, table_heading, title, warning,
+    HelpColorMode, available, detected_help_color_mode, dim, good, injury_status, table_heading,
+    visible_width, warning,
 };
 use crate::transport::HttpClient;
 
@@ -37,6 +39,7 @@ pub struct MatchupOptions {
     pub weekly: bool,
     pub day: Option<String>,
     pub advise: bool,
+    pub oauth: bool,
 }
 
 impl MatchupOptions {
@@ -62,6 +65,12 @@ impl MatchupOptions {
                 "match: day must use YYYY-MM-DD; correct the date and retry".into(),
             ));
         }
+        if !self.oauth && (self.day.is_some() || self.week.is_some() || self.advise) {
+            return Err(MatchupError(
+                "match: this mode requires authenticated Yahoo data; add -o/--oauth and retry"
+                    .into(),
+            ));
+        }
         Ok(())
     }
 }
@@ -72,15 +81,23 @@ pub struct MatchupView {
     pub matchup: Matchup,
     pub mine: RosterWeekStats,
     pub opponent: RosterWeekStats,
+    pub teams: Vec<StoredFantasyTeam>,
     pub stale: bool,
-    pub odds: Vec<String>,
+    pub odds: Vec<MatchupOdds>,
+}
+
+/// One probable-pitcher odds row assigned to a matchup side.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatchupOdds {
+    pub mine: bool,
+    pub line: String,
 }
 
 /// A local-only fallback when no compatible Yahoo scoreboard exists.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalMatchupView {
     pub team_name: String,
-    pub players: Vec<PlayerWeekStats>,
+    pub players: Vec<StoredFantasyPlayer>,
 }
 
 /// One contextual matchup workflow failure.
@@ -167,24 +184,33 @@ pub fn show_with_team_options(
         YahooClient::production(http.clone())
             .map_err(|error| contextual("initialize Yahoo", error))?,
     );
-    let oauth_available = yahoo
-        .token_status()
-        .is_ok_and(|status| status.valid || status.has_refresh);
+    let oauth_available = if options.oauth {
+        yahoo
+            .token_status()
+            .is_ok_and(|status| status.valid || status.has_refresh)
+    } else {
+        false
+    };
+    if options.oauth && !oauth_available {
+        return Err(MatchupError(
+            "match: Yahoo authentication is unavailable; run b9 login and retry".into(),
+        ));
+    }
     let effective_team_key = resolved_team_override
         .clone()
         .or_else(|| (!config.current_team_key.is_empty()).then(|| config.current_team_key.clone()));
 
-    // The default weekly view (no explicit day/week/advise) is the only one
-    // eligible to prefer the public feed — day-mode and advisory-mode stay
-    // strictly OAuth-sourced (per settled Out-of-Scope: pp-fetched players
-    // aren't MLBAM-identity-reconciled, so a daily overlay over them would
-    // silently no-op). Reads there always prefer the freshest non-stale row
-    // across *both* sources (AT4); day/advise/explicit-week below are
-    // completely untouched and keep reading only the "yahoo" source.
+    // The default weekly view uses the public feed unless OAuth was explicitly
+    // requested. Day, explicit-week, and advisory modes require OAuth because
+    // public-feed players are not MLBAM-identity-reconciled for daily overlays.
     if options.day.is_none() && !options.advise && options.week.is_none() {
-        let public_league_id = league_id_from_key(&league_key)
-            .or_else(|_| league_id_from_key(&config.pull_public_league_id))
-            .ok();
+        let public_league_id = if options.oauth {
+            None
+        } else {
+            league_id_from_key(&league_key)
+                .or_else(|_| league_id_from_key(&config.pull_public_league_id))
+                .ok()
+        };
         let source = YahooFantasyClient::new(yahoo);
         let public_client = YahooPublicClient::production()
             .map_err(|error| contextual("initialize public feed client", error))?;
@@ -278,12 +304,17 @@ pub fn show_with_team_options(
             http.clone(),
         )?;
     }
-    let odds = acquire_odds_context(&mut store, http.clone()).unwrap_or_default();
+    apply_roster_statuses(&store, &league_key, &mut mine, &mut opponent)?;
+    let odds = acquire_odds_context(&mut store, http.clone(), &mine, &opponent).unwrap_or_default();
     let stale = scoreboard_stale || mine_stale || opponent_stale;
+    let teams = store
+        .fantasy_teams(&league_key)
+        .map_err(|error| contextual("read matchup team context", error))?;
     let view = MatchupView {
         matchup,
         mine,
         opponent,
+        teams,
         stale,
         odds,
     };
@@ -358,6 +389,55 @@ fn apply_daily_roster(
             player.strikeouts = split.stat.strikeouts as i32;
             player.earned_run_average = split.stat.era.clone();
             player.whip = split.stat.whip.clone();
+        }
+    }
+}
+
+fn apply_roster_statuses(
+    store: &Store,
+    league_key: &str,
+    mine: &mut RosterWeekStats,
+    opponent: &mut RosterWeekStats,
+) -> Result<(), MatchupError> {
+    let identities = store
+        .fantasy_players(league_key)
+        .map_err(|error| contextual("read roster status identities", error))?;
+    let roster_ids = mine
+        .players
+        .iter()
+        .chain(&opponent.players)
+        .map(|player| player.yahoo_player_id)
+        .collect::<HashSet<_>>();
+    let mut roster_players = identities
+        .iter()
+        .filter(|player| {
+            player
+                .yahoo_player_id
+                .is_some_and(|id| roster_ids.contains(&id))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    crate::player_commands::populate_game_statuses(&mut roster_players, &identities);
+    apply_resolved_roster_statuses(&mut mine.players, &roster_players);
+    apply_resolved_roster_statuses(&mut opponent.players, &roster_players);
+    Ok(())
+}
+
+fn apply_resolved_roster_statuses(
+    players: &mut [PlayerWeekStats],
+    resolved: &[StoredFantasyPlayer],
+) {
+    for player in players {
+        let Some(status) = resolved
+            .iter()
+            .find(|stored| stored.yahoo_player_id == Some(player.yahoo_player_id))
+        else {
+            continue;
+        };
+        if !status.status.is_empty() {
+            player.injury_status.clone_from(&status.status);
+        } else if !status.game_status.is_empty() {
+            player.injury_status.clone_from(&status.game_status);
         }
     }
 }
@@ -457,10 +537,11 @@ fn show_weekly_matchup(
     http: Arc<HttpClient>,
     now: SystemTime,
 ) -> Result<String, MatchupError> {
-    let active_source = if oauth_available {
-        YAHOO_SOURCE
-    } else {
+    let use_public = public_league_id.is_some();
+    let active_source = if use_public {
         PUBLIC_PULL_SOURCE
+    } else {
+        YAHOO_SOURCE
     };
     let team_key = match effective_team_key {
         Some(team_key) => team_key,
@@ -474,13 +555,13 @@ fn show_weekly_matchup(
         }
     };
     let public_league_id = match (oauth_available, public_league_id) {
-        (false, Some(id)) => Some(id),
+        (_, Some(id)) => Some(id),
         (false, None) => {
             return Err(MatchupError(
                 "match: no public league id resolved; run b9 pp -l <id> once and retry".into(),
             ));
         }
-        (true, id) => id,
+        (true, None) => None,
     };
     let mut redzone_feed: Option<Result<RedzoneFeed, String>> = None;
     let current_week = store
@@ -497,19 +578,19 @@ fn show_weekly_matchup(
         &scoreboard_scope,
         now,
         || -> Result<Vec<Matchup>, String> {
-            if oauth_available {
-                source
-                    .scoreboard(league_key, current_week)
-                    .map_err(|error| error.to_string())
-            } else {
+            if use_public {
                 ensure_redzone_feed(
                     public_client,
                     &mut redzone_feed,
-                    public_league_id.expect("public league id when !oauth_available"),
+                    public_league_id.expect("public league id when use_public"),
                     league_key,
                 )
                 .map(|feed| feed.matchups.clone())
                 .map_err(|error| error.to_string())
+            } else {
+                source
+                    .scoreboard(league_key, current_week)
+                    .map_err(|error| error.to_string())
             }
         },
     ) {
@@ -541,15 +622,11 @@ fn show_weekly_matchup(
         &mine_scope,
         now,
         || -> Result<RosterWeekStats, String> {
-            if oauth_available {
-                source
-                    .roster_week_stats(&matchup.teams[my_index].team_key, week)
-                    .map_err(|error| error.to_string())
-            } else {
+            if use_public {
                 ensure_redzone_feed(
                     public_client,
                     &mut redzone_feed,
-                    public_league_id.expect("public league id when !oauth_available"),
+                    public_league_id.expect("public league id when use_public"),
                     league_key,
                 )
                 .map_err(|error| error.to_string())
@@ -559,6 +636,10 @@ fn show_weekly_matchup(
                         .cloned()
                         .ok_or_else(|| "no roster available for the selected team".into())
                 })
+            } else {
+                source
+                    .roster_week_stats(&matchup.teams[my_index].team_key, week)
+                    .map_err(|error| error.to_string())
             }
         },
     )?;
@@ -569,15 +650,11 @@ fn show_weekly_matchup(
         &opponent_scope,
         now,
         || -> Result<RosterWeekStats, String> {
-            if oauth_available {
-                source
-                    .roster_week_stats(&matchup.teams[opponent_index].team_key, week)
-                    .map_err(|error| error.to_string())
-            } else {
+            if use_public {
                 ensure_redzone_feed(
                     public_client,
                     &mut redzone_feed,
-                    public_league_id.expect("public league id when !oauth_available"),
+                    public_league_id.expect("public league id when use_public"),
                     league_key,
                 )
                 .map_err(|error| error.to_string())
@@ -587,6 +664,10 @@ fn show_weekly_matchup(
                         .cloned()
                         .ok_or_else(|| "no roster available for the opponent team".into())
                 })
+            } else {
+                source
+                    .roster_week_stats(&matchup.teams[opponent_index].team_key, week)
+                    .map_err(|error| error.to_string())
             }
         },
     )?;
@@ -611,12 +692,17 @@ fn show_weekly_matchup(
             http.clone(),
         )?;
     }
-    let odds = acquire_odds_context(store, http).unwrap_or_default();
+    apply_roster_statuses(store, league_key, &mut mine, &mut opponent)?;
+    let odds = acquire_odds_context(store, http, &mine, &opponent).unwrap_or_default();
     let stale = scoreboard_stale || mine_stale || opponent_stale;
+    let teams = store
+        .fantasy_teams(league_key)
+        .map_err(|error| contextual("read matchup team context", error))?;
     let view = MatchupView {
         matchup,
         mine,
         opponent,
+        teams,
         stale,
         odds,
     };
@@ -640,9 +726,13 @@ fn ensure_redzone_feed<'a>(
     league_key: &str,
 ) -> Result<&'a RedzoneFeed, MatchupError> {
     let result = cache.get_or_insert_with(|| {
-        client
+        let mut feed = client
             .fetch_redzone(public_league_id, league_key)
-            .map_err(|error| contextual("fetch public matchup feed", error).to_string())
+            .map_err(|error| contextual("fetch public matchup feed", error).to_string())?;
+        feed.matchups = client
+            .fetch_scoreboard(league_key, feed.week)
+            .map_err(|error| contextual("fetch public matchup totals", error).to_string())?;
+        Ok(feed)
     });
     result
         .as_ref()
@@ -920,67 +1010,208 @@ pub fn render_matchup(view: &MatchupView, mode: HelpColorMode) -> String {
         .iter()
         .position(|team| team.team_key == view.opponent.team_key)
         .unwrap_or(1)];
+    let mine_team = view
+        .teams
+        .iter()
+        .find(|team| team.team_key == mine.team_key);
+    let opponent_team = view
+        .teams
+        .iter()
+        .find(|team| team.team_key == opponent.team_key);
     let mut output = String::new();
-    output.push_str(&title(&format!("MATCHUP WEEK {}", view.matchup.week), mode));
-    output.push('\n');
     output.push_str(&format!(
-        "{}  {}–{}–{}    {}  {}–{}–{}\n",
-        clean_fantasy_team_name(&mine.name),
-        mine.wins,
-        mine.losses,
-        mine.ties,
-        clean_fantasy_team_name(&opponent.name),
-        opponent.wins,
-        opponent.losses,
-        opponent.ties
+        "{} {}\n",
+        table_heading("MATCHUP WEEK:", mode),
+        dim(
+            &format!(
+                "{} of 26 ({})",
+                view.matchup.week,
+                matchup_week_dates(&view.matchup.week_start, &view.matchup.week_end)
+            ),
+            mode
+        )
     ));
     if view.stale {
-        output.push_str("STALE — showing the last complete Yahoo matchup snapshot.\n");
+        output.push_str(&warning(
+            "STALE — Yahoo unavailable; showing the last complete matchup snapshot",
+            mode,
+        ));
+        output.push('\n');
     }
-    render_categories(&mut output, mine, opponent, mode);
+    let divider = format!(
+        "{}           {}\n",
+        matchup_team_divider(mine, mine_team, mode),
+        matchup_team_divider(opponent, opponent_team, mode)
+    );
+    output.push_str(divider.trim_end());
+    output.push('\n');
     render_players(
         &mut output,
-        "HITTERS",
         &view.mine.players,
         &view.opponent.players,
         "B",
+        mine,
+        opponent,
         mode,
     );
-    if !view.odds.is_empty() {
-        output.push('\n');
-        output.push_str(&table_heading("ODDS", mode));
-        output.push('\n');
-        for line in &view.odds {
-            output.push_str("  ");
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
+    output.push('\n');
     render_players(
         &mut output,
-        "PITCHERS",
         &view.mine.players,
         &view.opponent.players,
         "P",
+        mine,
+        opponent,
         mode,
     );
-    output.push_str(&format!(
-        "Games: {} complete / {} live / {} remaining\n",
-        mine.completed_games + opponent.completed_games,
-        mine.live_games + opponent.live_games,
-        mine.remaining_games + opponent.remaining_games
-    ));
+    render_matchup_summary(&mut output, mine, view, mode);
     output
+}
+
+fn matchup_team_divider(
+    matchup: &MatchupTeam,
+    team: Option<&StoredFantasyTeam>,
+    mode: HelpColorMode,
+) -> String {
+    let (wins, losses, ties, rank) = team.map_or(
+        (
+            i64::from(matchup.wins),
+            i64::from(matchup.losses),
+            i64::from(matchup.ties),
+            0,
+        ),
+        |team| (team.wins, team.losses, team.ties, team.rank),
+    );
+    let played = matchup.completed_games + matchup.live_games;
+    let total = played + matchup.remaining_games;
+    let name = available(&clean_fantasy_team_name(&matchup.name), mode);
+    let rank = if rank > 0 {
+        ordinal(rank)
+    } else {
+        "—".into()
+    };
+    let info = dim(
+        &format!(
+            "({wins}-{losses}-{ties} | {rank}) - {} rem ({played}/{total})",
+            matchup.remaining_games
+        ),
+        mode,
+    );
+    let mut value = format!("{name} {info}");
+    let width = visible_width(&value);
+    if width < 67 {
+        value.push_str(&" ".repeat(67 - width));
+    }
+    value
+}
+
+fn ordinal(value: i64) -> String {
+    let suffix = if (11..=13).contains(&(value % 100)) {
+        "th"
+    } else {
+        match value % 10 {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        }
+    };
+    format!("{value}{suffix}")
+}
+
+fn render_matchup_summary(
+    output: &mut String,
+    mine: &MatchupTeam,
+    view: &MatchupView,
+    mode: HelpColorMode,
+) {
+    output.push('\n');
+    output.push_str(&table_heading("SUMMARY", mode));
+    output.push('\n');
+    output.push_str(&format!(
+        "{} {} / {} / {}\n",
+        table_heading(&format!("{:<12}", "W/T/L"), mode),
+        good(&mine.wins.to_string(), mode),
+        warning(&mine.ties.to_string(), mode),
+        injury_status(&mine.losses.to_string(), mode),
+    ));
+    render_odds_block(
+        output,
+        "MY ODDS",
+        view.odds.iter().filter(|odds| odds.mine),
+        mode,
+    );
+    render_odds_block(
+        output,
+        "OPP ODDS",
+        view.odds.iter().filter(|odds| !odds.mine),
+        mode,
+    );
+}
+
+fn render_odds_block<'a>(
+    output: &mut String,
+    label: &str,
+    odds: impl Iterator<Item = &'a MatchupOdds>,
+    mode: HelpColorMode,
+) {
+    for (index, odds) in odds.enumerate() {
+        let label = if index == 0 {
+            table_heading(&format!("{label:<12}"), mode)
+        } else {
+            " ".repeat(12)
+        };
+        output.push_str(&format!("{label} {}\n", render_odds_line(&odds.line, mode)));
+    }
+}
+
+fn matchup_week_dates(start: &str, end: &str) -> String {
+    format!("{} / {}", matchup_week_date(start), matchup_week_date(end))
+}
+
+fn matchup_week_date(value: &str) -> String {
+    let parts = value
+        .split('-')
+        .filter_map(|part| part.parse::<i64>().ok())
+        .collect::<Vec<_>>();
+    let [year, month, day] = parts.as_slice() else {
+        return value.to_owned();
+    };
+    let month_name = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ]
+    .get((*month - 1) as usize)
+    .copied()
+    .unwrap_or("");
+    if month_name.is_empty() {
+        return value.to_owned();
+    }
+    let adjusted_year = year - i64::from(*month <= 2);
+    let era = adjusted_year.div_euclid(400);
+    let year_of_era = adjusted_year - era * 400;
+    let adjusted_month = month + if *month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * adjusted_month + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    let days = era * 146_097 + day_of_era - 719_468;
+    let weekday =
+        ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][(days + 4).rem_euclid(7) as usize];
+    format!("{weekday} {month_name}-{day:02}")
 }
 
 /// Render the deliberately limited fallback without matchup or advisory claims.
 pub fn render_local_matchup(view: &LocalMatchupView, mode: HelpColorMode) -> String {
     let mut output = format!(
-        "{}\nLOCAL ROSTER — Yahoo matchup data is unavailable.\n",
-        title(&clean_fantasy_team_name(&view.team_name), mode)
+        "{}\n",
+        warning(
+            "YAHOO UNAVAILABLE — showing local roster; matchup totals and opponent unavailable",
+            mode
+        )
     );
-    render_local_players(&mut output, "HITTERS", &view.players, "B", mode);
-    render_local_players(&mut output, "PITCHERS", &view.players, "P", mode);
+    output.push_str(&render_roster_players(
+        &clean_fantasy_team_name(&view.team_name),
+        &view.players,
+        mode,
+    ));
     output
 }
 
@@ -1002,7 +1233,6 @@ fn local_matchup_view(
         .map_err(|error| contextual("read local roster", error))?
         .into_iter()
         .filter(|player| player.owner.as_deref() == Some(team.name.as_str()))
-        .map(local_player_week_stats)
         .collect();
     Ok(LocalMatchupView {
         team_name: team.name,
@@ -1010,61 +1240,12 @@ fn local_matchup_view(
     })
 }
 
-fn local_player_week_stats(player: StoredFantasyPlayer) -> PlayerWeekStats {
-    let eligible_positions = player
-        .positions
-        .split(',')
-        .filter(|position| !position.is_empty())
-        .map(Position::from)
-        .collect();
-    PlayerWeekStats {
-        yahoo_player_id: player.yahoo_player_id.unwrap_or_default(),
-        name: player.name,
-        team: player.team,
-        position_type: player.role.clone(),
-        slot_position: player
-            .slot
-            .as_deref()
-            .map_or(Position::Bench, Position::from),
-        eligible_positions,
-        injury_status: player.status,
-        hab: player.batting[0].round().to_string(),
-        runs: player.batting[2].round() as i32,
-        home_runs: player.batting[3].round() as i32,
-        runs_batted_in: player.batting[4].round() as i32,
-        stolen_bases: player.batting[5].round() as i32,
-        batting_average: format!("{:.3}", player.batting[6]),
-        innings_pitched: format!("{:.1}", player.pitching[0]),
-        wins: player.pitching[2].round() as i32,
-        saves: player.pitching[3].round() as i32,
-        strikeouts: player.pitching[4].round() as i32,
-        earned_run_average: format!("{:.2}", player.pitching[5]),
-        whip: format!("{:.2}", player.pitching[6]),
-    }
-}
-
-fn render_local_players(
-    output: &mut String,
-    heading: &str,
-    players: &[PlayerWeekStats],
-    role: &str,
-    mode: HelpColorMode,
-) {
-    output.push('\n');
-    output.push_str(&table_heading(heading, mode));
-    output.push('\n');
-    for player in players.iter().filter(|player| player.position_type == role) {
-        output.push_str(&format!(
-            "  {:<3} {} ({})\n",
-            player.slot_position, player.name, player.team
-        ));
-    }
-}
-
 fn acquire_odds_context(
     store: &mut Store,
     http: Arc<HttpClient>,
-) -> Result<Vec<String>, MatchupError> {
+    mine: &RosterWeekStats,
+    opponent: &RosterWeekStats,
+) -> Result<Vec<MatchupOdds>, MatchupError> {
     let now = SystemTime::now();
     let date = utc_date(now)?;
     let schedule = crate::providers::mlb::MlbClient::production(http.clone())
@@ -1109,17 +1290,115 @@ fn acquire_odds_context(
                 && normalized_team(&line.away_team) == normalized_team(&game.away_team_name)
         }) && line.quoted
         {
-            let (away, home) = normalized_probabilities(line.away_moneyline, line.home_moneyline);
-            output.push(format!(
-                "{} {:.0}% @ {} {:.0}%",
-                line.away_team,
-                away * 100.0,
-                line.home_team,
-                home * 100.0
-            ));
+            output.extend(rostered_probable_odds(&game, line, mine, opponent));
         }
     }
     Ok(output)
+}
+
+fn roster_has_probable_pitcher(
+    game: &ScheduleGame,
+    mine: &RosterWeekStats,
+    opponent: &RosterWeekStats,
+) -> bool {
+    let probable = [
+        game.away_probable_pitcher_name.as_str(),
+        game.home_probable_pitcher_name.as_str(),
+    ]
+    .map(normalized_team);
+    mine.players
+        .iter()
+        .chain(&opponent.players)
+        .filter(|player| player.position_type == "P")
+        .any(|player| probable.contains(&normalized_team(&player.name)))
+}
+
+fn rostered_probable_odds(
+    game: &ScheduleGame,
+    line: &crate::providers::espn::GameLine,
+    mine: &RosterWeekStats,
+    opponent: &RosterWeekStats,
+) -> Vec<MatchupOdds> {
+    if !roster_has_probable_pitcher(game, mine, opponent) {
+        return Vec::new();
+    }
+    let rostered_pitchers = mine
+        .players
+        .iter()
+        .chain(&opponent.players)
+        .filter(|player| player.position_type == "P")
+        .collect::<Vec<_>>();
+    let (away_probability, home_probability) =
+        normalized_probabilities(line.away_moneyline, line.home_moneyline);
+    let away_team = crate::player_commands::mlb_team_abbreviation(game.away_team_id);
+    let home_team = crate::player_commands::mlb_team_abbreviation(game.home_team_id);
+    let tag = format!("{away_team}@{home_team}");
+    [
+        (
+            game.away_probable_pitcher_name.as_str(),
+            game.home_probable_pitcher_name.as_str(),
+            away_probability,
+        ),
+        (
+            game.home_probable_pitcher_name.as_str(),
+            game.away_probable_pitcher_name.as_str(),
+            home_probability,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(pitcher, opposing_pitcher, probability)| {
+        let player = rostered_pitchers
+            .iter()
+            .find(|player| normalized_team(&player.name) == normalized_team(pitcher))?;
+        let mine = mine
+            .players
+            .iter()
+            .any(|mine| mine.yahoo_player_id == player.yahoo_player_id);
+        Some((pitcher, opposing_pitcher, probability, mine))
+    })
+    .map(|(pitcher, opposing_pitcher, probability, mine)| {
+        let percent = (probability * 100.0).round() as usize;
+        let filled = ((percent + 5) / 10).min(10);
+        let bar = format!("{}{}", "█".repeat(filled), "░".repeat(10 - filled));
+        MatchupOdds {
+            mine,
+            line: format!(
+                "{:<16} v {:<16}  {:<7}  {bar} {percent}%",
+                last_name(pitcher),
+                last_name(opposing_pitcher),
+                tag,
+            ),
+        }
+    })
+    .collect()
+}
+
+fn last_name(name: &str) -> &str {
+    let name = name.split_once(" (").map_or(name, |(name, _)| name);
+    name.split_whitespace().last().unwrap_or("")
+}
+
+fn render_odds_line(line: &str, mode: HelpColorMode) -> String {
+    if mode == HelpColorMode::Plain {
+        return line.to_owned();
+    }
+    let Some(bar_start) = line.find(['█', '░']) else {
+        return line.to_owned();
+    };
+    let percent = line[bar_start..]
+        .split_whitespace()
+        .last()
+        .and_then(|value| value.strip_suffix('%'))
+        .and_then(|value| value.parse::<usize>().ok());
+    let Some(percent) = percent else {
+        return line.to_owned();
+    };
+    let code = if percent >= 50 { "38;5;34" } else { "38;5;196" };
+    format!(
+        "{}\u{1b}[{code}m{}\u{1b}[0m",
+        &line[..bar_start],
+        &line[bar_start..]
+    )
 }
 
 fn normalized_team(value: &str) -> String {
@@ -1169,44 +1448,17 @@ fn utc_date(time: SystemTime) -> Result<String, MatchupError> {
     Ok(format!("{year:04}-{month:02}-{day:02}"))
 }
 
-fn render_categories(
-    output: &mut String,
-    mine: &MatchupTeam,
-    opponent: &MatchupTeam,
-    mode: HelpColorMode,
-) {
-    output.push('\n');
-    output.push_str(&table_heading("CATEGORIES", mode));
-    output.push('\n');
-    let mut keys = mine
-        .stats
-        .keys()
-        .chain(opponent.stats.keys())
-        .collect::<Vec<_>>();
-    keys.sort();
-    keys.dedup();
-    if keys.is_empty() {
-        output.push_str("  Category totals unavailable\n");
-        return;
-    }
-    for key in keys {
-        output.push_str(&format!(
-            "  {key:<8} {:>8}  {:>8}\n",
-            mine.stats.get(key).map(String::as_str).unwrap_or("—"),
-            opponent.stats.get(key).map(String::as_str).unwrap_or("—")
-        ));
-    }
-}
-
 fn render_players(
     output: &mut String,
-    _heading: &str,
     mine: &[PlayerWeekStats],
     opponent: &[PlayerWeekStats],
     role: &str,
+    mine_team: &MatchupTeam,
+    opponent_team: &MatchupTeam,
     mode: HelpColorMode,
 ) {
-    output.push('\n');
+    const NAME_WIDTH: usize = 20;
+    const CELL_WIDTH: usize = 67;
     let left = mine
         .iter()
         .filter(|player| player.position_type == role)
@@ -1218,7 +1470,7 @@ fn render_players(
     let header = if role == "B" {
         format!(
             "{}{}{}{}{}{}{}{}",
-            table_heading(&format!("{:<20}", "HITTER"), mode),
+            table_heading(&format!("{:<NAME_WIDTH$}", "HITTER"), mode),
             table_heading(&format!("{:<17}", "STATUS"), mode),
             dim(&format!("{:>6}", "H/AB"), mode),
             table_heading(&format!("{:>4}", "R"), mode),
@@ -1230,7 +1482,7 @@ fn render_players(
     } else {
         format!(
             "{}{}{}{}{}{}{}{}",
-            table_heading(&format!("{:<20}", "PITCHER"), mode),
+            table_heading(&format!("{:<NAME_WIDTH$}", "PITCHER"), mode),
             table_heading(&format!("{:<17}", "STATUS"), mode),
             dim(&format!("{:>6}", "IP"), mode),
             table_heading(&format!("{:>4}", "W"), mode),
@@ -1250,7 +1502,7 @@ fn render_players(
         let right_player = right.get(index).copied();
         let left = left_player
             .map(|player| matchup_player_cell(player, role, mode))
-            .unwrap_or_else(|| " ".repeat(67));
+            .unwrap_or_else(|| " ".repeat(CELL_WIDTH));
         let right = right_player
             .map(|player| matchup_player_cell(player, role, mode))
             .unwrap_or_default();
@@ -1261,11 +1513,97 @@ fn render_players(
         output.push_str(row.trim_end());
         output.push('\n');
     }
+    render_matchup_totals(output, role, mine_team, opponent_team, mode);
+}
+
+fn render_matchup_totals(
+    output: &mut String,
+    role: &str,
+    mine: &MatchupTeam,
+    opponent: &MatchupTeam,
+    mode: HelpColorMode,
+) {
+    const NAME_AND_STATUS_WIDTH: usize = 37;
+    let categories = if role == "B" {
+        [
+            ("H/AB", "60", 6, false),
+            ("R", "7", 4, false),
+            ("HR", "12", 4, false),
+            ("RBI", "13", 4, false),
+            ("SB", "16", 5, false),
+            ("AVG", "3", 7, false),
+        ]
+    } else {
+        [
+            ("IP", "50", 6, false),
+            ("W", "28", 4, false),
+            ("SV", "32", 4, false),
+            ("K", "42", 4, false),
+            ("ERA", "26", 6, true),
+            ("WHIP", "27", 6, true),
+        ]
+    };
+    let side = |team: &MatchupTeam, mine_side: bool| {
+        let mut rendered = " ".repeat(NAME_AND_STATUS_WIDTH);
+        for (index, (name, id, width, lower_wins)) in categories.iter().enumerate() {
+            let value = matchup_stat(team, name, id);
+            let padded = format!("{value:>width$}");
+            if index == 0 {
+                rendered.push_str(&dim(&padded, mode));
+            } else {
+                let other = if mine_side { opponent } else { mine };
+                rendered.push_str(&matchup_total_color(
+                    &padded,
+                    value,
+                    matchup_stat(other, name, id),
+                    *lower_wins,
+                    mode,
+                ));
+            }
+        }
+        rendered
+    };
+    output.push_str(&format!(
+        "{}           {}\n",
+        side(mine, true),
+        side(opponent, false)
+    ));
+}
+
+fn matchup_stat<'a>(team: &'a MatchupTeam, name: &str, id: &str) -> &'a str {
+    team.stats
+        .get(name)
+        .or_else(|| team.stats.get(id))
+        .map(String::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("—")
+}
+
+fn matchup_total_color(
+    padded: &str,
+    value: &str,
+    opponent: &str,
+    lower_wins: bool,
+    mode: HelpColorMode,
+) -> String {
+    if mode == HelpColorMode::Plain {
+        return padded.to_owned();
+    }
+    let code = match (value.parse::<f64>(), opponent.parse::<f64>()) {
+        (Ok(value), Ok(opponent)) if value != opponent => {
+            if (value > opponent) != lower_wins {
+                "1;38;5;34"
+            } else {
+                "1;38;5;196"
+            }
+        }
+        _ => "1;38;5;231",
+    };
+    format!("\u{1b}[{code}m{padded}\u{1b}[0m")
 }
 
 fn matchup_player_cell(player: &PlayerWeekStats, role: &str, mode: HelpColorMode) -> String {
-    let name = format!("{} {}", player.name, player.team);
-    let name = format!("{:<20}", name.chars().take(20).collect::<String>());
+    let name = matchup_player_name(player);
     let status = if player.injury_status.is_empty() {
         "NoGame"
     } else {
@@ -1325,12 +1663,181 @@ fn matchup_player_cell(player: &PlayerWeekStats, role: &str, mode: HelpColorMode
     }
 }
 
+fn matchup_player_name(player: &PlayerWeekStats) -> String {
+    const NAME_WIDTH: usize = 20;
+    let short_name = player.name.split_once(' ').map_or_else(
+        || player.name.clone(),
+        |(first, rest)| {
+            first
+                .chars()
+                .next()
+                .map_or_else(|| rest.to_owned(), |initial| format!("{initial} {rest}"))
+        },
+    );
+    let team_width = player.team.chars().count();
+    let value = if player.team.is_empty() {
+        short_name.chars().take(NAME_WIDTH).collect::<String>()
+    } else {
+        let max_name_width = NAME_WIDTH.saturating_sub(team_width + 3);
+        format!(
+            "{} {}",
+            short_name.chars().take(max_name_width).collect::<String>(),
+            player.team
+        )
+    };
+    format!("{value:<NAME_WIDTH$}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::{FantasyPlayer, FantasyTeam};
     use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, HittingStats, PitchingStats};
     use crate::transport::{ExecutorError, HttpExecutor, HttpResponse, ValidatedRequest};
+
+    #[test]
+    fn odds_include_only_games_with_a_rostered_probable_pitcher() {
+        let game = ScheduleGame {
+            game_id: 1,
+            game_date: "2026-08-18T22:40:00Z".into(),
+            detailed_state: "Scheduled".into(),
+            away_team_id: 116,
+            away_team_name: "Detroit Tigers".into(),
+            home_team_id: 134,
+            home_team_name: "Pittsburgh Pirates".into(),
+            away_probable_pitcher_id: Some(10),
+            away_probable_pitcher_name: "Ada Starter".into(),
+            home_probable_pitcher_id: Some(20),
+            home_probable_pitcher_name: "Grace Starter".into(),
+            linescore: None,
+            away_lineup: None,
+            home_lineup: None,
+        };
+        let roster = |name: &str, role: &str| RosterWeekStats {
+            team_key: "team".into(),
+            team_name: "Team".into(),
+            week: 1,
+            players: vec![PlayerWeekStats {
+                yahoo_player_id: 1,
+                name: name.into(),
+                team: "NYY".into(),
+                position_type: role.into(),
+                slot_position: Position::StartingPitcher,
+                eligible_positions: vec![],
+                injury_status: String::new(),
+                hab: String::new(),
+                runs: 0,
+                home_runs: 0,
+                runs_batted_in: 0,
+                stolen_bases: 0,
+                batting_average: String::new(),
+                innings_pitched: String::new(),
+                wins: 0,
+                saves: 0,
+                strikeouts: 0,
+                earned_run_average: String::new(),
+                whip: String::new(),
+            }],
+        };
+        let empty = RosterWeekStats {
+            team_key: "other".into(),
+            team_name: "Other".into(),
+            week: 1,
+            players: vec![],
+        };
+
+        assert!(roster_has_probable_pitcher(
+            &game,
+            &roster("Ada Starter", "P"),
+            &empty
+        ));
+        assert!(!roster_has_probable_pitcher(
+            &game,
+            &roster("Ada Starter", "B"),
+            &empty
+        ));
+        assert!(!roster_has_probable_pitcher(
+            &game,
+            &roster("Other Pitcher", "P"),
+            &empty
+        ));
+        let rows = rostered_probable_odds(
+            &game,
+            &crate::providers::espn::GameLine {
+                event_id: "1".into(),
+                competition_id: "1".into(),
+                home_team: "Pittsburgh Pirates".into(),
+                away_team: "Detroit Tigers".into(),
+                sportsbook: "test".into(),
+                home_moneyline: -133,
+                away_moneyline: 133,
+                quoted: true,
+            },
+            &roster("Ada Starter", "P"),
+            &empty,
+        );
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].mine);
+        assert!(rows[0].line.starts_with("Starter          v Starter"));
+        assert!(rows[0].line.ends_with("  DET@PIT  ████░░░░░░ 43%"));
+        assert!(
+            render_odds_line(&rows[0].line, HelpColorMode::Color)
+                .contains("\u{1b}[38;5;196m████░░░░░░ 43%\u{1b}[0m")
+        );
+    }
+
+    #[test]
+    fn matchup_statuses_reuse_roster_injury_and_game_values() {
+        let mut players = vec![PlayerWeekStats {
+            yahoo_player_id: 1,
+            name: "Ada Starter".into(),
+            team: "NYY".into(),
+            position_type: "P".into(),
+            slot_position: Position::StartingPitcher,
+            eligible_positions: vec![],
+            injury_status: String::new(),
+            hab: String::new(),
+            runs: 0,
+            home_runs: 0,
+            runs_batted_in: 0,
+            stolen_bases: 0,
+            batting_average: String::new(),
+            innings_pitched: String::new(),
+            wins: 0,
+            saves: 0,
+            strikeouts: 0,
+            earned_run_average: String::new(),
+            whip: String::new(),
+        }];
+        let stored = |status: &str, game_status: &str| StoredFantasyPlayer {
+            yahoo_player_id: Some(1),
+            mlbam_id: Some(10),
+            name: "Ada Starter".into(),
+            team: "NYY".into(),
+            role: "P".into(),
+            positions: "SP".into(),
+            is_closer: false,
+            status: status.into(),
+            injury_note: String::new(),
+            birth_date: String::new(),
+            game_status: game_status.into(),
+            game_indicator: crate::domain::GameIndicator::StartingPitcher,
+            hand: "R".into(),
+            rank: None,
+            percent_owned: None,
+            owner: None,
+            slot: Some("SP".into()),
+            batting: [0.0; 7],
+            pitching: [0.0; 7],
+            hitting_advanced: [None; 8],
+            pitching_advanced: [None; 6],
+        };
+
+        apply_resolved_roster_statuses(&mut players, &[stored("", "7:05p ● v BOS")]);
+        assert_eq!(players[0].injury_status, "7:05p ● v BOS");
+        apply_resolved_roster_statuses(&mut players, &[stored("IL15", "7:05p ● v BOS")]);
+        assert_eq!(players[0].injury_status, "IL15");
+    }
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
@@ -1368,6 +1875,15 @@ mod tests {
             status: 200,
             headers: Vec::new(),
             body: REDZONE_VALID.to_vec(),
+        })
+    }
+
+    fn scoreboard_response() -> Result<HttpResponse, ExecutorError> {
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: br#"{"data":[{"week":20,"week_start":"2026-08-10","week_end":"2026-08-16","status":"midevent","teams":[{"team_key":"469.l.170874.t.1","team_id":1,"name":"New York Yankees","team_stats":{"stats":[{"stat_id":60,"value":"12/40"},{"stat_id":7,"value":"9"},{"stat_id":12,"value":"3"},{"stat_id":13,"value":"8"},{"stat_id":16,"value":"2"},{"stat_id":3,"value":".300"},{"stat_id":50,"value":"6.0"},{"stat_id":28,"value":"1"},{"stat_id":32,"value":"0"},{"stat_id":42,"value":"10"},{"stat_id":26,"value":"3.00"},{"stat_id":27,"value":"1.33"}]}},{"team_key":"469.l.170874.t.2","team_id":2,"name":"Stuntin' Like My Vladdy","team_stats":{"stats":[{"stat_id":60,"value":"10/40"},{"stat_id":7,"value":"7"},{"stat_id":12,"value":"2"},{"stat_id":13,"value":"6"},{"stat_id":16,"value":"1"},{"stat_id":3,"value":".250"},{"stat_id":50,"value":"7.0"},{"stat_id":28,"value":"0"},{"stat_id":32,"value":"1"},{"stat_id":42,"value":"8"},{"stat_id":26,"value":"4.50"},{"stat_id":27,"value":"1.50"}]}}]}]}"#
+                .to_vec(),
         })
     }
 
@@ -1562,10 +2078,10 @@ mod tests {
     }
 
     #[test]
-    fn weekly_matchup_fetches_the_public_feed_and_caches_then_reuses_it_without_a_second_fetch() {
+    fn weekly_matchup_uses_public_feed_despite_oauth_token_and_reuses_its_cache() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
-        let public = public_client(vec![ok_response()]);
+        let public = public_client(vec![ok_response(), scoreboard_response()]);
         let source = FakeFantasySource::default();
         let now = SystemTime::now();
 
@@ -1573,7 +2089,7 @@ mod tests {
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            false,
+            true,
             &source,
             &public,
             Some("170874"),
@@ -1596,7 +2112,7 @@ mod tests {
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            false,
+            true,
             &source,
             &empty_public,
             Some("170874"),
@@ -1621,7 +2137,7 @@ mod tests {
             Some("469.l.170874.t.1".into()),
             false,
             &source,
-            &public_client(vec![ok_response()]),
+            &public_client(vec![ok_response(), scoreboard_response()]),
             Some("170874"),
             false,
             failing_http_client(),

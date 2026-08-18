@@ -225,7 +225,8 @@ No crate, framework, or compatibility change is selected.
 - `b9 log` provides bounded tail, follow, and path modes over an owner-only log capped at 5 MiB.
 - `b9 start`, `b9 stop`, and `b9 restart` explicitly manage one detached synchronization daemon through held owner locks and an owner-only Unix control socket.
 - No unrelated command starts the daemon. `b9 sync -f/--force` remains a direct foreground operation and shares its synchronization service with startup and scheduled daemon work.
-- `b9 sync`, startup synchronization, and scheduled synchronization attempt the public Yahoo redzone feed before authenticated Yahoo supplements; independent provider failures produce bounded degradation without discarding prior successful data.
+- Default `b9 sync`, startup synchronization, and scheduled synchronization to the public Yahoo feed without accessing the credential store.
+- Add authenticated Yahoo supplements only for explicit `b9 sync -o/--oauth` requests.
 - `_daemon` remains hidden; process identity files are diagnostic only and never authorize signaling or shutdown.
 - `b9 lm` configures None, Gemini, Groq/Llama, Mistral, Claude, or OpenAI interactively, keeps secrets outside configuration, and uses bounded provider validation and OpenAI model discovery.
 
@@ -252,7 +253,7 @@ No crate, framework, or compatibility change is selected.
 ### b9 status boundary
 
 - Keep `b9 st` local-first: it reads cached configuration and durable status only.
-- Keep `b9 st` from accessing Yahoo or the macOS Keychain; direct the operator to `b9 login` or `b9 sync` when authenticated access is required.
+- Keep `b9 st` from accessing Yahoo or the macOS Keychain; direct the operator to `b9 login` or an explicit `-o/--oauth` operation when authenticated access is required.
 - Render an empty store as unavailable freshness and identity state with `No local snapshot; run b9 sync.` rather than fabricated zero totals.
 - Preserve the last successful snapshot and report bounded provider failures locally.
 - Render the dashboard fields in settled, fixed order: service state and uptime, last/next scheduled run and completion state, database path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit state and bounded last error, unmatched-player count, then selected league and config paths.
@@ -264,7 +265,8 @@ No crate, framework, or compatibility change is selected.
 - Keep `b9 pp` (long alias `pull-public`) a standalone, permanent command, independent of `b9 login`/`b9 sync` — not a temporary bridge.
 - `pp` is b9's first *visible* command alias. The skout parity baseline's "no production command declares an alias" holds only for the ported skout command set (see Command Matrix above) and the existing hidden `whatis` compatibility alias on `i`; it does not extend to new, b9-only commands. `pp`/`pull-public` are both shown in `b9 --help`.
 - Never read the Yahoo credential, refresh OAuth, or access the macOS Keychain from `pp`.
-- Merge public league, team, roster, and player data first during `sync`, then apply successful authenticated scoring metadata, standings metadata, precise roster metadata, free-agent, and team-identity supplements.
+- Merge public league, team, roster, and player data during default `sync` without consulting the credential store.
+- Apply authenticated scoring metadata, standings metadata, precise roster metadata, free-agent, and team-identity supplements only during `sync -o/--oauth`.
 - Keep transaction-history and roster-move acquisition unimplemented.
 - Keep `b9 st` local-only; never turn status rendering into public or authenticated provider acquisition.
 - Resolve the operator's league without prompting when it's already known: an explicit `-l/--league` override; the league already selected via `login`/`sync`; a previously saved `pp`-only selection; only then an interactive prompt, whose answer is saved for next time. Fail with actionable guidance rather than hanging when none of those resolve and the session isn't interactive.

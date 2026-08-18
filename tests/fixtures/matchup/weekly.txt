@@ -1,13 +1,13 @@
-MATCHUP WEEK 7
-Operators  5–4–1    Opponents  4–5–1
-STALE — showing the last complete Yahoo matchup snapshot.
-
-CATEGORIES
-  Category totals unavailable
-
+MATCHUP WEEK: 7 of 26 (Mon may-04 / Sun may-10)
+STALE — Yahoo unavailable; showing the last complete matchup snapshot
+Operators (5-4-1 | —) - 5 rem (5/10)                                          Opponents (4-5-1 | —) - 5 rem (5/10)
 HITTER              STATUS             H/AB   R  HR RBI   SB    AVG    SLOT   HITTER              STATUS             H/AB   R  HR RBI   SB    AVG
-Ada Hitter          NoGame                —   0   0   0    0      —    OF
+A Hitter            NoGame                —   0   0   0    0      —    OF
+                                          —   —   —   —    —      —                                                     —   —   —   —    —      —
 
 PITCHER             STATUS               IP   W  SV   K   ERA  WHIP    SLOT   PITCHER             STATUS               IP   W  SV   K   ERA  WHIP
-                                                                              Grace Pitcher       NoGame                —   0   0   0     —     —
-Games: 8 complete / 2 live / 10 remaining
+                                                                              G Pitcher           NoGame                —   0   0   0     —     —
+                                          —   —   —   —     —     —                                                     —   —   —   —     —     —
+
+SUMMARY
+W/T/L        5 / 1 / 4

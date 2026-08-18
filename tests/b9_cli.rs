@@ -136,6 +136,23 @@ fn fantasy_commands_have_help_without_side_effects() {
 }
 
 #[test]
+fn matchup_help_exposes_explicit_oauth_opt_in() {
+    let output = b9(&["m", "--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("-o, --oauth"));
+    assert!(stdout.contains("Use authenticated Yahoo data"));
+}
+
+#[test]
+fn weekly_roster_totals_require_explicit_oauth_opt_in() {
+    let output = b9(&["rt", "--weekly"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("add -o/--oauth"));
+}
+
+#[test]
 fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
     let missing_fetch = b9(&["fetch"]);
     assert_eq!(missing_fetch.status.code(), Some(2));
@@ -154,6 +171,11 @@ fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
 fn operational_help_exposes_settled_short_and_long_flags() {
     let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
     assert!(sync.contains("-f, --force"));
+    assert!(sync.contains("-o, --oauth"));
+    assert!(sync.contains("Include authenticated Yahoo supplements"));
+    let roster_totals = String::from_utf8(b9(&["rt", "--help"]).stdout).unwrap();
+    assert!(roster_totals.contains("-o, --oauth"));
+    assert!(roster_totals.contains("Use authenticated Yahoo data"));
     let log = String::from_utf8(b9(&["log", "--help"]).stdout).unwrap();
     for flag in ["-n, --lines", "-f, --follow", "-p, --path"] {
         assert!(log.contains(flag), "missing {flag}");

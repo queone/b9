@@ -10,6 +10,7 @@ const REDZONE_MALFORMED: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_m
 const REDZONE_NO_TEAMS: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_no_teams.json");
 const PUBLIC_RANKS: &[u8] = br#"{"fantasy_content":{"league":{"players":[{"player":{"player_id":"10395","player_ranks":[{"player_rank":{"rank_type":"S","rank_value":"216","rank_season":"2026"}},{"player_rank":{"rank_type":"S","rank_position":"C","rank_value":"12","rank_season":"2026"}}]}}]}}}"#;
 const PUBLIC_STANDINGS: &[u8] = br#"{"fantasy_content":{"league":[{"league_key":"mlb.l.1"},{"standings":[{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.1"},{"team_id":"1"},{"name":"Operators"},{"waiver_priority":1},{"faab_balance":"65"},{"number_of_moves":29}],{"team_standings":{"rank":1}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.2"},{"team_id":"2"},{"name":"Opponents"},{"waiver_priority":2},{"faab_balance":"33"},{"number_of_moves":56}],{"team_standings":{"rank":2}}]},"count":2}}]}]}}"#;
+const PUBLIC_SCOREBOARD: &[u8] = br#"{"fantasy_content":{"league":[{"league_key":"mlb.l.1"},{"scoreboard":{"0":{"matchups":{"0":{"matchup":{"week":"7","week_start":"2026-05-11","week_end":"2026-05-17","status":"midevent","0":{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.1"},{"team_id":"1"},{"name":"Operators"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"12"}}]}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.2"},{"team_id":"2"},{"name":"Opponents"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"9"}}]}}]}}}}},"1":{"matchup":{"week":"7","week_start":"2026-05-11","week_end":"2026-05-17","status":"midevent","0":{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.5"},{"team_id":"5"},{"name":"Another Team"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"8"}}]}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.6"},{"team_id":"6"},{"name":"Toros"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"11"}}]}}]}}}}}}},"week":"7"}}]}}"#;
 
 // Fixture provenance: hand-built from the confirmed real response shape of
 // `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb`, trimmed to two
@@ -233,6 +234,7 @@ fn matchup_aggregation_sums_counting_stats_computes_rate_stats_and_scores_catego
     // directly: AVG = 10H / 20AB = .500; ERA = 9*2ER / 6IP = 3.00;
     // WHIP = (3BB + 5H) / 6IP = 1.33.
     assert_eq!(yankees.stats.get("3").unwrap(), "0.500");
+    assert_eq!(yankees.stats.get("H/AB").unwrap(), "10/20");
     assert_eq!(yankees.stats.get("26").unwrap(), "3.00");
     assert_eq!(yankees.stats.get("27").unwrap(), "1.33");
     assert_eq!(yankees.stats.get("50").unwrap(), "6.0");
@@ -283,6 +285,44 @@ fn matchup_aggregation_sums_counting_stats_computes_rate_stats_and_scores_catego
     assert_eq!(batter.hab, "10-20");
     assert_eq!(batter.batting_average, "0.500");
     assert_eq!(batter.runs, 5);
+}
+
+#[test]
+fn public_scoreboard_uses_authoritative_team_totals_without_auth() {
+    let executor = Arc::new(FakeExecutor::new(vec![response(200, PUBLIC_SCOREBOARD)]));
+    let matchups = client(executor.clone())
+        .fetch_scoreboard("mlb.l.1", 7)
+        .unwrap();
+
+    assert_eq!(matchups[0].teams[0].stats.get("7").unwrap(), "12");
+    assert_eq!(matchups[0].teams[1].stats.get("7").unwrap(), "9");
+    assert_eq!(
+        (
+            matchups[0].teams[0].wins,
+            matchups[0].teams[0].ties,
+            matchups[0].teams[0].losses,
+        ),
+        (1, 9, 0)
+    );
+    assert_eq!(matchups.len(), 2);
+    assert!(
+        matchups[1]
+            .teams
+            .iter()
+            .any(|team| team.team_key == "mlb.l.1.t.6"
+                && team.stats.get("7").map(String::as_str) == Some("11"))
+    );
+    let requests = executor.requests();
+    assert_eq!(
+        requests[0].0,
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json"
+    );
+    assert!(
+        requests[0]
+            .1
+            .iter()
+            .all(|header| !header.name.eq_ignore_ascii_case("authorization"))
+    );
 }
 
 #[test]
