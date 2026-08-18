@@ -4,8 +4,8 @@ use std::path::Path;
 use std::process::Command;
 
 const PUBLIC_COMMANDS: &[&str] = &[
-    "login", "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "fetch", "lm",
-    "m", "t", "tt", "sp", "r", "rt", "h", "p", "i",
+    "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "lm", "m", "t", "tt", "sp",
+    "r", "rt", "h", "p", "i",
 ];
 
 fn repository_file(path: &str) -> String {

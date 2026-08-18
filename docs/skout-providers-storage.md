@@ -2,6 +2,8 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
+Current b9 intentionally diverges from this inventory: all read-only Yahoo workflows use exact bounded paths on the two public Yahoo fantasy hosts, account discovery is replaced by explicit league and primary-team selection, complete fantasy refreshes replace atomically, and OAuth/circuit behavior is retired. Advisory credentials remain unchanged.
+
 ## Source Baseline
 
 - Source: `<skout-repo>` at clean commit `cf65984024bd10a0a41faa69b8aecd3894052c31`

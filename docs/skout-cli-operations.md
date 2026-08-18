@@ -2,6 +2,8 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
+Current b9 intentionally diverges from this inventory: Yahoo reads are public-only; `login`, `pp`, `pull-public`, authenticated `fetch`, and Yahoo OAuth flags are removed; `sync -l/--league -T/--team` owns setup; and transitional `logout` can only delete the retired Yahoo credential.
+
 ## Source Baseline
 
 - Source repository: `<skout-repo>`

@@ -249,7 +249,7 @@ impl Store {
     /// Read the origin of the data currently reflected in the durable
     /// fantasy tables: the `origin` of the most recent **completed** run,
     /// not merely the most recent run regardless of status. A failed `sync`
-    /// or `pp` attempt never changes this answer, since it never wrote
+    /// or historical public-pull attempt never changes this answer, since it never wrote
     /// anything durable.
     pub fn current_data_origin(&self, mode: SyncMode) -> Result<Option<SyncOrigin>, StoreError> {
         self.query_latest_sync_run(

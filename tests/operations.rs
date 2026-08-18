@@ -2,14 +2,8 @@ use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use b9::operations::{follow_log, open_log, render_fetch, reset_at, tail_log};
+use b9::operations::{follow_log, open_log, reset_at, tail_log};
 use tempfile::tempdir;
-
-#[test]
-fn fetch_rendering_prettifies_json_and_preserves_other_bytes() {
-    assert_eq!(render_fetch(br#"{"a":1}"#), b"{\n  \"a\": 1\n}\n");
-    assert_eq!(render_fetch(b"not json\n"), b"not json\n");
-}
 
 #[test]
 fn reset_is_idempotent_and_requires_confirmation() {

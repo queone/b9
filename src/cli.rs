@@ -45,17 +45,9 @@ struct FlagDescriptor {
 
 const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
-        name: "login",
-        display_label: "login",
-        description: "Authenticate with Yahoo",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
         name: "logout",
         display_label: "logout",
-        description: "Remove Yahoo authentication",
+        description: "Remove the retired Yahoo credential",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -74,14 +66,6 @@ const COMMANDS: &[CommandDescriptor] = &[
         description: "Synchronize the selected league",
         argument: None,
         aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
-        name: "pp",
-        display_label: "pp",
-        description: "Fetch public Yahoo league data without login",
-        argument: None,
-        aliases: &["pull-public"],
         routes_to_root_help: false,
     },
     CommandDescriptor {
@@ -121,17 +105,6 @@ const COMMANDS: &[CommandDescriptor] = &[
         display_label: "reset",
         description: "Delete the local b9 database",
         argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
-        name: "fetch",
-        display_label: "fetch <path>",
-        description: "Perform a raw Yahoo API GET",
-        argument: Some(ArgumentDescriptor {
-            id: "path",
-            value_name: "PATH",
-        }),
         aliases: &[],
         routes_to_root_help: false,
     },
@@ -290,8 +263,8 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
     ),
     (
         "sync",
-        "-o, --oauth",
-        "Include authenticated Yahoo supplements",
+        "-T, --team <TEAM>",
+        "Select the primary fantasy team",
     ),
     (
         "log",
@@ -308,7 +281,6 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
         "Show stats for a specific day",
     ),
     ("m", "-a, --advise", "Include the advisory summary"),
-    ("m", "-o, --oauth", "Use authenticated Yahoo data"),
     ("t", "-f, --force", "Refresh provider data"),
     ("tt", "-f, --force", "Refresh provider data"),
     ("sp", "-f, --force", "Refresh provider data"),
@@ -317,7 +289,6 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
         "-w, --weekly [<WEEK|DATE>]",
         "Show current or selected weekly totals",
     ),
-    ("rt", "-o, --oauth", "Use authenticated Yahoo data"),
     ("h", "-s, --sort <FIELD>", "Sort by a displayed field"),
     ("h", "-p, --position <POS>", "Filter by eligible position"),
     ("h", "-w, --waiver", "Show waiver candidates only"),
@@ -373,7 +344,6 @@ where
 
     match matches.subcommand() {
         Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
-        Some(("login", _)) => run_result(crate::sync::login().map(|()| String::new())),
         Some(("logout", _)) => run_result(crate::sync::logout()),
         Some(("st", _)) => run_result(crate::sync::status(
             matches.get_one::<String>("league").map(String::as_str),
@@ -383,15 +353,12 @@ where
             let result = crate::sync::synchronize_with_options_streaming(
                 matches.get_one::<String>("league").map(String::as_str),
                 subcommand.get_flag("force"),
-                subcommand.get_flag("oauth"),
+                subcommand.get_one::<String>("team").map(String::as_str),
                 &mut output,
             );
             drop(output);
             run_result(result)
         }
-        Some(("pp", _)) => run_result(crate::public_pull::pull(
-            matches.get_one::<String>("league").map(String::as_str),
-        )),
         Some(("start", _)) => run_result(crate::daemon::start()),
         Some(("stop", _)) => run_result(crate::daemon::stop()),
         Some(("restart", _)) => run_result(crate::daemon::restart()),
@@ -400,27 +367,6 @@ where
             let mut input = std::io::BufReader::new(std::io::stdin().lock());
             let mut output = std::io::stdout();
             run_result(crate::operations::reset(&mut input, &mut output))
-        }
-        Some(("fetch", subcommand)) => {
-            let Some(path) = subcommand.get_one::<String>("path") else {
-                eprintln!("fetch: PATH is required; quote paths containing semicolons and retry");
-                return ExitCode::from(2);
-            };
-            match crate::operations::fetch(path) {
-                Ok(bytes) => {
-                    use std::io::Write;
-                    if let Err(error) = std::io::stdout().write_all(&bytes) {
-                        eprintln!("fetch: write response: {error}; retry");
-                        ExitCode::from(1)
-                    } else {
-                        ExitCode::SUCCESS
-                    }
-                }
-                Err(error) => {
-                    eprintln!("{error}");
-                    ExitCode::from(1)
-                }
-            }
         }
         Some(("log", subcommand)) => {
             let path = match crate::operations::log_path() {
@@ -461,7 +407,6 @@ where
                 weekly: subcommand.get_flag("weekly"),
                 day: subcommand.get_one::<String>("day").cloned(),
                 advise: subcommand.get_flag("advise"),
-                oauth: subcommand.get_flag("oauth"),
             },
         )),
         Some(("t", subcommand)) => run_result(crate::mlb_commands::show_teams(
@@ -479,7 +424,6 @@ where
         )),
         Some(("rt", subcommand)) => run_result(crate::player_commands::show_totals(
             subcommand.get_one::<String>("weekly").map(String::as_str),
-            subcommand.get_flag("oauth"),
         )),
         Some(("h", subcommand)) => run_result(crate::player_commands::show_pool(
             "B",
@@ -536,11 +480,7 @@ fn root_command(version: &'static str) -> Command {
         }
         if let Some(argument) = descriptor.argument {
             let argument = Arg::new(argument.id).value_name(argument.value_name);
-            subcommand = subcommand.arg(if descriptor.name == "fetch" {
-                argument.num_args(1)
-            } else {
-                argument.num_args(0..=1)
-            });
+            subcommand = subcommand.arg(argument.num_args(0..=1));
         }
         if descriptor.name == "m" {
             subcommand = subcommand
@@ -571,32 +511,17 @@ fn root_command(version: &'static str) -> Command {
                         .short('a')
                         .long("advise")
                         .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("oauth")
-                        .short('o')
-                        .long("oauth")
-                        .help("Use authenticated Yahoo data")
-                        .action(ArgAction::SetTrue),
                 );
         }
         if descriptor.name == "rt" {
-            subcommand = subcommand
-                .arg(
-                    Arg::new("weekly")
-                        .short('w')
-                        .long("weekly")
-                        .value_name("WEEK|DATE")
-                        .num_args(0..=1)
-                        .default_missing_value("true"),
-                )
-                .arg(
-                    Arg::new("oauth")
-                        .short('o')
-                        .long("oauth")
-                        .help("Use authenticated Yahoo data")
-                        .action(ArgAction::SetTrue),
-                );
+            subcommand = subcommand.arg(
+                Arg::new("weekly")
+                    .short('w')
+                    .long("weekly")
+                    .value_name("WEEK|DATE")
+                    .num_args(0..=1)
+                    .default_missing_value("true"),
+            );
         }
         if matches!(descriptor.name, "h" | "p") {
             subcommand = subcommand
@@ -633,11 +558,11 @@ fn root_command(version: &'static str) -> Command {
                         .action(ArgAction::SetTrue),
                 )
                 .arg(
-                    Arg::new("oauth")
-                        .short('o')
-                        .long("oauth")
-                        .help("Include authenticated Yahoo supplements")
-                        .action(ArgAction::SetTrue),
+                    Arg::new("team")
+                        .short('T')
+                        .long("team")
+                        .value_name("TEAM")
+                        .help("Select the primary fantasy team"),
                 );
         }
         if descriptor.name == "log" {
@@ -665,17 +590,14 @@ fn root_command(version: &'static str) -> Command {
         }
         if matches!(
             descriptor.name,
-            "login"
-                | "logout"
+            "logout"
                 | "st"
                 | "sync"
-                | "pp"
                 | "start"
                 | "stop"
                 | "restart"
                 | "log"
                 | "reset"
-                | "fetch"
                 | "lm"
                 | "m"
                 | "t"

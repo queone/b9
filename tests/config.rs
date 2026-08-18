@@ -17,7 +17,15 @@ fn private_atomic_configuration_round_trips_and_rejects_malformed_state() {
         strategy_punts: vec!["ERA".into()],
     };
     write_at(&path, &expected).unwrap();
-    assert_eq!(read_at(&path).unwrap(), expected);
+    let read = read_at(&path).unwrap();
+    assert_eq!(read.pull_public_league_id, "");
+    assert_eq!(
+        read,
+        Config {
+            pull_public_league_id: String::new(),
+            ..expected
+        }
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -65,7 +73,7 @@ fn legacy_selections_fill_only_empty_b9_fields() {
 }
 
 #[test]
-fn pull_public_league_id_round_trips_independently_of_current_league() {
+fn legacy_public_league_id_is_read_but_not_written() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("config.json");
     let config = Config {
@@ -73,9 +81,12 @@ fn pull_public_league_id_round_trips_independently_of_current_league() {
         ..Config::default()
     };
     write_at(&path, &config).unwrap();
-    let read = read_at(&path).unwrap();
-    assert_eq!(read.pull_public_league_id, "170874");
-    assert!(read.current_league.is_empty());
+    let serialized = fs::read_to_string(&path).unwrap();
+    assert!(!serialized.contains("pull_public_league_id"));
+    assert!(read_at(&path).unwrap().pull_public_league_id.is_empty());
+
+    fs::write(&path, r#"{"pull_public_league_id":"170874"}"#).unwrap();
+    assert_eq!(read_at(&path).unwrap().pull_public_league_id, "170874");
 }
 
 #[test]

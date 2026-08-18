@@ -2,7 +2,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use b9::domain::{Position, ScoringType};
-use b9::providers::yahoo_public::{YahooPublicClient, YahooPublicError, league_id_from_key};
+use b9::providers::yahoo_fantasy::YahooFantasySource;
+use b9::providers::yahoo_public::{
+    YahooPublicClient, YahooPublicError, canonical_public_league_key, league_id_from_key,
+};
 use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
 
 const REDZONE_VALID: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_valid.json");
@@ -11,6 +14,14 @@ const REDZONE_NO_TEAMS: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_no
 const PUBLIC_RANKS: &[u8] = br#"{"fantasy_content":{"league":{"players":[{"player":{"player_id":"10395","player_ranks":[{"player_rank":{"rank_type":"S","rank_value":"216","rank_season":"2026"}},{"player_rank":{"rank_type":"S","rank_position":"C","rank_value":"12","rank_season":"2026"}}]}}]}}}"#;
 const PUBLIC_STANDINGS: &[u8] = br#"{"fantasy_content":{"league":[{"league_key":"mlb.l.1"},{"standings":[{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.1"},{"team_id":"1"},{"name":"Operators"},{"waiver_priority":1},{"faab_balance":"65"},{"number_of_moves":29}],{"team_standings":{"rank":1}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.2"},{"team_id":"2"},{"name":"Opponents"},{"waiver_priority":2},{"faab_balance":"33"},{"number_of_moves":56}],{"team_standings":{"rank":2}}]},"count":2}}]}]}}"#;
 const PUBLIC_SCOREBOARD: &[u8] = br#"{"fantasy_content":{"league":[{"league_key":"mlb.l.1"},{"scoreboard":{"0":{"matchups":{"0":{"matchup":{"week":"7","week_start":"2026-05-11","week_end":"2026-05-17","status":"midevent","0":{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.1"},{"team_id":"1"},{"name":"Operators"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"12"}}]}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.2"},{"team_id":"2"},{"name":"Opponents"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"9"}}]}}]}}}}},"1":{"matchup":{"week":"7","week_start":"2026-05-11","week_end":"2026-05-17","status":"midevent","0":{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.5"},{"team_id":"5"},{"name":"Another Team"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"8"}}]}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.6"},{"team_id":"6"},{"name":"Toros"}],{"team_stats":{"stats":[{"stat":{"stat_id":"7","value":"11"}}]}}]}}}}}}},"week":"7"}}]}}"#;
+
+const LEAGUE_SETTINGS: &[u8] = include_bytes!("fixtures/yahoo/league-settings.json");
+const LEAGUE_STANDINGS: &[u8] = include_bytes!("fixtures/yahoo/standings.json");
+const LEAGUE_ROSTERS: &[u8] = include_bytes!("fixtures/yahoo/rosters.json");
+const FREE_AGENTS: &[u8] = include_bytes!("fixtures/yahoo/free-agents.json");
+const MATCHUP: &[u8] = include_bytes!("fixtures/yahoo/matchup.json");
+const WEEKLY_STATS: &[u8] = include_bytes!("fixtures/yahoo/weekly-stats.json");
+const NO_FREE_AGENTS: &[u8] = br#"{"fantasy_content":{"league":[{}, {"players":{"count":0}}]}}"#;
 
 // Fixture provenance: hand-built from the confirmed real response shape of
 // `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb`, trimmed to two
@@ -366,5 +377,72 @@ fn non_200_status_is_reported_as_blocked_not_escalated() {
 #[test]
 fn league_id_from_key_round_trips_through_the_client_call() {
     assert_eq!(league_id_from_key("469.l.170874").unwrap(), "170874");
+    assert_eq!(
+        canonical_public_league_key("170874").unwrap(),
+        "mlb.l.170874"
+    );
+    assert_eq!(
+        canonical_public_league_key("public.170874").unwrap(),
+        "mlb.l.170874"
+    );
+    assert_eq!(
+        canonical_public_league_key("469.l.170874").unwrap(),
+        "469.l.170874"
+    );
     assert!(league_id_from_key("garbage").is_err());
+}
+
+#[test]
+fn fantasy_source_uses_exact_public_paths_without_credentials() {
+    let executor = Arc::new(FakeExecutor::new(vec![
+        response(200, LEAGUE_SETTINGS),
+        response(200, LEAGUE_STANDINGS),
+        response(200, LEAGUE_ROSTERS),
+        response(200, FREE_AGENTS),
+        response(200, NO_FREE_AGENTS),
+        response(200, MATCHUP),
+        response(200, WEEKLY_STATS),
+    ]));
+    let client = client(executor.clone());
+
+    assert_eq!(
+        client.league_settings("mlb.l.1").unwrap().league.league_key,
+        "mlb.l.1"
+    );
+    assert_eq!(client.standings("mlb.l.1").unwrap().len(), 2);
+    assert_eq!(client.league_rosters("mlb.l.1").unwrap().slots.len(), 2);
+    assert!(!client.free_agents("mlb.l.1").unwrap().is_empty());
+    assert_eq!(client.scoreboard("mlb.l.1", Some(7)).unwrap().len(), 1);
+    assert_eq!(
+        client
+            .roster_week_stats("mlb.l.1.t.1", 7)
+            .unwrap()
+            .players
+            .len(),
+        1
+    );
+
+    let urls = executor
+        .requests()
+        .into_iter()
+        .map(|(url, headers)| {
+            assert!(headers.iter().all(|header| {
+                !header.name.eq_ignore_ascii_case("authorization")
+                    && !header.name.eq_ignore_ascii_case("cookie")
+            }));
+            url
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        urls,
+        vec![
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/settings?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/standings?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/teams/roster/players;out=ranks,percent_owned?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=0;count=25;out=ranks,percent_owned?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=25;count=25;out=ranks,percent_owned?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.1/roster;week=7/players/stats;type=week;week=7?format=json",
+        ]
+    );
 }

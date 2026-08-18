@@ -251,9 +251,8 @@ dependencies = [
 
 [[package]]
 name = "b9"
-version = "0.25.1"
+version = "0.26.0"
 dependencies = [
- "base64",
  "clap",
  "dirs",
  "getrandom 0.4.3",

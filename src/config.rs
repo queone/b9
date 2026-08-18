@@ -15,7 +15,7 @@ pub struct Config {
     pub current_league: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub current_team_key: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[serde(default, skip_serializing)]
     pub pull_public_league_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub advisory_provider: String,

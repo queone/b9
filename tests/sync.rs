@@ -5,13 +5,13 @@ use b9::domain::{
     ScoringType,
 };
 use b9::providers::yahoo_fantasy::{
-    LeagueRosters, LeagueSettings, RosterPosition, StatCategory, UserLeague, YahooFantasyError,
+    LeagueRosters, LeagueSettings, RosterPosition, StatCategory, YahooFantasyError,
     YahooFantasySource,
 };
 use b9::store::{
     FantasySnapshotWrite, PositionWrite, Store, SyncMode, SyncOrigin, inspect_status_at,
 };
-use b9::sync::{select_league, synchronize_with, synchronize_with_origin};
+use b9::sync::{select_primary_team, synchronize_with, synchronize_with_origin};
 use tempfile::tempdir;
 
 struct Source {
@@ -19,14 +19,6 @@ struct Source {
 }
 
 impl YahooFantasySource for Source {
-    fn user_leagues(&self) -> Result<Vec<UserLeague>, YahooFantasyError> {
-        Ok(leagues())
-    }
-
-    fn team_key(&self, _: &str) -> Result<String, YahooFantasyError> {
-        Ok("mlb.l.1.t.1".into())
-    }
-
     fn league_settings(&self, _: &str) -> Result<LeagueSettings, YahooFantasyError> {
         Ok(LeagueSettings {
             league: League {
@@ -82,25 +74,6 @@ impl YahooFantasySource for Source {
     }
 }
 
-fn leagues() -> Vec<UserLeague> {
-    vec![
-        UserLeague {
-            league_key: "mlb.l.1".into(),
-            name: "Alpha".into(),
-            season: 2026,
-            team_key: "mlb.l.1.t.1".into(),
-            team_name: "One".into(),
-        },
-        UserLeague {
-            league_key: "mlb.l.2".into(),
-            name: "Beta".into(),
-            season: 2026,
-            team_key: "mlb.l.2.t.1".into(),
-            team_name: "Other".into(),
-        },
-    ]
-}
-
 fn team(id: i64) -> FantasyTeam {
     FantasyTeam {
         team_key: format!("mlb.l.1.t.{id}"),
@@ -142,26 +115,65 @@ fn slot(team_id: i64, player_id: i64) -> FantasyRosterSlot {
 }
 
 #[test]
-fn league_selection_handles_interactive_and_noninteractive_ambiguity() {
-    let values = leagues();
+fn primary_team_selection_handles_matching_prompt_and_ambiguity() {
+    let values = vec![team(1), team(2)];
     let mut output = Vec::new();
     let selected =
-        select_league(&values, None, true, &mut Cursor::new("2\n"), &mut output).unwrap();
-    assert_eq!(selected.as_deref(), Some("mlb.l.2"));
+        select_primary_team(&values, None, true, &mut Cursor::new("2\n"), &mut output).unwrap();
+    assert_eq!(selected, "mlb.l.1.t.2");
     assert_eq!(
         String::from_utf8(output).unwrap(),
-        "Select a league:\n  1. mlb.l.1  Alpha\n  2. mlb.l.2  Beta\nChoice: "
+        "Select your primary team:\n  1. mlb.l.1.t.1  Team 1\n  2. mlb.l.1.t.2  Team 2\nChoice: "
     );
-    assert!(select_league(&values, None, false, &mut Cursor::new(""), &mut Vec::new()).is_err());
-    assert!(
-        select_league(
+    assert_eq!(
+        select_primary_team(
             &values,
-            Some("unknown"),
+            Some("MLB.L.1.T.1"),
+            false,
+            &mut Cursor::new(""),
+            &mut Vec::new(),
+        )
+        .unwrap_err()
+        .to_string(),
+        "select primary team: no team matches \"MLB.L.1.T.1\"; run b9 sync -T <key-or-name> and retry"
+    );
+    assert_eq!(
+        select_primary_team(
+            &values,
+            Some("team 1"),
+            false,
+            &mut Cursor::new(""),
+            &mut Vec::new(),
+        )
+        .unwrap(),
+        "mlb.l.1.t.1"
+    );
+    assert!(
+        select_primary_team(
+            &values,
+            Some("Team"),
             false,
             &mut Cursor::new(""),
             &mut Vec::new()
         )
         .is_err()
+    );
+    let mut output = Vec::new();
+    assert_eq!(
+        select_primary_team(
+            &values,
+            Some("stale team"),
+            true,
+            &mut Cursor::new("1\n"),
+            &mut output,
+        )
+        .unwrap(),
+        "mlb.l.1.t.1"
+    );
+    assert!(
+        String::from_utf8(output)
+            .unwrap()
+            .contains("Select your primary team:")
     );
 }
 
@@ -176,6 +188,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
         },
         &mut store,
         "mlb.l.1",
+        "mlb.l.1.t.1",
         &mut identities,
     )
     .unwrap();
@@ -192,6 +205,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
             &Source { fail_rosters: true },
             &mut store,
             "mlb.l.1",
+            "mlb.l.1.t.1",
             &mut identities
         )
         .is_err()
@@ -207,7 +221,14 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
         fail_rosters: false,
     };
     let mut identities = |_| Vec::new();
-    synchronize_with(&source, &mut store, "mlb.l.1", &mut identities).unwrap();
+    synchronize_with(
+        &source,
+        &mut store,
+        "mlb.l.1",
+        "mlb.l.1.t.1",
+        &mut identities,
+    )
+    .unwrap();
 
     let settings = source.league_settings("mlb.l.1").unwrap();
     let mut public_teams = source.standings("mlb.l.1").unwrap();
@@ -218,7 +239,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
     let target_id = public_players[0].yahoo_player_id;
     let mut precise = public_players[0].clone();
     precise.injury_status = "IL60".into();
-    store.merge_authenticated_players(&[precise]).unwrap();
+    store.merge_fantasy_players(&[precise]).unwrap();
     for player in &mut public_players {
         player.percent_owned = None;
         player.yahoo_rank = None;
@@ -262,7 +283,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
 
     let mut active = public_players[0].clone();
     active.injury_status.clear();
-    store.merge_authenticated_players(&[active]).unwrap();
+    store.merge_fantasy_players(&[active]).unwrap();
     let players = store.fantasy_players("mlb.l.1").unwrap();
     assert!(
         players
@@ -275,7 +296,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
 
     let mut dtd = public_players[0].clone();
     dtd.injury_status = "DTD".into();
-    store.merge_authenticated_players(&[dtd]).unwrap();
+    store.merge_fantasy_players(&[dtd]).unwrap();
     let settings = source.league_settings("mlb.l.1").unwrap();
     store
         .merge_public_fantasy_snapshot(&FantasySnapshotWrite {
@@ -325,6 +346,7 @@ fn circuit_opens_after_five_failures_and_closes_on_recovery() {
                 &Source { fail_rosters: true },
                 &mut store,
                 "mlb.l.1",
+                "mlb.l.1.t.1",
                 SyncOrigin::Manual,
                 &mut identities,
             )
@@ -340,6 +362,7 @@ fn circuit_opens_after_five_failures_and_closes_on_recovery() {
         },
         &mut store,
         "mlb.l.1",
+        "mlb.l.1.t.1",
         SyncOrigin::Manual,
         &mut identities,
     )
@@ -363,6 +386,7 @@ fn local_status_reports_real_identities_once_a_league_has_synced() {
         },
         &mut store,
         "mlb.l.1",
+        "mlb.l.1.t.1",
         &mut identities,
     )
     .unwrap();
@@ -387,6 +411,7 @@ fn all_callers_record_the_shared_synchronization_service_origin() {
             },
             &mut store,
             "mlb.l.1",
+            "mlb.l.1.t.1",
             origin,
             &mut identities,
         )

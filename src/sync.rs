@@ -2,15 +2,15 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config;
-use crate::providers::yahoo::YahooClient;
-use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasyError, YahooFantasySource};
+use crate::domain::FantasyTeam;
+use crate::providers::yahoo_fantasy::YahooFantasySource;
+use crate::providers::yahoo_public::YahooPublicClient;
 use crate::store::{
     CategoryWrite, FantasySnapshotWrite, IdentityCandidate, ItemRefreshPolicy, PositionWrite,
     SeasonStatWrite, Store, StoreStatus, SyncMode, SyncOrigin,
@@ -36,87 +36,11 @@ impl fmt::Display for WorkflowError {
 
 impl std::error::Error for WorkflowError {}
 
-fn production_yahoo() -> Result<Arc<YahooClient>, WorkflowError> {
-    let http = Arc::new(
-        HttpClient::production()
-            .map_err(|error| WorkflowError::context("initialize HTTP transport", error))?,
-    );
-    YahooClient::production(http)
-        .map(Arc::new)
-        .map_err(|error| WorkflowError::context("initialize Yahoo", error))
-}
-
-/// Run interactive Yahoo login with explicit terminal and browser boundaries.
-pub fn login_with(
-    yahoo: &YahooClient,
-    input: &mut dyn BufRead,
-    output: &mut dyn Write,
-    open_browser: &mut dyn FnMut(&str) -> Result<(), String>,
-) -> Result<(), WorkflowError> {
-    let authorization = yahoo
-        .begin_authorization()
-        .map_err(|error| WorkflowError::context("start login", error))?;
-    if let Err(error) = open_browser(&authorization.url) {
-        writeln!(output, "Browser did not open ({error}).")
-            .map_err(|error| WorkflowError::context("write login prompt", error))?;
-    }
-    writeln!(
-        output,
-        "Open this Yahoo authorization URL:\n{}",
-        authorization.url
-    )
-    .map_err(|error| WorkflowError::context("write login URL", error))?;
-    writeln!(output, "Paste the complete callback URL:")
-        .map_err(|error| WorkflowError::context("write login prompt", error))?;
-    let mut callback = String::new();
-    input
-        .read_line(&mut callback)
-        .map_err(|error| WorkflowError::context("read callback URL", error))?;
-    yahoo
-        .complete_authorization(authorization.pending, callback.trim())
-        .map_err(|error| WorkflowError::context("complete login", error))?;
-    writeln!(output, "Yahoo login complete.")
-        .map_err(|error| WorkflowError::context("write login result", error))?;
-    Ok(())
-}
-
-/// Run production Yahoo login.
-pub fn login() -> Result<(), WorkflowError> {
-    let http = Arc::new(
-        HttpClient::production()
-            .map_err(|error| WorkflowError::context("initialize HTTP transport", error))?,
-    );
-    let yahoo = Arc::new(
-        YahooClient::production(http.clone())
-            .map_err(|error| WorkflowError::context("initialize Yahoo", error))?,
-    );
-    let mut input = std::io::BufReader::new(std::io::stdin());
-    let mut output = std::io::stdout();
-    let mut browser = |url: &str| {
-        #[cfg(target_os = "macos")]
-        let status = Command::new("open").arg(url).status();
-        #[cfg(target_os = "windows")]
-        let status = Command::new("cmd").args(["/C", "start", "", url]).status();
-        #[cfg(all(unix, not(target_os = "macos")))]
-        let status = Command::new("xdg-open").arg(url).status();
-        status
-            .map_err(|error| error.to_string())
-            .and_then(|status| {
-                status
-                    .success()
-                    .then_some(())
-                    .ok_or_else(|| "browser command failed".into())
-            })
-    };
-    login_with(&yahoo, &mut input, &mut output, &mut browser)
-}
-
-/// Remove the production Yahoo credential idempotently.
+/// Remove the retired Yahoo credential idempotently without reading it.
 pub fn logout() -> Result<String, WorkflowError> {
-    production_yahoo()?
-        .delete_credential()
+    crate::providers::yahoo_credential_cleanup::delete_legacy_yahoo_credential()
         .map_err(|error| WorkflowError::context("logout", error))?;
-    Ok("Yahoo logout complete.\n".into())
+    Ok("Legacy Yahoo credential removed. The logout command is deprecated.\n".into())
 }
 
 /// Render local-first status without accessing Yahoo or the operating-system credential store.
@@ -236,12 +160,12 @@ pub fn render_dashboard(
             .map_or_else(|| terminal::dim("none", mode), |at| format!("unix {at}"))
     };
 
-    let circuit = format!(
-        "{} ({} failed requests)",
+    let provider_failures = format!(
+        "{} ({})",
         if status.circuit_open {
-            terminal::warning("open", mode)
+            terminal::warning("blocked", mode)
         } else {
-            terminal::good("closed", mode)
+            terminal::good("ready", mode)
         },
         status.provider_failure_count
     );
@@ -264,14 +188,14 @@ pub fn render_dashboard(
     };
 
     let mut output = format!(
-        "Yahoo: not checked (run b9 login or b9 sync)\n\
+        "Yahoo: public endpoints\n\
          Service: {service}\n\
          Last run: {last_run}\n\
          Next run: {next_run}\n\
          Database: {database}\n\
          Identities: {identities}\n\
          Provider freshness: {provider_freshness}\n\
-         Circuit: {circuit}\n\
+         Provider failures: {provider_failures}\n\
          Last provider error: {last_error}\n\
          Unmatched players: {unmatched}\n\
          League: {selected_league}\n\
@@ -302,14 +226,14 @@ mod tests {
             0,
             HelpColorMode::Plain,
         );
-        assert!(output.contains("Yahoo: not checked (run b9 login or b9 sync)"));
+        assert!(output.contains("Yahoo: public endpoints"));
         assert!(output.contains("Service: stopped"));
         assert!(output.contains("Last run: none"));
         assert!(output.contains("Next run: not scheduled (daemon stopped)"));
         assert!(output.contains("Database: /absent/b9.db (absent, schema unknown)"));
         assert!(output.contains("Identities: unavailable"));
         assert!(output.contains("Provider freshness: unavailable"));
-        assert!(output.contains("Circuit: closed (0 failed requests)"));
+        assert!(output.contains("Provider failures: ready (0)"));
         assert!(output.contains("Unmatched players: unavailable"));
         assert!(output.contains("League: none"));
         assert!(output.contains("Config: /absent/config.json"));
@@ -357,46 +281,68 @@ mod tests {
     }
 }
 
-/// Choose a visible league through an injectable terminal boundary.
-pub fn select_league(
-    leagues: &[crate::providers::yahoo_fantasy::UserLeague],
+/// Choose the primary team through deterministic matching or an injectable prompt.
+pub fn select_primary_team(
+    teams: &[FantasyTeam],
     requested: Option<&str>,
     interactive: bool,
     input: &mut dyn BufRead,
     output: &mut dyn Write,
-) -> Result<Option<String>, WorkflowError> {
-    if let Some(key) = requested {
-        return leagues
+) -> Result<String, WorkflowError> {
+    if let Some(query) = requested.filter(|value| !value.trim().is_empty()) {
+        let query = query.trim();
+        if let Some(team) = teams.iter().find(|team| team.team_key == query) {
+            return Ok(team.team_key.clone());
+        }
+        let exact = teams
             .iter()
-            .find(|league| league.league_key == key)
-            .map(|league| Some(league.league_key.clone()))
-            .ok_or_else(|| WorkflowError("select league: key is not visible to the authenticated user; run b9 st and retry".into()));
+            .filter(|team| team.name.eq_ignore_ascii_case(query))
+            .collect::<Vec<_>>();
+        if let [team] = exact.as_slice() {
+            return Ok(team.team_key.clone());
+        }
+        let lowered = query.to_lowercase();
+        let partial = teams
+            .iter()
+            .filter(|team| team.name.to_lowercase().contains(&lowered))
+            .collect::<Vec<_>>();
+        if let [team] = partial.as_slice() {
+            return Ok(team.team_key.clone());
+        }
+        if !interactive {
+            return if partial.is_empty() {
+                Err(WorkflowError(format!(
+                    "select primary team: no team matches {query:?}; run b9 sync -T <key-or-name> and retry"
+                )))
+            } else {
+                Err(WorkflowError(format!(
+                    "select primary team: {query:?} is ambiguous; use an exact team key or name"
+                )))
+            };
+        }
     }
-    match leagues {
-        [] => Ok(None),
-        [league] => Ok(Some(league.league_key.clone())),
+    match teams {
+        [] => Err(WorkflowError(
+            "select primary team: the public league contains no teams; verify the league id and retry"
+                .into(),
+        )),
+        [team] => Ok(team.team_key.clone()),
         _ if !interactive => Err(WorkflowError(
-            "select league: multiple leagues found; run b9 st -l <key> and retry".into(),
+            "select primary team: run b9 sync -T <key-or-name> and retry".into(),
         )),
         _ => {
-            writeln!(output, "Select a league:")
-                .map_err(|error| WorkflowError::context("write league selection", error))?;
-            for (index, league) in leagues.iter().enumerate() {
-                writeln!(
-                    output,
-                    "  {}. {}  {}",
-                    index + 1,
-                    league.league_key,
-                    league.name
-                )
-                .map_err(|error| WorkflowError::context("write league selection", error))?;
+            writeln!(output, "Select your primary team:")
+                .map_err(|error| WorkflowError::context("write team selection", error))?;
+            for (index, team) in teams.iter().enumerate() {
+                writeln!(output, "  {}. {}  {}", index + 1, team.team_key, team.name)
+                    .map_err(|error| WorkflowError::context("write team selection", error))?;
             }
             write!(output, "Choice: ")
-                .map_err(|error| WorkflowError::context("write league selection", error))?;
+                .map_err(|error| WorkflowError::context("write team selection", error))?;
             let mut choice = String::new();
             input
                 .read_line(&mut choice)
-                .map_err(|error| WorkflowError::context("read league selection", error))?;
+                .map_err(|error| WorkflowError::context("read team selection", error))?;
             let index = choice
                 .trim()
                 .parse::<usize>()
@@ -404,15 +350,15 @@ pub fn select_league(
                 .filter(|value| *value > 0)
                 .ok_or_else(|| {
                     WorkflowError(
-                        "select league: enter one of the displayed numbers and retry".into(),
+                        "select primary team: enter one of the displayed numbers and retry".into(),
                     )
                 })?;
-            leagues
+            teams
                 .get(index - 1)
-                .map(|league| Some(league.league_key.clone()))
+                .map(|team| team.team_key.clone())
                 .ok_or_else(|| {
                     WorkflowError(
-                        "select league: enter one of the displayed numbers and retry".into(),
+                        "select primary team: enter one of the displayed numbers and retry".into(),
                     )
                 })
         }
@@ -434,12 +380,14 @@ pub fn synchronize_with(
     source: &dyn YahooFantasySource,
     store: &mut Store,
     league_key: &str,
+    selected_team_key: &str,
     identities_for_season: &mut dyn FnMut(i32) -> Vec<IdentityCandidate>,
 ) -> Result<SyncSummary, WorkflowError> {
     synchronize_with_origin(
         source,
         store,
         league_key,
+        selected_team_key,
         SyncOrigin::Manual,
         identities_for_season,
     )
@@ -450,6 +398,7 @@ pub fn synchronize_with_origin(
     source: &dyn YahooFantasySource,
     store: &mut Store,
     league_key: &str,
+    selected_team_key: &str,
     origin: SyncOrigin,
     identities_for_season: &mut dyn FnMut(i32) -> Vec<IdentityCandidate>,
 ) -> Result<SyncSummary, WorkflowError> {
@@ -469,11 +418,11 @@ pub fn synchronize_with_origin(
         let free_agents = source
             .free_agents(league_key)
             .map_err(|error| WorkflowError::context("sync free agents", error))?;
-        let team_key = source
-            .team_key(league_key)
-            .map_err(|error| WorkflowError::context("resolve authenticated team", error))?;
-        if !teams.iter().any(|team| team.team_key == team_key) {
-            return Err(WorkflowError("sync: authenticated team is outside the complete standings; prior data was retained".into()));
+        if !teams.iter().any(|team| team.team_key == selected_team_key) {
+            return Err(WorkflowError(
+                "sync: selected primary team is outside the complete standings; choose it again and retry"
+                    .into(),
+            ));
         }
         let snapshot = FantasySnapshotWrite {
             league: settings.league,
@@ -509,7 +458,7 @@ pub fn synchronize_with_origin(
             .reconcile_mlb_identities(&identities_for_season(snapshot.league.season))
             .map_err(|error| WorkflowError::context("reconcile MLB identities", error))?;
         let summary = SyncSummary {
-            team_key,
+            team_key: selected_team_key.to_owned(),
             teams: snapshot.teams.len(),
             players: snapshot.players.len(),
             roster_slots: snapshot.slots.len(),
@@ -537,14 +486,14 @@ pub fn synchronize_with_origin(
 
 /// Synchronize the selected league's stable normalized Yahoo data in the foreground.
 pub fn synchronize(league_override: Option<&str>) -> Result<String, WorkflowError> {
-    synchronize_with_options(league_override, false, false)
+    synchronize_with_options(league_override, false, None)
 }
 
 /// Synchronize manually, optionally bypassing all application freshness gates.
 pub fn synchronize_with_options(
     league_override: Option<&str>,
     _force: bool,
-    include_authenticated: bool,
+    team_override: Option<&str>,
 ) -> Result<String, WorkflowError> {
     // Stable Yahoo synchronization currently always acquires a complete snapshot. Keeping force
     // explicit here preserves manual execution semantics when freshness gates are introduced.
@@ -553,7 +502,7 @@ pub fn synchronize_with_options(
         SyncOrigin::Manual,
         &mut |_| Ok(()),
         true,
-        include_authenticated,
+        team_override,
     )
 }
 
@@ -561,7 +510,7 @@ pub fn synchronize_with_options(
 pub fn synchronize_with_options_streaming(
     league_override: Option<&str>,
     _force: bool,
-    include_authenticated: bool,
+    team_override: Option<&str>,
     output: &mut dyn Write,
 ) -> Result<String, WorkflowError> {
     let mut reporter = |line: &str| write_sync_progress(output, line);
@@ -570,7 +519,7 @@ pub fn synchronize_with_options_streaming(
         SyncOrigin::Manual,
         &mut reporter,
         false,
-        include_authenticated,
+        team_override,
     )
 }
 
@@ -579,7 +528,7 @@ pub fn synchronize_for_origin(
     league_override: Option<&str>,
     origin: SyncOrigin,
 ) -> Result<String, WorkflowError> {
-    synchronize_for_origin_reporting(league_override, origin, &mut |_| Ok(()), true, false)
+    synchronize_for_origin_reporting(league_override, origin, &mut |_| Ok(()), true, None)
 }
 
 fn synchronize_for_origin_reporting(
@@ -587,21 +536,39 @@ fn synchronize_for_origin_reporting(
     origin: SyncOrigin,
     reporter: &mut dyn FnMut(&str) -> Result<(), WorkflowError>,
     include_step_lines: bool,
-    include_authenticated: bool,
+    team_override: Option<&str>,
 ) -> Result<String, WorkflowError> {
     let _guard = crate::daemon::SyncGuard::acquire()
         .map_err(|error| WorkflowError::context("start synchronization", error))?;
     let mut config =
         config::read().map_err(|error| WorkflowError::context("read configuration", error))?;
     let original_config = config.clone();
-    let mut league_key = league_override
+    let mut requested_league = league_override
         .filter(|key| !key.trim().is_empty())
         .unwrap_or(&config.current_league)
         .to_owned();
-    if league_key.is_empty() && !config.pull_public_league_id.is_empty() {
-        league_key = format!("public.{}", config.pull_public_league_id);
-        config.current_league = league_key.clone();
+    if requested_league.is_empty() && !config.pull_public_league_id.is_empty() {
+        requested_league = config.pull_public_league_id.clone();
     }
+    if requested_league.is_empty() {
+        if !std::io::stdin().is_terminal() {
+            return Err(WorkflowError(
+                "sync: no Yahoo league configured; run b9 sync -l <league-id-or-key> -T <team> and retry"
+                    .into(),
+            ));
+        }
+        let mut prompt = std::io::stderr();
+        write!(prompt, "Yahoo league id or key: ")
+            .and_then(|()| prompt.flush())
+            .map_err(|error| WorkflowError::context("write league prompt", error))?;
+        let mut line = String::new();
+        std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|error| WorkflowError::context("read league prompt", error))?;
+        requested_league = line.trim().to_owned();
+    }
+    let league_key = crate::providers::yahoo_public::canonical_public_league_key(&requested_league)
+        .map_err(|error| WorkflowError::context("resolve public Yahoo league", error))?;
     let http = Arc::new(
         HttpClient::production()
             .map_err(|error| WorkflowError::context("initialize HTTP transport", error))?,
@@ -627,252 +594,78 @@ fn synchronize_for_origin_reporting(
     let public = run_sync_item(
         &mut store,
         "yahoo_public",
-        "redzone",
+        "fantasy",
         public_scope,
         origin,
         force,
         |store| {
-            let league_id = crate::providers::yahoo_public::league_id_from_key(&league_key)
-                .or_else(|_| {
-                    crate::providers::yahoo_public::league_id_from_key(
-                        &config.pull_public_league_id,
-                    )
-                })
-                .map_err(|error| {
-                    format!("resolve public Yahoo league: {error}; configure a league and retry")
-                })?;
-            let client = crate::providers::yahoo_public::YahooPublicClient::shared(http.clone());
-            let mut feed = client
-                .fetch_redzone(&league_id, &league_key)
-                .map_err(|error| format!("fetch public Yahoo snapshot: {error}; retry later"))?;
-            client
-                .enrich_team_transactions(&league_key, &mut feed.teams)
-                .map_err(|error| {
-                    format!("fetch public Yahoo team transactions: {error}; retry later")
-                })?;
-            client
-                .enrich_player_ranks(&mut feed.players)
-                .map_err(|error| {
-                    format!("fetch public Yahoo player ranks: {error}; retry later")
-                })?;
-            let snapshot = crate::public_pull::public_snapshot(feed);
+            let source = YahooPublicClient::shared(http.clone());
+            let settings = source
+                .league_settings(&league_key)
+                .map_err(|error| format!("fetch public Yahoo settings: {error}"))?;
+            let teams = source
+                .standings(&league_key)
+                .map_err(|error| format!("fetch public Yahoo standings: {error}"))?;
+            let rosters = source
+                .league_rosters(&league_key)
+                .map_err(|error| format!("fetch public Yahoo rosters: {error}"))?;
+            let free_agents = source
+                .free_agents(&league_key)
+                .map_err(|error| format!("fetch public Yahoo free agents: {error}"))?;
+            let requested_team = team_override
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| {
+                    (!config.current_team_key.is_empty())
+                        .then_some(config.current_team_key.as_str())
+                });
+            let interactive = std::io::stdin().is_terminal();
+            let mut input = std::io::BufReader::new(std::io::stdin());
+            let mut prompt = std::io::stderr();
+            let team_key =
+                select_primary_team(&teams, requested_team, interactive, &mut input, &mut prompt)
+                    .map_err(|error| error.to_string())?;
+            let snapshot = FantasySnapshotWrite {
+                league: settings.league,
+                current_week: settings.current_week,
+                categories: settings
+                    .categories
+                    .into_iter()
+                    .map(|row| CategoryWrite {
+                        stat_id: row.stat_id,
+                        abbreviation: row.abbreviation,
+                        name: row.name,
+                        sort_order: row.sort_order,
+                        display_only: row.display_only,
+                        sequence: row.sequence,
+                    })
+                    .collect(),
+                positions: settings
+                    .roster_positions
+                    .into_iter()
+                    .map(|row| PositionWrite {
+                        position: row.position.to_string(),
+                        count: row.count,
+                    })
+                    .collect(),
+                teams,
+                players: rosters.players.into_iter().chain(free_agents).collect(),
+                slots: rosters.slots,
+            };
             let count = snapshot.players.len() as i64;
-            store.merge_public_fantasy_snapshot(&snapshot)
-                .map_err(|error| format!("persist public Yahoo snapshot: {error}; prior supplemental data was retained"))?;
+            store
+                .replace_fantasy_snapshot(&snapshot)
+                .map_err(|error| {
+                    format!(
+                        "persist public Yahoo fantasy snapshot: {error}; prior complete data was retained"
+                    )
+                })?;
+            config.current_league = league_key.clone();
+            config.current_team_key = team_key;
+            config.pull_public_league_id.clear();
             Ok(count)
         },
     );
     record_outcome(&mut outcomes, public, reporter)?;
-
-    let mut authenticated_outcomes = Vec::new();
-    if !include_authenticated {
-        // Public Yahoo is the default and does not consult Keychain.
-    } else if league_key.is_empty() {
-        record_outcome(
-            &mut authenticated_outcomes,
-            failed_sync_item(
-                &mut store,
-                "yahoo_authenticated",
-                "configuration",
-                public_scope,
-                "authenticated Yahoo league is not configured; run b9 login when API access is available",
-            ),
-            reporter,
-        )?;
-    } else {
-        let yahoo = YahooClient::production(http.clone()).map(Arc::new);
-        match yahoo {
-            Ok(yahoo) => {
-                let source = YahooFantasyClient::new(yahoo);
-                let mut terminal_failures = 0;
-                record_outcome(
-                    &mut authenticated_outcomes,
-                    run_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "settings",
-                        public_scope,
-                        origin,
-                        force,
-                        |store| {
-                            let settings =
-                                source.league_settings(&league_key).map_err(|error| {
-                                    authenticated_yahoo_error(
-                                        "fetch authenticated Yahoo settings",
-                                        error,
-                                        &mut terminal_failures,
-                                    )
-                                })?;
-                            let rows = settings
-                                .categories
-                                .into_iter()
-                                .map(|row| CategoryWrite {
-                                    stat_id: row.stat_id,
-                                    abbreviation: row.abbreviation,
-                                    name: row.name,
-                                    sort_order: row.sort_order,
-                                    display_only: row.display_only,
-                                    sequence: row.sequence,
-                                })
-                                .collect::<Vec<_>>();
-                            store
-                                .replace_authenticated_categories(&league_key, &rows)
-                                .map_err(|error| {
-                                    format!("persist authenticated Yahoo settings: {error}")
-                                })?;
-                            Ok(rows.len() as i64)
-                        },
-                    ),
-                    reporter,
-                )?;
-                record_outcome(
-                    &mut authenticated_outcomes,
-                    run_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "standings",
-                        public_scope,
-                        origin,
-                        force,
-                        |store| {
-                            let rows = source.standings(&league_key).map_err(|error| {
-                                authenticated_yahoo_error(
-                                    "fetch authenticated Yahoo standings",
-                                    error,
-                                    &mut terminal_failures,
-                                )
-                            })?;
-                            store.merge_authenticated_teams(&rows).map_err(|error| {
-                                format!("persist authenticated Yahoo standings: {error}")
-                            })?;
-                            Ok(rows.len() as i64)
-                        },
-                    ),
-                    reporter,
-                )?;
-                record_outcome(
-                    &mut authenticated_outcomes,
-                    run_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "rosters",
-                        public_scope,
-                        origin,
-                        force,
-                        |store| {
-                            let rows = source.league_rosters(&league_key).map_err(|error| {
-                                authenticated_yahoo_error(
-                                    "fetch authenticated Yahoo rosters",
-                                    error,
-                                    &mut terminal_failures,
-                                )
-                            })?;
-                            store
-                                .merge_authenticated_players(&rows.players)
-                                .map_err(|error| {
-                                    format!("persist authenticated Yahoo roster metadata: {error}")
-                                })?;
-                            Ok(rows.players.len() as i64)
-                        },
-                    ),
-                    reporter,
-                )?;
-                let free_agents = if authenticated_yahoo_limit_reached(terminal_failures) {
-                    skipped_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "free_agents",
-                        public_scope,
-                    )
-                } else {
-                    run_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "free_agents",
-                        public_scope,
-                        origin,
-                        force,
-                        |store| {
-                            let rows = source.free_agents(&league_key).map_err(|error| {
-                                authenticated_yahoo_error(
-                                    "fetch authenticated Yahoo free agents",
-                                    error,
-                                    &mut terminal_failures,
-                                )
-                            })?;
-                            store
-                                .replace_authenticated_free_agents(&league_key, &rows)
-                                .map_err(|error| {
-                                    format!("persist authenticated Yahoo free agents: {error}")
-                                })?;
-                            Ok(rows.len() as i64)
-                        },
-                    )
-                };
-                record_outcome(&mut authenticated_outcomes, free_agents, reporter)?;
-                let team_identity = if authenticated_yahoo_limit_reached(terminal_failures) {
-                    skipped_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "team_identity",
-                        public_scope,
-                    )
-                } else {
-                    run_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "team_identity",
-                        public_scope,
-                        origin,
-                        force,
-                        |_| {
-                            let key = source.team_key(&league_key).map_err(|error| {
-                                authenticated_yahoo_error(
-                                    "resolve authenticated Yahoo team",
-                                    error,
-                                    &mut terminal_failures,
-                                )
-                            })?;
-                            if league_override.is_none() || config.current_league == league_key {
-                                config.current_team_key = key;
-                            }
-                            Ok(1)
-                        },
-                    )
-                };
-                record_outcome(&mut authenticated_outcomes, team_identity, reporter)?;
-            }
-            Err(error) => {
-                record_outcome(
-                    &mut authenticated_outcomes,
-                    failed_sync_item(
-                        &mut store,
-                        "yahoo_authenticated",
-                        "initialization",
-                        public_scope,
-                        &format!(
-                            "initialize authenticated Yahoo: {error}; public Yahoo remains available"
-                        ),
-                    ),
-                    reporter,
-                )?;
-            }
-        }
-    }
-    if include_authenticated
-        && authenticated_outcomes
-            .iter()
-            .all(|outcome| outcome.succeeded)
-    {
-        let _ = store.record_provider_success();
-    } else if include_authenticated
-        && let Some(failure) = authenticated_outcomes
-            .iter()
-            .find(|outcome| !outcome.succeeded)
-    {
-        let _ = store.record_provider_failure(&failure.detail);
-    }
-    outcomes.extend(authenticated_outcomes);
 
     let mlb = crate::providers::mlb::MlbClient::production(http.clone());
     let mlb_hitting = run_sync_item(
@@ -1185,7 +978,7 @@ fn synchronize_for_origin_reporting(
             String::new()
         };
         return Err(WorkflowError(format!(
-            "sync failed: every provider failed{detail}\nCheck network access and provider credentials, then retry"
+            "sync failed: every provider failed{detail}\nCheck network access and provider availability, then retry"
         )));
     }
     let disposition = if failures == 0 && degradations == 0 {
@@ -1251,54 +1044,6 @@ impl SyncItemOutcome {
         } else {
             format!("{} {}: {status}: {}", self.source, self.item, self.detail)
         }
-    }
-}
-
-fn authenticated_yahoo_error(
-    operation: &str,
-    error: YahooFantasyError,
-    terminal_failures: &mut usize,
-) -> String {
-    if error.is_terminal_access() {
-        *terminal_failures += 1;
-    }
-    format!("{operation}: {error}")
-}
-
-fn authenticated_yahoo_limit_reached(terminal_failures: usize) -> bool {
-    terminal_failures >= 3
-}
-
-fn skipped_sync_item(store: &mut Store, source: &str, item: &str, scope: &str) -> SyncItemOutcome {
-    let detail = "terminal access failure limit reached after 3 attempts";
-    let _ = store.mark_sync_item_failure(source, item, scope, SYNC_PIPELINE_VERSION, detail);
-    SyncItemOutcome {
-        source: source.into(),
-        item: item.into(),
-        succeeded: false,
-        skipped: true,
-        degraded: false,
-        count: 0,
-        detail: detail.into(),
-    }
-}
-
-fn failed_sync_item(
-    store: &mut Store,
-    source: &str,
-    item: &str,
-    scope: &str,
-    detail: &str,
-) -> SyncItemOutcome {
-    let _ = store.mark_sync_item_failure(source, item, scope, SYNC_PIPELINE_VERSION, detail);
-    SyncItemOutcome {
-        source: source.into(),
-        item: item.into(),
-        succeeded: false,
-        skipped: false,
-        degraded: false,
-        count: 0,
-        detail: detail.into(),
     }
 }
 
@@ -1619,7 +1364,6 @@ fn sync_utc_date(time: SystemTime) -> Result<String, WorkflowError> {
 #[cfg(test)]
 mod provider_cycle_tests {
     use super::*;
-    use crate::providers::yahoo::YahooError;
     use std::cell::Cell;
     use std::io;
     use tempfile::tempdir;
@@ -1696,55 +1440,6 @@ mod provider_cycle_tests {
             "provider first: success (1)\nprovider second: success (1)\n"
         );
         assert_eq!(outcomes.len(), 2);
-    }
-
-    #[test]
-    fn authenticated_yahoo_stops_after_three_terminal_access_failures() {
-        let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
-        let mut terminal_failures = 0;
-        let mut dispatched = 0;
-        let mut outcomes = Vec::new();
-        for item in [
-            "settings",
-            "standings",
-            "rosters",
-            "free_agents",
-            "team_identity",
-        ] {
-            if authenticated_yahoo_limit_reached(terminal_failures) {
-                outcomes.push(skipped_sync_item(
-                    &mut store,
-                    "yahoo_authenticated",
-                    item,
-                    "league",
-                ));
-                continue;
-            }
-            dispatched += 1;
-            let detail = authenticated_yahoo_error(
-                "fetch authenticated Yahoo",
-                YahooFantasyError::Yahoo(YahooError::Forbidden),
-                &mut terminal_failures,
-            );
-            outcomes.push(failed_sync_item(
-                &mut store,
-                "yahoo_authenticated",
-                item,
-                "league",
-                &detail,
-            ));
-        }
-
-        assert_eq!(dispatched, 3);
-        assert_eq!(terminal_failures, 3);
-        assert!(outcomes[3..].iter().all(|outcome| outcome.skipped));
-        assert!(
-            outcomes[3..]
-                .iter()
-                .all(|outcome| outcome.line().contains("skipped"))
-        );
-        assert!(!authenticated_yahoo_limit_reached(0));
     }
 
     #[test]

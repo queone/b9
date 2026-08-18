@@ -13,8 +13,8 @@ use crate::player_display::{
 };
 use crate::providers::mlb::{Boxscore, LineupPlayer, MlbClient, ScheduleGame};
 use crate::providers::rotowire::{DailyLineup, RotowireClient};
-use crate::providers::yahoo::YahooClient;
-use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
+use crate::providers::yahoo_fantasy::YahooFantasySource;
+use crate::providers::yahoo_public::YahooPublicClient;
 use crate::store::{Store, StoredFantasyTeam, WaiverCandidate};
 use crate::store::{SyncMode, SyncRunStatus};
 use crate::terminal::detected_help_color_mode;
@@ -407,16 +407,7 @@ fn select_roster_team<'a>(
 }
 
 /// Render configured roster totals from durable state.
-pub fn show_totals(
-    weekly: Option<&str>,
-    include_authenticated: bool,
-) -> Result<String, PlayerCommandError> {
-    if weekly.is_some() && !include_authenticated {
-        return Err(error(
-            "rt",
-            "weekly totals require authenticated Yahoo data; add -o/--oauth and retry",
-        ));
-    }
+pub fn show_totals(weekly: Option<&str>) -> Result<String, PlayerCommandError> {
     let (mut store, league, selected) = context()?;
     if let Some(requested) = weekly {
         return show_weekly_totals(&mut store, &league, &selected, requested);
@@ -437,9 +428,7 @@ fn show_weekly_totals(
     team_key: &str,
     requested: &str,
 ) -> Result<String, PlayerCommandError> {
-    let http = Arc::new(HttpClient::production().map_err(|failure| error("rt", failure))?);
-    let yahoo = Arc::new(YahooClient::production(http).map_err(|failure| error("rt", failure))?);
-    let source = YahooFantasyClient::new(yahoo);
+    let source = YahooPublicClient::production().map_err(|failure| error("rt", failure))?;
     let current_week = store
         .fantasy_current_week(league)
         .map_err(|failure| error("rt", failure))?
@@ -1092,7 +1081,7 @@ mod tests {
     };
     use crate::providers::mlb::{Linescore, LineupPlayer, ScheduleGame};
     use crate::providers::yahoo_fantasy::{
-        LeagueRosters, LeagueSettings, UserLeague, YahooFantasyError, YahooFantasySource,
+        LeagueRosters, LeagueSettings, YahooFantasyError, YahooFantasySource,
     };
     use crate::store::{Store, StoredFantasyTeam};
 
@@ -1152,12 +1141,6 @@ mod tests {
     }
 
     impl YahooFantasySource for WeeklySource {
-        fn user_leagues(&self) -> Result<Vec<UserLeague>, YahooFantasyError> {
-            Err(YahooFantasyError::Incomplete("not used"))
-        }
-        fn team_key(&self, _: &str) -> Result<String, YahooFantasyError> {
-            Err(YahooFantasyError::Incomplete("not used"))
-        }
         fn league_settings(&self, _: &str) -> Result<LeagueSettings, YahooFantasyError> {
             Err(YahooFantasyError::Incomplete("not used"))
         }

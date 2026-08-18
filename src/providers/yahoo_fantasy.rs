@@ -1,21 +1,17 @@
 //! Typed Yahoo Fantasy acquisition and numeric-key JSON normalization.
 
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::sync::Arc;
-
-use serde_json::{Map, Value};
 
 use crate::domain::{
     FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, MatchupTeam, PlayerWeekStats,
     Position, RosterWeekStats, ScoringType, clean_fantasy_team_name,
 };
 
-use super::yahoo::{YahooClient, YahooError};
-
 const MAX_PAGES: usize = 20;
 
-/// One league visible to the authenticated Yahoo user.
+/// One legacy account-discovery record retained only for fixture parsing.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserLeague {
     pub league_key: String,
@@ -62,7 +58,7 @@ pub struct LeagueRosters {
 /// One Yahoo fantasy data failure.
 #[derive(Debug)]
 pub enum YahooFantasyError {
-    Yahoo(YahooError),
+    Provider(String),
     InvalidInput(&'static str),
     InvalidPayload(&'static str),
     Incomplete(&'static str),
@@ -71,7 +67,7 @@ pub enum YahooFantasyError {
 impl fmt::Display for YahooFantasyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Yahoo(error) => write!(formatter, "acquire Yahoo fantasy data: {error}"),
+            Self::Provider(error) => write!(formatter, "acquire Yahoo fantasy data: {error}"),
             Self::InvalidInput(detail) => write!(
                 formatter,
                 "construct Yahoo fantasy request: {detail}; correct the value and retry"
@@ -90,23 +86,8 @@ impl fmt::Display for YahooFantasyError {
 
 impl std::error::Error for YahooFantasyError {}
 
-impl YahooFantasyError {
-    /// Report whether this failure means authenticated access cannot continue.
-    pub fn is_terminal_access(&self) -> bool {
-        matches!(self, Self::Yahoo(error) if error.is_terminal_access())
-    }
-}
-
-impl From<YahooError> for YahooFantasyError {
-    fn from(value: YahooError) -> Self {
-        Self::Yahoo(value)
-    }
-}
-
 /// Injectable Yahoo fantasy operations consumed by application layers.
 pub trait YahooFantasySource {
-    fn user_leagues(&self) -> Result<Vec<UserLeague>, YahooFantasyError>;
-    fn team_key(&self, league_key: &str) -> Result<String, YahooFantasyError>;
     fn league_settings(&self, league_key: &str) -> Result<LeagueSettings, YahooFantasyError>;
     fn standings(&self, league_key: &str) -> Result<Vec<FantasyTeam>, YahooFantasyError>;
     fn league_rosters(&self, league_key: &str) -> Result<LeagueRosters, YahooFantasyError>;
@@ -123,122 +104,7 @@ pub trait YahooFantasySource {
     ) -> Result<RosterWeekStats, YahooFantasyError>;
 }
 
-/// Production Yahoo fantasy client layered over authenticated raw requests.
-pub struct YahooFantasyClient {
-    yahoo: Arc<YahooClient>,
-}
-
-impl YahooFantasyClient {
-    /// Construct a typed Yahoo fantasy adapter.
-    pub fn new(yahoo: Arc<YahooClient>) -> Self {
-        Self { yahoo }
-    }
-
-    fn get(&self, path: &str) -> Result<Value, YahooFantasyError> {
-        let response = self.yahoo.get_raw(path)?;
-        serde_json::from_slice(&response.body)
-            .map_err(|_| YahooFantasyError::InvalidPayload("response is not valid JSON"))
-    }
-}
-
-impl YahooFantasySource for YahooFantasyClient {
-    fn user_leagues(&self) -> Result<Vec<UserLeague>, YahooFantasyError> {
-        parse_user_leagues(&self.get("/users;use_login=1/games;game_keys=mlb/leagues/teams")?)
-    }
-
-    fn team_key(&self, league_key: &str) -> Result<String, YahooFantasyError> {
-        validate_key(league_key)?;
-        self.user_leagues()?
-            .into_iter()
-            .find(|league| league.league_key == league_key)
-            .map(|league| league.team_key)
-            .filter(|key| !key.is_empty())
-            .ok_or(YahooFantasyError::Incomplete(
-                "authenticated team is missing from the selected league",
-            ))
-    }
-
-    fn league_settings(&self, league_key: &str) -> Result<LeagueSettings, YahooFantasyError> {
-        validate_key(league_key)?;
-        parse_league_settings(
-            league_key,
-            &self.get(&format!("/league/{league_key}/settings"))?,
-        )
-    }
-
-    fn standings(&self, league_key: &str) -> Result<Vec<FantasyTeam>, YahooFantasyError> {
-        validate_key(league_key)?;
-        parse_standings(
-            league_key,
-            &self.get(&format!("/league/{league_key}/standings"))?,
-        )
-    }
-
-    fn league_rosters(&self, league_key: &str) -> Result<LeagueRosters, YahooFantasyError> {
-        validate_key(league_key)?;
-        parse_league_rosters(
-            league_key,
-            &self.get(&format!(
-                "/league/{league_key}/teams/roster/players;out=ranks,percent_owned"
-            ))?,
-        )
-    }
-
-    fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
-        validate_key(league_key)?;
-        let mut players = BTreeMap::new();
-        for start in 0..MAX_PAGES {
-            let offset = start * 25;
-            let page = parse_free_agents(&self.get(&format!(
-                "/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned"
-            ))?)?;
-            if page.is_empty() {
-                break;
-            }
-            for player in page {
-                players.insert(player.yahoo_player_id, player);
-            }
-        }
-        (!players.is_empty())
-            .then(|| players.into_values().collect())
-            .ok_or(YahooFantasyError::Incomplete(
-                "free-agent pages contain no players",
-            ))
-    }
-
-    fn scoreboard(
-        &self,
-        league_key: &str,
-        week: Option<i32>,
-    ) -> Result<Vec<Matchup>, YahooFantasyError> {
-        validate_key(league_key)?;
-        if week.is_some_and(|value| value <= 0) {
-            return Err(YahooFantasyError::InvalidInput("week must be positive"));
-        }
-        let suffix = week.map_or_else(String::new, |value| format!(";week={value}"));
-        parse_scoreboard(&self.get(&format!("/league/{league_key}/scoreboard{suffix}"))?)
-    }
-
-    fn roster_week_stats(
-        &self,
-        team_key: &str,
-        week: i32,
-    ) -> Result<RosterWeekStats, YahooFantasyError> {
-        validate_key(team_key)?;
-        if week <= 0 {
-            return Err(YahooFantasyError::InvalidInput("week must be positive"));
-        }
-        parse_roster_week_stats(
-            team_key,
-            week,
-            &self.get(&format!(
-                "/team/{team_key}/roster;week={week}/players/stats;type=week;week={week}"
-            ))?,
-        )
-    }
-}
-
-fn validate_key(key: &str) -> Result<(), YahooFantasyError> {
+pub(crate) fn validate_key(key: &str) -> Result<(), YahooFantasyError> {
     if key.trim().is_empty() || key.contains('/') || key.contains('\\') {
         return Err(YahooFantasyError::InvalidInput("provider key is invalid"));
     }

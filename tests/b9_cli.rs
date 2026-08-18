@@ -35,22 +35,16 @@ fn root_help_forms_share_the_golden_surface() {
 fn root_help_lists_every_command_specific_flag() {
     let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
     for (command, flags) in [
-        ("sync", &["-f, --force", "-o, --oauth"][..]),
+        ("sync", &["-f, --force", "-T, --team"][..]),
         ("log", &["-n, --lines", "-f, --follow", "-p, --path"]),
         (
             "m",
-            &[
-                "-w, --week",
-                "-W, --weekly",
-                "-D, --day",
-                "-a, --advise",
-                "-o, --oauth",
-            ],
+            &["-w, --week", "-W, --weekly", "-D, --day", "-a, --advise"],
         ),
         ("t", &["-f, --force"]),
         ("tt", &["-f, --force"]),
         ("sp", &["-f, --force"]),
-        ("rt", &["-w, --weekly", "-o, --oauth"]),
+        ("rt", &["-w, --weekly"]),
         ("h", &["-s, --sort", "-p, --position", "-w, --waiver"]),
         ("p", &["-s, --sort", "-p, --position", "-w, --waiver"]),
     ] {
@@ -157,21 +151,7 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
     for command in [
-        "login",
-        "logout",
-        "st",
-        "sync",
-        "pp",
-        "pull-public",
-        "start",
-        "stop",
-        "restart",
-        "log",
-        "reset",
-        "fetch",
-        "lm",
-        "m",
-        "i",
+        "logout", "st", "sync", "start", "stop", "restart", "log", "reset", "lm", "m", "i",
         "whatis",
     ] {
         let output = b9(&[command, "--help"]);
@@ -182,28 +162,7 @@ fn fantasy_commands_have_help_without_side_effects() {
 }
 
 #[test]
-fn matchup_help_exposes_explicit_oauth_opt_in() {
-    let output = b9(&["m", "--help"]);
-    assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("-o, --oauth"));
-    assert!(stdout.contains("Use authenticated Yahoo data"));
-}
-
-#[test]
-fn weekly_roster_totals_require_explicit_oauth_opt_in() {
-    let output = b9(&["rt", "--weekly"]);
-    assert!(!output.status.success());
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("add -o/--oauth"));
-}
-
-#[test]
 fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
-    let missing_fetch = b9(&["fetch"]);
-    assert_eq!(missing_fetch.status.code(), Some(2));
-    let extra_fetch = b9(&["fetch", "/a", "/b"]);
-    assert_eq!(extra_fetch.status.code(), Some(2));
     let negative_lines = b9(&["log", "--lines", "-1"]);
     assert_eq!(negative_lines.status.code(), Some(2));
     let model = b9(&["lm"]);
@@ -217,11 +176,8 @@ fn operational_arguments_and_noninteractive_model_selection_fail_cleanly() {
 fn operational_help_exposes_settled_short_and_long_flags() {
     let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
     assert!(sync.contains("-f, --force"));
-    assert!(sync.contains("-o, --oauth"));
-    assert!(sync.contains("Include authenticated Yahoo supplements"));
-    let roster_totals = String::from_utf8(b9(&["rt", "--help"]).stdout).unwrap();
-    assert!(roster_totals.contains("-o, --oauth"));
-    assert!(roster_totals.contains("Use authenticated Yahoo data"));
+    assert!(sync.contains("-T, --team"));
+    assert!(sync.contains("Select the primary fantasy team"));
     let log = String::from_utf8(b9(&["log", "--help"]).stdout).unwrap();
     for flag in ["-n, --lines", "-f, --follow", "-p, --path"] {
         assert!(log.contains(flag), "missing {flag}");
@@ -251,41 +207,23 @@ fn status_is_local_first_and_has_no_yahoo_attribution() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 status");
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 status diagnostics");
-    assert!(stdout.contains("Yahoo: not checked (run b9 login or b9 sync)"));
+    assert!(stdout.contains("Yahoo: public endpoints"));
     assert!(stdout.contains("No local snapshot; run b9 sync."));
     assert!(!stderr.contains("Data provided by Yahoo Fantasy Sports."));
 }
 
 #[test]
-fn pp_fails_noninteractively_with_actionable_guidance_when_nothing_is_configured() {
-    let home = tempfile::tempdir().expect("temporary HOME");
-    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
-        .args(["pp"])
-        .env("HOME", home.path())
-        .output()
-        .expect("run pp without a configured league");
-    assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
-    let stderr = String::from_utf8(output.stderr).expect("UTF-8 pp diagnostics");
-    assert!(stderr.contains("b9 pp -l"));
-    assert!(!stderr.contains("Data provided by Yahoo Fantasy Sports."));
-}
-
-#[test]
-fn pull_public_alias_reaches_the_same_command_as_pp() {
-    let home = tempfile::tempdir().expect("temporary HOME");
-    let alias = Command::new(env!("CARGO_BIN_EXE_b9"))
-        .args(["pull-public"])
-        .env("HOME", home.path())
-        .output()
-        .expect("run pull-public alias");
-    let primary = Command::new(env!("CARGO_BIN_EXE_b9"))
-        .args(["pp"])
-        .env("HOME", home.path())
-        .output()
-        .expect("run pp");
-    assert_eq!(alias.status.code(), primary.status.code());
-    assert_eq!(alias.stderr, primary.stderr);
+fn retired_oauth_surfaces_are_absent() {
+    let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
+    for retired in ["login", "pp", "pull-public", "fetch", "--oauth"] {
+        assert!(
+            !root.contains(retired),
+            "retired surface remains: {retired}"
+        );
+    }
+    for command in ["login", "pp", "pull-public", "fetch"] {
+        assert_eq!(b9(&[command]).status.code(), Some(2), "{command}");
+    }
 }
 
 #[test]

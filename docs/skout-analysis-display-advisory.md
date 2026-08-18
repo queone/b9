@@ -2,6 +2,8 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
+Current b9 uses public Yahoo matchup inputs without Yahoo credentials. Advisory-provider credentials remain independent in their environment and keyring boundary.
+
 ## Source Baseline
 
 - Use source repository `<skout-repo>` at commit `cf65984024bd10a0a41faa69b8aecd3894052c31`.

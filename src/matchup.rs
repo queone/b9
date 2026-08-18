@@ -20,8 +20,7 @@ use crate::domain::{
 use crate::player_display::render_players as render_roster_players;
 use crate::providers::advisory::{AdvisoryClient, AdvisoryProvider};
 use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, MlbClient, ScheduleGame};
-use crate::providers::yahoo::YahooClient;
-use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
+use crate::providers::yahoo_fantasy::YahooFantasySource;
 use crate::providers::yahoo_public::{RedzoneFeed, YahooPublicClient, league_id_from_key};
 use crate::store::{Store, StoredFantasyTeam};
 use crate::terminal::{
@@ -39,7 +38,6 @@ pub struct MatchupOptions {
     pub weekly: bool,
     pub day: Option<String>,
     pub advise: bool,
-    pub oauth: bool,
 }
 
 impl MatchupOptions {
@@ -63,12 +61,6 @@ impl MatchupOptions {
         {
             return Err(MatchupError(
                 "match: day must use YYYY-MM-DD; correct the date and retry".into(),
-            ));
-        }
-        if !self.oauth && (self.day.is_some() || self.week.is_some() || self.advise) {
-            return Err(MatchupError(
-                "match: this mode requires authenticated Yahoo data; add -o/--oauth and retry"
-                    .into(),
             ));
         }
         Ok(())
@@ -142,10 +134,7 @@ pub fn show_with_options(
 ///
 /// The team argument resolves "my team" by name/manager substring, matching
 /// `r <team>`'s existing lookup. When it resolves, it's persisted to
-/// `config.current_team_key` (mirroring `pp -l`'s persist-once pattern) so
-/// it's needed only once, not on every invocation — unlike the pre-existing
-/// `league_override` path below, which re-resolves "my team" live via OAuth
-/// on every call and never saves it.
+/// `config.current_team_key` so it is needed only once, not on every invocation.
 pub fn show_with_team_options(
     league_override: Option<&str>,
     team_override: Option<&str>,
@@ -180,60 +169,32 @@ pub fn show_with_team_options(
     let http = Arc::new(
         HttpClient::production().map_err(|error| contextual("initialize HTTP transport", error))?,
     );
-    let yahoo = Arc::new(
-        YahooClient::production(http.clone())
-            .map_err(|error| contextual("initialize Yahoo", error))?,
-    );
-    let oauth_available = if options.oauth {
-        yahoo
-            .token_status()
-            .is_ok_and(|status| status.valid || status.has_refresh)
-    } else {
-        false
-    };
-    if options.oauth && !oauth_available {
-        return Err(MatchupError(
-            "match: Yahoo authentication is unavailable; run b9 login and retry".into(),
-        ));
-    }
     let effective_team_key = resolved_team_override
         .clone()
         .or_else(|| (!config.current_team_key.is_empty()).then(|| config.current_team_key.clone()));
 
-    // The default weekly view uses the public feed unless OAuth was explicitly
-    // requested. Day, explicit-week, and advisory modes require OAuth because
-    // public-feed players are not MLBAM-identity-reconciled for daily overlays.
+    let source = YahooPublicClient::shared(http.clone());
     if options.day.is_none() && !options.advise && options.week.is_none() {
-        let public_league_id = if options.oauth {
-            None
-        } else {
-            league_id_from_key(&league_key)
-                .or_else(|_| league_id_from_key(&config.pull_public_league_id))
-                .ok()
-        };
-        let source = YahooFantasyClient::new(yahoo);
+        let public_league_id = league_id_from_key(&league_key)
+            .map_err(|error| contextual("resolve public league id", error))?;
         let public_client = YahooPublicClient::production()
             .map_err(|error| contextual("initialize public feed client", error))?;
         return show_weekly_matchup(
             &mut store,
             &league_key,
             effective_team_key,
-            oauth_available,
-            &source,
             &public_client,
-            public_league_id.as_deref(),
+            &public_league_id,
             options.weekly,
-            http,
-            SystemTime::now(),
+            (http, SystemTime::now()),
         );
     }
 
-    if effective_team_key.is_none() && league_override.is_none() {
+    if effective_team_key.is_none() {
         return Err(MatchupError(
-            "match: no authenticated team stored; run b9 sync and retry".into(),
+            "match: no primary team selected; run b9 sync -T <key-or-name> and retry".into(),
         ));
     }
-    let source = YahooFantasyClient::new(yahoo);
     let current_week = store
         .fantasy_current_week(&league_key)
         .map_err(|error| contextual("read current matchup week", error))?;
@@ -253,12 +214,7 @@ pub fn show_with_team_options(
         league_key,
         week.map_or_else(|| "current".into(), |week| week.to_string())
     );
-    let team_key = match effective_team_key {
-        Some(team_key) => team_key,
-        None => source
-            .team_key(&league_key)
-            .map_err(|error| contextual("resolve authenticated team", error))?,
-    };
+    let team_key = effective_team_key.expect("primary team checked above");
     let (matchups, scoreboard_stale) =
         match cached_or_fetch(&mut store, "match_scoreboard", &scoreboard_scope, || {
             source.scoreboard(&league_key, week)
@@ -340,6 +296,10 @@ fn apply_daily_stats(
     let season = day[..4].parse::<i64>().map_err(|_| {
         MatchupError("match: day must include a valid year; correct the date and retry".into())
     })?;
+    let stored_players = store
+        .fantasy_players(league_key)
+        .map_err(|error| contextual("read daily player identities", error))?;
+    let identities = required_mlb_identities(&stored_players, mine, opponent)?;
     let mlb = MlbClient::production(http);
     let hitting = mlb
         .fetch_hitting_stats_by_date_range(season, day, day)
@@ -347,15 +307,34 @@ fn apply_daily_stats(
     let pitching = mlb
         .fetch_pitching_stats_by_date_range(season, day, day)
         .map_err(|error| contextual("refresh daily MLB pitching stats", error))?;
-    let identities = store
-        .fantasy_players(league_key)
-        .map_err(|error| contextual("read daily player identities", error))?
-        .into_iter()
-        .filter_map(|player| player.yahoo_player_id.zip(player.mlbam_id))
-        .collect::<HashMap<_, _>>();
     apply_daily_roster(&mut mine.players, &identities, &hitting, &pitching);
     apply_daily_roster(&mut opponent.players, &identities, &hitting, &pitching);
     Ok(())
+}
+
+fn required_mlb_identities(
+    stored_players: &[StoredFantasyPlayer],
+    mine: &RosterWeekStats,
+    opponent: &RosterWeekStats,
+) -> Result<HashMap<i64, i64>, MatchupError> {
+    let identities = stored_players
+        .iter()
+        .filter_map(|player| player.yahoo_player_id.zip(player.mlbam_id))
+        .collect::<HashMap<_, _>>();
+    let missing = mine
+        .players
+        .iter()
+        .chain(&opponent.players)
+        .filter(|player| !identities.contains_key(&player.yahoo_player_id))
+        .map(|player| player.name.as_str())
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(MatchupError(format!(
+            "match: daily overlay requires reconciled MLB identities; run b9 sync and retry (unresolved: {})",
+            missing.join(", ")
+        )));
+    }
+    Ok(identities)
 }
 
 fn apply_daily_roster(
@@ -499,9 +478,8 @@ fn select_matchup_team<'a>(
 }
 
 /// Resolve a `[team]` argument against known teams and stage the config
-/// mutation in memory, mirroring `public_pull::resolve_league`'s split: only
-/// the caller touches `config::write`, so this stays testable without ever
-/// risking a real config path.
+/// mutation in memory. Only the caller touches `config::write`, so this stays
+/// testable without risking a real config path.
 fn resolve_team_override(
     teams: &[StoredFantasyTeam],
     config: &mut config::Config,
@@ -515,54 +493,24 @@ fn resolve_team_override(
     Ok((resolved, changed))
 }
 
-const YAHOO_SOURCE: &str = "yahoo";
-const PUBLIC_PULL_SOURCE: &str = "public_pull";
+const YAHOO_SOURCE: &str = "yahoo_public";
 
-/// Render the default weekly matchup view, preferring whichever of OAuth or
-/// the public feed is fresher and non-stale for each cached slot (AT4) —
-/// day-mode and advisory-mode never call this; they stay on `cached_or_fetch`
-/// and its single "yahoo" source. `public_league_id` is `None` when it can't
-/// be resolved at all (no prior `pp`/OAuth login); that only becomes fatal
-/// if OAuth also isn't available.
-#[allow(clippy::too_many_arguments)]
+/// Render the default weekly matchup view from the public redzone feed.
 fn show_weekly_matchup(
     store: &mut Store,
     league_key: &str,
     effective_team_key: Option<String>,
-    oauth_available: bool,
-    source: &impl YahooFantasySource,
     public_client: &YahooPublicClient,
-    public_league_id: Option<&str>,
+    public_league_id: &str,
     force_weekly: bool,
-    http: Arc<HttpClient>,
-    now: SystemTime,
+    runtime: (Arc<HttpClient>, SystemTime),
 ) -> Result<String, MatchupError> {
-    let use_public = public_league_id.is_some();
-    let active_source = if use_public {
-        PUBLIC_PULL_SOURCE
-    } else {
-        YAHOO_SOURCE
-    };
-    let team_key = match effective_team_key {
-        Some(team_key) => team_key,
-        None if oauth_available => source
-            .team_key(league_key)
-            .map_err(|error| contextual("resolve authenticated team", error))?,
-        None => {
-            return Err(MatchupError(
-                "match: no team known for the public feed; run b9 m <team> once and retry".into(),
-            ));
-        }
-    };
-    let public_league_id = match (oauth_available, public_league_id) {
-        (_, Some(id)) => Some(id),
-        (false, None) => {
-            return Err(MatchupError(
-                "match: no public league id resolved; run b9 pp -l <id> once and retry".into(),
-            ));
-        }
-        (true, None) => None,
-    };
+    let (http, now) = runtime;
+    let team_key = effective_team_key.ok_or_else(|| {
+        MatchupError(
+            "match: no primary team selected; run b9 sync -T <key-or-name> and retry".into(),
+        )
+    })?;
     let mut redzone_feed: Option<Result<RedzoneFeed, String>> = None;
     let current_week = store
         .fantasy_current_week(league_key)
@@ -574,24 +522,18 @@ fn show_weekly_matchup(
     let (matchups, scoreboard_stale, _) = match cached_or_fetch_any_source_at(
         store,
         "match_scoreboard",
-        active_source,
+        YAHOO_SOURCE,
         &scoreboard_scope,
         now,
         || -> Result<Vec<Matchup>, String> {
-            if use_public {
-                ensure_redzone_feed(
-                    public_client,
-                    &mut redzone_feed,
-                    public_league_id.expect("public league id when use_public"),
-                    league_key,
-                )
-                .map(|feed| feed.matchups.clone())
-                .map_err(|error| error.to_string())
-            } else {
-                source
-                    .scoreboard(league_key, current_week)
-                    .map_err(|error| error.to_string())
-            }
+            ensure_redzone_feed(
+                public_client,
+                &mut redzone_feed,
+                public_league_id,
+                league_key,
+            )
+            .map(|feed| feed.matchups.clone())
+            .map_err(|error| error.to_string())
         },
     ) {
         Ok(result) => result,
@@ -615,69 +557,51 @@ fn show_weekly_matchup(
     let opponent_index = 1 - my_index;
     let mine_scope = format!("{}:{week}", matchup.teams[my_index].team_key);
     let opponent_scope = format!("{}:{week}", matchup.teams[opponent_index].team_key);
-    let (mut mine, mine_stale, mine_source) = cached_or_fetch_any_source_at(
+    let (mut mine, mine_stale, _) = cached_or_fetch_any_source_at(
         store,
         "match_roster",
-        active_source,
+        YAHOO_SOURCE,
         &mine_scope,
         now,
         || -> Result<RosterWeekStats, String> {
-            if use_public {
-                ensure_redzone_feed(
-                    public_client,
-                    &mut redzone_feed,
-                    public_league_id.expect("public league id when use_public"),
-                    league_key,
-                )
-                .map_err(|error| error.to_string())
-                .and_then(|feed| {
-                    feed.roster_week_stats
-                        .get(&matchup.teams[my_index].team_key)
-                        .cloned()
-                        .ok_or_else(|| "no roster available for the selected team".into())
-                })
-            } else {
-                source
-                    .roster_week_stats(&matchup.teams[my_index].team_key, week)
-                    .map_err(|error| error.to_string())
-            }
+            ensure_redzone_feed(
+                public_client,
+                &mut redzone_feed,
+                public_league_id,
+                league_key,
+            )
+            .map_err(|error| error.to_string())
+            .and_then(|feed| {
+                feed.roster_week_stats
+                    .get(&matchup.teams[my_index].team_key)
+                    .cloned()
+                    .ok_or_else(|| "no roster available for the selected team".into())
+            })
         },
     )?;
-    let (mut opponent, opponent_stale, opponent_source) = cached_or_fetch_any_source_at(
+    let (mut opponent, opponent_stale, _) = cached_or_fetch_any_source_at(
         store,
         "match_roster",
-        active_source,
+        YAHOO_SOURCE,
         &opponent_scope,
         now,
         || -> Result<RosterWeekStats, String> {
-            if use_public {
-                ensure_redzone_feed(
-                    public_client,
-                    &mut redzone_feed,
-                    public_league_id.expect("public league id when use_public"),
-                    league_key,
-                )
-                .map_err(|error| error.to_string())
-                .and_then(|feed| {
-                    feed.roster_week_stats
-                        .get(&matchup.teams[opponent_index].team_key)
-                        .cloned()
-                        .ok_or_else(|| "no roster available for the opponent team".into())
-                })
-            } else {
-                source
-                    .roster_week_stats(&matchup.teams[opponent_index].team_key, week)
-                    .map_err(|error| error.to_string())
-            }
+            ensure_redzone_feed(
+                public_client,
+                &mut redzone_feed,
+                public_league_id,
+                league_key,
+            )
+            .map_err(|error| error.to_string())
+            .and_then(|feed| {
+                feed.roster_week_stats
+                    .get(&matchup.teams[opponent_index].team_key)
+                    .cloned()
+                    .ok_or_else(|| "no roster available for the opponent team".into())
+            })
         },
     )?;
-    // The daily overlay needs MLBAM-identity-reconciled players, which only
-    // an actual OAuth `sync` produces (never a `pp`/public-feed row) — under
-    // freshest-wins, that has to be checked per fetch, not just once via
-    // `oauth_available`, since a `public_pull` row can still win the
-    // roster-cache read even when OAuth is available.
-    let fully_reconciled = mine_source == YAHOO_SOURCE && opponent_source == YAHOO_SOURCE;
-    let daily_date = if !force_weekly && fully_reconciled {
+    let daily_date = if !force_weekly {
         Some(utc_date(SystemTime::now())?)
     } else {
         None
@@ -982,14 +906,9 @@ where
                     .map_err(|decode| contextual("decode stale data", decode))?;
                 Ok((value, true, snapshot.source.clone()))
             } else {
-                let retry = if write_source == PUBLIC_PULL_SOURCE {
-                    "run b9 pp"
-                } else {
-                    "run b9 sync"
-                };
                 Err(contextual(
                     "refresh data",
-                    format!("{error}; {retry}, verify connectivity, and retry"),
+                    format!("{error}; run b9 sync, verify connectivity, and retry"),
                 ))
             }
         }
@@ -1691,7 +1610,6 @@ fn matchup_player_name(player: &PlayerWeekStats) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{FantasyPlayer, FantasyTeam};
     use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, HittingStats, PitchingStats};
     use crate::transport::{ExecutorError, HttpExecutor, HttpResponse, ValidatedRequest};
 
@@ -1904,81 +1822,6 @@ mod tests {
         ]))))
     }
 
-    #[derive(Default)]
-    struct FakeFantasySource {
-        team_key: Option<String>,
-        scoreboard: Option<Vec<Matchup>>,
-        rosters: HashMap<String, RosterWeekStats>,
-    }
-
-    impl YahooFantasySource for FakeFantasySource {
-        fn user_leagues(
-            &self,
-        ) -> Result<
-            Vec<crate::providers::yahoo_fantasy::UserLeague>,
-            crate::providers::yahoo_fantasy::YahooFantasyError,
-        > {
-            Err(crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"))
-        }
-        fn team_key(
-            &self,
-            _league_key: &str,
-        ) -> Result<String, crate::providers::yahoo_fantasy::YahooFantasyError> {
-            self.team_key.clone().ok_or(
-                crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"),
-            )
-        }
-        fn league_settings(
-            &self,
-            _league_key: &str,
-        ) -> Result<
-            crate::providers::yahoo_fantasy::LeagueSettings,
-            crate::providers::yahoo_fantasy::YahooFantasyError,
-        > {
-            Err(crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"))
-        }
-        fn standings(
-            &self,
-            _league_key: &str,
-        ) -> Result<Vec<FantasyTeam>, crate::providers::yahoo_fantasy::YahooFantasyError> {
-            Err(crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"))
-        }
-        fn league_rosters(
-            &self,
-            _league_key: &str,
-        ) -> Result<
-            crate::providers::yahoo_fantasy::LeagueRosters,
-            crate::providers::yahoo_fantasy::YahooFantasyError,
-        > {
-            Err(crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"))
-        }
-        fn free_agents(
-            &self,
-            _league_key: &str,
-        ) -> Result<Vec<FantasyPlayer>, crate::providers::yahoo_fantasy::YahooFantasyError>
-        {
-            Err(crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"))
-        }
-        fn scoreboard(
-            &self,
-            _league_key: &str,
-            _week: Option<i32>,
-        ) -> Result<Vec<Matchup>, crate::providers::yahoo_fantasy::YahooFantasyError> {
-            self.scoreboard.clone().ok_or(
-                crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"),
-            )
-        }
-        fn roster_week_stats(
-            &self,
-            team_key: &str,
-            _week: i32,
-        ) -> Result<RosterWeekStats, crate::providers::yahoo_fantasy::YahooFantasyError> {
-            self.rosters.get(team_key).cloned().ok_or(
-                crate::providers::yahoo_fantasy::YahooFantasyError::Incomplete("not used in test"),
-            )
-        }
-    }
-
     fn matchup_team(team_key: &str, name: &str) -> MatchupTeam {
         MatchupTeam {
             team_key: team_key.into(),
@@ -2067,8 +1910,8 @@ mod tests {
         assert!(changed);
         assert_eq!(config.current_team_key, "l.1.t.2");
 
-        // Re-resolving to the same team reports no change, matching `pp
-        // -l`'s persist-once-then-reuse pattern for the caller's write gate.
+        // Re-resolving to the same team reports no change, matching sync's
+        // persist-once-then-reuse pattern for the caller's write gate.
         let (resolved_again, changed_again) =
             resolve_team_override(&teams, &mut config, "vladdy").unwrap();
         assert_eq!(resolved_again, "l.1.t.2");
@@ -2078,24 +1921,20 @@ mod tests {
     }
 
     #[test]
-    fn weekly_matchup_uses_public_feed_despite_oauth_token_and_reuses_its_cache() {
+    fn weekly_matchup_uses_public_feed_and_reuses_its_cache() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
         let public = public_client(vec![ok_response(), scoreboard_response()]);
-        let source = FakeFantasySource::default();
         let now = SystemTime::now();
 
         let first = show_weekly_matchup(
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            true,
-            &source,
             &public,
-            Some("170874"),
-            false,
-            failing_http_client(),
-            now,
+            "170874",
+            true,
+            (failing_http_client(), now),
         )
         .unwrap();
         assert!(first.contains("New York Yankees"));
@@ -2112,13 +1951,10 @@ mod tests {
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            true,
-            &source,
             &empty_public,
-            Some("170874"),
-            false,
-            failing_http_client(),
-            now + Duration::from_secs(1),
+            "170874",
+            true,
+            (failing_http_client(), now + Duration::from_secs(1)),
         )
         .unwrap();
         assert_eq!(first, second);
@@ -2128,20 +1964,16 @@ mod tests {
     fn weekly_matchup_falls_back_to_the_stale_snapshot_when_a_later_fetch_fails() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
-        let source = FakeFantasySource::default();
         let now = SystemTime::now();
 
         show_weekly_matchup(
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            false,
-            &source,
             &public_client(vec![ok_response(), scoreboard_response()]),
-            Some("170874"),
-            false,
-            failing_http_client(),
-            now,
+            "170874",
+            true,
+            (failing_http_client(), now),
         )
         .unwrap();
 
@@ -2152,13 +1984,10 @@ mod tests {
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            false,
-            &source,
             &public_client(vec![blocked_response()]),
-            Some("170874"),
-            false,
-            failing_http_client(),
-            later,
+            "170874",
+            true,
+            (failing_http_client(), later),
         )
         .unwrap();
         assert!(fallback.contains("STALE"));
@@ -2169,30 +1998,24 @@ mod tests {
     fn weekly_matchup_with_no_prior_snapshot_reports_the_fetch_error() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
-        let source = FakeFantasySource::default();
         let error = show_weekly_matchup(
             &mut store,
             "469.l.170874",
             Some("469.l.170874.t.1".into()),
-            false,
-            &source,
             &public_client(vec![blocked_response()]),
-            Some("170874"),
-            false,
-            failing_http_client(),
-            SystemTime::now(),
+            "170874",
+            true,
+            (failing_http_client(), SystemTime::now()),
         )
         .unwrap_err();
         let message = error.to_string();
         assert!(message.contains("403"));
-        // A pp-only user has no OAuth login to run `b9 sync` against — the
-        // recovery hint must point at `b9 pp`, not the OAuth-only command.
-        assert!(message.contains("run b9 pp"));
-        assert!(!message.contains("run b9 sync"));
+        assert!(message.contains("retry later"));
+        assert!(!message.contains("login"));
     }
 
     #[test]
-    fn weekly_matchup_prefers_a_fresher_public_pull_row_even_when_oauth_is_available() {
+    fn weekly_matchup_reads_a_fresh_historical_public_pull_snapshot() {
         let directory = tempfile::tempdir().unwrap();
         let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
         let league_key = "469.l.170874";
@@ -2230,26 +2053,18 @@ mod tests {
             )
             .unwrap();
 
-        // An OAuth source that errors if actually called — proves the
-        // fresher public_pull cache is used instead of a live OAuth fetch.
-        let source = FakeFantasySource::default();
         let output = show_weekly_matchup(
             &mut store,
             league_key,
             Some(team_key.into()),
-            true,
-            &source,
             &public_client(vec![]),
-            None,
-            false,
-            failing_http_client(),
-            SystemTime::now(),
+            "170874",
+            true,
+            (failing_http_client(), SystemTime::now()),
         )
         .unwrap();
         assert!(output.contains("Team A"));
         assert!(output.contains("Team B"));
-        // Even though OAuth is available, the roster data actually served
-        // came from public_pull (unreconciled), so no daily overlay/label.
         assert!(!output.contains("DAY "));
     }
 
@@ -2318,5 +2133,46 @@ mod tests {
             ),
             ("4", 1, 8)
         );
+    }
+
+    #[test]
+    fn daily_identity_gate_fails_before_provider_acquisition() {
+        let mine = RosterWeekStats {
+            team_key: "l.1.t.1".into(),
+            team_name: "Mine".into(),
+            week: 1,
+            players: vec![PlayerWeekStats {
+                yahoo_player_id: 7,
+                name: "Missing Hitter".into(),
+                team: "NYY".into(),
+                position_type: "B".into(),
+                slot_position: Position::Outfield,
+                eligible_positions: vec![Position::Outfield],
+                injury_status: String::new(),
+                hab: String::new(),
+                runs: 0,
+                home_runs: 0,
+                runs_batted_in: 0,
+                stolen_bases: 0,
+                batting_average: String::new(),
+                innings_pitched: String::new(),
+                wins: 0,
+                saves: 0,
+                strikeouts: 0,
+                earned_run_average: String::new(),
+                whip: String::new(),
+            }],
+        };
+        let opponent = RosterWeekStats {
+            team_key: "l.1.t.2".into(),
+            team_name: "Opponent".into(),
+            week: 1,
+            players: Vec::new(),
+        };
+        let error = required_mlb_identities(&[], &mine, &opponent)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("run b9 sync and retry"));
+        assert!(error.contains("Missing Hitter"));
     }
 }

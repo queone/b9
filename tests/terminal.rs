@@ -4,7 +4,7 @@ use b9::terminal::{
     section, subtitle, title, visible_width,
 };
 
-const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n    -f, --force                Bypass synchronization freshness gates\n    -o, --oauth                Include authenticated Yahoo supplements\n  pp                           Fetch public Yahoo league data without login\n  start                        Start the background sync daemon\n  stop                         Stop the running daemon\n  restart                      Restart the daemon\n  log                          Show or follow the daemon log\n    -n, --lines <N>            Show the last N log lines (default 50)\n    -f, --follow               Follow new log output\n    -p, --path                 Print only the log path\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n    -a, --advise               Include the advisory summary\n    -o, --oauth                Use authenticated Yahoo data\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n    -o, --oauth                Use authenticated Yahoo data\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\nFantasy data provided by https://sports.yahoo.com/fantasy/\n";
+const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  logout                       Remove the retired Yahoo credential\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n    -f, --force                Bypass synchronization freshness gates\n    -T, --team <TEAM>          Select the primary fantasy team\n  start                        Start the background sync daemon\n  stop                         Stop the running daemon\n  restart                      Restart the daemon\n  log                          Show or follow the daemon log\n    -n, --lines <N>            Show the last N log lines (default 50)\n    -f, --follow               Follow new log output\n    -p, --path                 Print only the log path\n  reset                        Delete the local b9 database\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n    -a, --advise               Include the advisory summary\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\nFantasy data provided by https://sports.yahoo.com/fantasy/\n";
 
 #[test]
 fn plain_help_matches_the_b9_style_golden() {
@@ -137,7 +137,7 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
         ..Config::default()
     };
 
-    const PLAIN: &str = "Yahoo: not checked (run b9 login or b9 sync)\nService: running (uptime 0h 2m 0s)\nLast run: success at unix 100\nNext run: unix 200\nDatabase: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nCircuit: closed (0 failed requests)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/b9/.config/b9/config.json\n";
+    const PLAIN: &str = "Yahoo: public endpoints\nService: running (uptime 0h 2m 0s)\nLast run: success at unix 100\nNext run: unix 200\nDatabase: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nProvider failures: ready (0)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/b9/.config/b9/config.json\n";
 
     let plain = render_dashboard(
         Path::new("/srv/b9/.config/b9/b9.db"),
@@ -172,7 +172,7 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
             "\u{1b}[38;5;34msuccess at unix 100\u{1b}[0m",
             1,
         )
-        .replacen("closed", "\u{1b}[38;5;34mclosed\u{1b}[0m", 1);
+        .replacen("ready", "\u{1b}[38;5;34mready\u{1b}[0m", 1);
     assert_eq!(colored, expected);
     for line in colored.lines() {
         assert!(visible_width(line) <= 80, "line too wide: {line}");
@@ -185,7 +185,7 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
         "Database:",
         "Identities:",
         "Provider freshness:",
-        "Circuit:",
+        "Provider failures:",
         "Unmatched players:",
         "League:",
     ];
@@ -223,7 +223,7 @@ fn dashboard_colors_stopped_service_and_open_circuit_distinctly() {
     );
     assert!(plain.contains("Service: stopped"));
     assert!(plain.contains("Last run: failed at unix 50"));
-    assert!(plain.contains("Circuit: open (5 failed requests)"));
+    assert!(plain.contains("Provider failures: blocked (5)"));
     assert!(plain.contains("Last provider error: Yahoo API returned HTTP 403"));
 
     let colored = render_dashboard(
@@ -236,5 +236,5 @@ fn dashboard_colors_stopped_service_and_open_circuit_distinctly() {
     );
     assert!(colored.contains("\u{1b}[38;5;245mstopped\u{1b}[0m"));
     assert!(colored.contains("\u{1b}[38;5;100mfailed at unix 50\u{1b}[0m"));
-    assert!(colored.contains("\u{1b}[38;5;100mopen\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;100mblocked\u{1b}[0m"));
 }

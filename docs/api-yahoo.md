@@ -1,176 +1,73 @@
-# Yahoo Authentication And Raw Requests
+# Yahoo Public Fantasy Requests
 
 ## Status
 
-Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministic transport and credential-store doubles as the pre-release contract. Keep live credentials, live authorization, and live requests outside automated validation.
+b9 acquires read-only Yahoo fantasy data without OAuth, cookies, browser state, or account credentials. Yahoo does not document these public endpoints as a supported API, so every request is bounded and every failed or incompatible refresh retains the last complete snapshot.
 
-## Endpoints
+## Hosts and ownership
 
-- Use `https://api.login.yahoo.com/oauth2/request_auth` for authorization.
-- Use `https://api.login.yahoo.com/oauth2/get_token` for authorization-code and refresh exchanges.
-- Use `https://localhost:8080/callback` as the registered callback without starting a local callback server.
-- Use `https://fantasysports.yahooapis.com/fantasy/v2` as the fantasy API root.
-- Read the public client identifier from `YAHOO_CLIENT_ID` at the production environment boundary.
+- Use `https://pub-api.fantasysports.yahoo.com/fantasy/v3` only for the redzone league feed.
+- Use `https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2` for league-scoped settings, standings, rosters, players, scoreboards, weekly team statistics, and public ranks.
+- Treat `ro` as an observed read-only frontend convention rather than a Yahoo compatibility promise.
+- Keep account-scoped discovery unavailable; require the operator to provide a league id or key and select a primary team.
+- Verify any proposed path independently before adding it to the production allowlist.
 
-## Yahoo Data Source Selection
+## Production request paths
 
-- Use `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone` for unauthenticated public league, roster, matchup, and current-week data.
-- Use `pub-api-ro.fantasysports.yahoo.com/fantasy/v2` for read-only player-pool metadata such as ranks, eligible positions, ownership, and draft analysis.
-- Treat `ro` as an observed read-only frontend convention, not a documented Yahoo contract.
-- Use `fantasysports.yahooapis.com/fantasy/v2` with OAuth for account identity and fields unavailable from public endpoints.
-- Investigate the two public hosts before assuming a Yahoo field requires OAuth.
-- Verify each candidate path without authentication instead of inferring that adjacent resources are public.
-- Document the exact response shape and authentication behavior before adding a new Yahoo acquisition path.
+- Fetch `/redzone/mlb?league_id={league_id}&format=json` for current league, team, roster, matchup, and player data.
+- Fetch `/league/{league_key}/settings?format=json` for categories, roster positions, season, and current week.
+- Fetch `/league/{league_key}/standings?format=json` for team records, rank, waiver priority, budget, and move counts.
+- Fetch `/league/{league_key}/teams/roster/players;out=ranks,percent_owned?format=json` for complete league rosters.
+- Fetch `/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned?format=json` until the first empty page for active free agents.
+- Fetch `/league/{league_key}/scoreboard[;week={week}]?format=json` for current or historical matchup scoreboards.
+- Fetch `/team/{team_key}/roster;week={week}/players/stats;type=week;week={week}?format=json` for weekly roster statistics.
+- Fetch `/league/mlb.l.public/players;player_ids={ids};out=ranks;ranks=season?format=json_f` in bounded batches for public season ranks.
 
-## Roster And Player Pool
+A full Yahoo league key such as `469.l.170874` is preserved. A bare id or legacy `public.170874` value is normalized to `mlb.l.170874`, the public alias accepted by the league-scoped host. Historical `public_pull` storage origins remain readable but are never newly written.
 
-- Fetch every roster through the league roster endpoint with ranks and ownership percentages.
-- Fetch free agents and waiver-eligible unrostered players through paginated league player requests with `status=A` and explicit offsets.
-- Stop free-agent pagination only after an empty page and reject a complete fetch that yields no players.
-- Replace the durable fantasy snapshot only after league, roster, and free-agent records are complete.
-- Preserve the most recent complete normalized snapshot when a later Yahoo acquisition fails.
-- Preserve weekly matchup snapshots by league and week so current, numeric-week, and ISO-date totals can fall back safely.
+## Transport and security
 
-## Authorization
+- Send only HTTPS GET requests through the shared validating transport.
+- Send an `Accept` header and never send `Authorization`, `Cookie`, OAuth parameters, refresh tokens, or browser headers.
+- Apply a ten-second request timeout and an eight-MiB response limit.
+- Bound free-agent pagination to 20 pages of 25 players.
+- Reject invalid league and team keys before request construction.
+- Reject non-success responses without retaining response bodies in diagnostics.
+- Avoid retrying access denial, evading blocking, or enumerating league ids.
+- Keep advisory-provider credentials isolated in their existing environment and keyring boundary.
 
-- Generate independent 32-byte operating-system-random state and PKCE verifier values for every attempt.
-- Encode state and verifier with unpadded URL-safe Base64.
-- Derive the PKCE challenge with SHA-256.
-- Request `response_type=code`, `scope=fspt-r`, `code_challenge_method=S256`, and `access_type=offline`.
-- Require the complete callback URL supplied by the browser.
-- Match the callback scheme, host, effective port, and path exactly.
-- Match exactly one returned state value against the pending authorization.
-- Accept exactly one nonblank code after rejecting provider-declared errors.
-- Consume the non-cloneable pending authorization during completion.
-- Reject bare codes because they cannot prove returned state.
+## Setup and synchronization
 
-## Tokens And Credentials
+Run `b9 sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic non-interactive setup. Interactive sync prompts for a missing league id and displays the fetched team list when the primary team is unresolved.
 
-- Exchange tokens through the injected `HttpClient` with form encoding, a ten-second timeout, a 64-KiB response limit, and no adapter retry.
-- Accept only successful JSON containing a nonblank access token, a case-insensitive bearer token type, and positive non-overflowing `expires_in` seconds.
-- Calculate expiry from one injected-clock capture.
-- Refresh ten seconds before recorded expiry to retain the predecessor OAuth library's safety margin.
-- Preserve the prior refresh token when Yahoo omits a rotated value.
-- Coalesce concurrent refresh demand into one exchange and one credential-store update.
-- Store serialized tokens only in the operating-system credential store under service `b9` and account `yahoo-oauth-token`.
-- Distinguish an absent credential from malformed data and credential-store failure.
-- Reject unsupported secure-store platforms without plaintext or repository-local fallback.
-- Treat initial credential persistence failure as failed authorization.
-- Return usable refreshed data with a typed issue when refresh persistence alone fails.
-- Keep logout-style credential deletion idempotent.
-- Keep the b9 credential independent from Skout's credential namespace.
+Primary-team matching uses this precedence:
 
-## Authenticated Raw Requests
+1. exact team key;
+2. case-insensitive exact team name;
+3. unique case-insensitive team-name substring.
 
-- Accept only absolute-path references beneath the Yahoo fantasy API root.
-- Reject authority changes, fragments, backslashes, empty paths, and literal or percent-encoded traversal.
-- Preserve caller query parameters while replacing every supplied `format` value with exactly one `format=json`.
-- Send one bearer header with a ten-second timeout and an eight-MiB response limit.
-- Retry only HTTP 429 for no more than five total attempts.
-- Honor numeric `Retry-After` values up to 30 seconds.
-- Use waits of one, two, four, and eight seconds when `Retry-After` is absent or invalid.
-- Return HTTP 401 and 403 as distinct typed terminal-access failures, each with its own recovery guidance, without response bodies.
-- Return successful raw bytes without interpreting Yahoo's fantasy JSON shape.
+Ambiguous, missing, or stale selections fail without guessing. Synchronization fetches settings, standings, complete rosters, and all free-agent pages before validating the selected team and atomically replacing the prior complete fantasy snapshot. A failed or incomplete acquisition leaves the prior snapshot intact and records a visible provider failure.
 
-## Security
+## Command behavior
 
-- Redact access tokens, refresh tokens, bearer headers, client identifiers, authorization codes, state, PKCE material, and token response bodies from debug, display, and errors.
-- Keep token and credential-store types inside the Yahoo adapter.
-- Keep Yahoo retries outside the shared no-retry transport.
-- Keep live credential and keychain mutation outside pre-release tests.
+- Use public Yahoo data for foreground, startup, and scheduled `sync`.
+- Use public Yahoo scoreboards and weekly team statistics for `m` and `rt --weekly`, including explicit weeks and ISO dates.
+- Require MLBAM identity reconciliation before daily matchup overlays; report unresolved players instead of silently applying an empty overlay.
+- Populate waiver candidates from the complete public free-agent snapshot.
+- Keep `st` local-only.
+- Remove `login`, `pp`, `pull-public`, authenticated `fetch`, and Yahoo `-o/--oauth` flags.
+- Retain `logout` for one released cleanup window only; it can delete the exact retired `b9` / `yahoo-oauth-token` keychain entry but cannot read, refresh, or use it.
 
-## Fantasy Data Contract
+## Response contracts
 
-- Acquire authenticated user leagues and team identity.
-- Acquire league settings, scoring categories, roster positions, standings, and complete league rosters for foreground synchronization.
-- Treat authenticated player status as the precise player-card injury source.
-- Preserve a prior precise authenticated status when authenticated acquisition fails and the public feed supplies only generic `IL` or no status.
-- Clear a prior precise status only when a successful authenticated player response reports the player active.
-- Acquire weekly scoreboards and both matchup rosters lazily for `b9 m`, from either OAuth or the public redzone feed — see "Matchup data from the public feed" below.
-- Traverse Yahoo numeric-key collections and accept observed array-or-object variants.
-- Remove emoji presentation runes from fantasy team names before persistence or display while preserving textual Unicode.
-- Reject incomplete stable snapshots before normalized replacement.
-- Cache weekly command payloads for 60 seconds and retain the last complete snapshot after refresh failure.
-- Store league, team, player, free-agent, and roster ownership in the existing schema-version-two tables.
-- Keep weekly scoreboards and weekly player statistics in versioned command snapshots.
-- Keep `login`, `logout`, `st`, `sync`, and the baseline `m` surface outside the provider adapter.
+Yahoo collections may use numeric object keys, arrays, or singleton shapes. Parsers normalize those variants into provider-neutral league, team, player, slot, matchup, category, and weekly-stat records. Empty roster placeholders are skipped; malformed identities, incomplete required collections, invalid roster ownership, and an empty completed free-agent acquisition reject the refresh.
 
-## Delivered Integration And Gaps
+The redzone feed supplies current-week category building blocks. Counting categories sum active roster players; rate categories are recomputed from their underlying totals. Innings use baseball thirds rather than decimal tenths. Bench and injured slots remain visible in roster views but do not contribute to active matchup totals.
 
-- Fetch and atomically replace complete free-agent snapshots for roster and waiver evaluation.
-- Resolve current, explicit-week, and ISO-day matchup views with durable stale fallback.
-- Share foreground, startup, and scheduled synchronization through one application service and execution lock.
-- Keep daily player-stat enrichment in the MLB adapter because Yahoo supplies the matchup scoreboard and weekly roster baseline.
-- Defer Yahoo transaction-history acquisition and reconciliation until a later approved provider contract.
-- Keep live OAuth and fantasy-format verification pending while Yahoo application access is unavailable.
+## Availability risk
 
-## Fixture Provenance
+These endpoints are publicly reachable but unofficial and potentially unstable. A future denial, path change, payload change, rate limit, or Yahoo policy change can prevent refresh. b9 mitigates that risk with exact allowlisted paths, bounded requests, fixture-backed parsers, atomic replacement, durable weekly snapshots, and stale fallback. It does not treat authentication as a recovery path.
 
-The scrubbed synthetic fixtures under `tests/fixtures/yahoo/` cover token, league, settings, standings, roster, matchup, weekly-stat, singleton, empty, and malformed shapes. They contain no credentials or personal data.
+## Fixture provenance
 
-## Local status and authorization boundary
-
-`b9 st` does not read the Yahoo credential, refresh OAuth, or make a Yahoo request. Public Yahoo acquisition is the default for `b9 m`, `b9 sync`, startup sync, and scheduled sync; these paths do not consult the credential store. Add `-o/--oauth` to `m`, `rt -w/--weekly`, or foreground `sync` when authenticated data is required. `login`, `logout`, and `fetch` remain inherently authenticated operations. On explicit OAuth paths, HTTP 401 is classified as an expired session and HTTP 403 as external Yahoo authorization denial, each with distinct recovery guidance; secure-store denial, missing, and malformed outcomes are classified separately. Cached data is retained when a refresh fails.
-
-## Public redzone feed (unauthenticated)
-
-`b9 pp` (long alias `pull-public`) fetches league, team, roster, matchup, and player data from Yahoo's public redzone feed without OAuth, the credential store, or any `b9 login` state. It is a permanent, independent command — not a temporary bridge — that coexists with `b9 login`/`b9 sync`.
-
-### Endpoint
-
-```
-GET https://pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb?league_id={league_id}&format=json
-```
-
-- `league_id` is the bare numeric Yahoo league id (e.g. `170874`) — not the full `{game_key}.l.{league_id}` key `sync` uses elsewhere in this document. b9 converts between the two; see "League key vs. league id" below.
-- No cookies, no auth header, no query parameter beyond `league_id` and `format=json` are required. Confirmed with a bare, cookie-free `curl` against a real league.
-- Confirmed deliberately public, not an oversight: sibling account-scoped paths on the same host — `pub-api.fantasysports.yahoo.com/fantasy/v3/user/subscriptions` and `pub-api-ro.fantasysports.yahoo.com/fantasy/v2/users;use_login=1/profile` — return HTTP 401 without login, while the redzone path returns 200 with real data.
-- Confirmed **not** a general mirror of the official REST API: the equivalent authenticated-shape paths (`.../league/{key}`, `.../league/{key}/standings`, `.../league/{key}/transactions`, `.../league/{key}/players;status=FA`) all return 404 on this host. Do not assume another resource is public without separately verifying it the same way.
-- One response returns the entire current week for every team in the league in a single call — no pagination observed.
-
-### Response shape (fields b9 reads)
-
-Top-level: `service.leagues.{league_id}`, `service.players` (a lookup table by Yahoo player id), `service.injuryStatuses`.
-
-`service.leagues.{league_id}`:
-- `name`, `scoringType` (`"head"` confirmed → `HeadToHead`; other values pass through as `ScoringType::Other`), `weekInfo.start` (`YYYY-MM-DD`, its year becomes the season)
-- `teams.{team_id}`: `id`, `name`, `rank`, `wins`, `losses`, `ties`, `managers.{id}.nickName` (server-redacted to the literal string `"--hidden--"` for every team observed — never a real name), `players[]`
-
-Each roster entry in `teams.{team_id}.players[]`:
-- `id`, `position` (roster slot), `eligiblePositionSlots`, `positionType`, `status` (injury code, e.g. `IL`)
-- **Empty roster slots are not omitted** — they come back as a placeholder shape: `id: null`, `positionType: false` (a JSON boolean, not a string, unlike every other row), and `invalid: true`. b9's deserializer treats `id`/`positionType` as flexible types and skips any entry with `invalid: true` or a null `id` rather than fabricating a player.
-
-`service.players.{id}`: `name`, `team` (MLB abbreviation) — used to fill in the roster entry's player identity.
-
-Not present in the feed and not written by `pp`: the free-agent/waiver pool, transaction history, and scoring-category abbreviations/names (only numeric stat ids with no label — b9 classifies them itself; see "Matchup data from the public feed" below). Per-player Yahoo stat totals (`teams.{team_id}.players[].stats`), `league.stats` (scoring-category metadata), `league.matchupGroups` (pairings), `league.weekInfo.week`, and `league.positions` (roster-slot labels, one entry per slot) are present and, as of `b9 m`'s public-feed support, parsed and used.
-
-### League key vs. league id
-
-b9's configuration stores the full Yahoo league key (`{game_key}.l.{league_id}`, e.g. `469.l.170874`) in `current_league` — the same value `sync`/`st` use. `pp` needs only the trailing numeric `league_id` for the request, but writes its snapshot under a b9 storage key that existing commands can find:
-
-- If `current_league` already resolves to the same numeric league, `pp` reuses that real key verbatim, so `sync`- and `pp`-written data land in the same place.
-- Otherwise `pp` synthesizes `public.{league_id}` and sets `current_league` to it (clearing `current_team_key`, since it named a team in whatever league was previously selected).
-
-`pp`'s league id resolves in order: an explicit `-l/--league` override (bare number or full key); `current_league`, if already set by a prior `login`/`sync`; a previously saved `pp`-only selection (`config.pull_public_league_id`); only then an interactive prompt, whose answer is saved for next time. Non-interactive with nothing resolvable fails with actionable guidance rather than hanging.
-
-### Provenance and precedence
-
-`sync_runs.origin` gained a fourth value, `public_pull` (`SyncOrigin::PublicPull`), alongside the existing `manual`/`automatic`/`startup`. Standalone `pp` keeps its complete public replacement behavior. `b9 sync` merges the public snapshot field by field and preserves unfetched authenticated-only values. `b9 sync -o/--oauth` then applies successful authenticated supplements; startup and scheduled sync remain public-only. Precise authenticated injury status outranks MLB roster status, which outranks generic public status; a failed authenticated refresh cannot downgrade a retained precise value. `Store::current_data_origin` reports the `origin` of the latest **complete** run, never merely the latest run regardless of status. Redacted fields render as explicit placeholders rather than inferred values.
-
-### Matchup data from the public feed
-
-`b9 m`'s default weekly view sources its scoreboard and both rosters from the public feed without consulting OAuth, resolving "my team" from a positional `[team]` argument (`b9 m <team>`, name/manager substring match against stored teams) persisted to `config.current_team_key` on first successful resolution, matching `pp -l`'s persist-once pattern — a second `b9 m` needs no argument. Add `-o/--oauth` to select authenticated Yahoo explicitly. `b9 m -D <date>`, `-w <week>`, and `-a` (advisory) require `-o/--oauth`: the public feed's players aren't MLBAM-identity-reconciled, so a daily overlay over them would silently no-op rather than fail loudly.
-
-Every per-player `stats` value is a **weekly, not season**, total (confirmed live/incremental within the week, not a fixed final number) — a `pp`-computed matchup score reflects the state as of the moment `pp` (or `b9 m`'s own lazy public fetch) ran. `league.stats` classifies each id (`isScoring`, `isNegative`, `group`); the ids actually observed:
-
-- Counting (sum directly across a team's active roster — bench/IL excluded): GP(1), R(7), HR(12), RBI(13), SB(16), AB(6), H-batting(8), W(28), SV(32), K(42), OUT(33), ER(37), BB-pitching(39), H-pitching(34, `group: "pitching"` — not batting H, confirmed against real data).
-- Rate (computed from summed counting stats, never summed/averaged directly): AVG(3) = ΣH(8) ÷ ΣAB(6); ERA(26) = 9 × ΣER(37) ÷ (ΣOUT(33) ÷ 3); WHIP(27) = (ΣBB(39) + ΣH(34)) ÷ (ΣOUT(33) ÷ 3). Displayed IP(50) is reformatted from ΣOUT back into Yahoo's `.1`/`.2` fractional notation — id 50 itself is never summed directly, it's not true decimal.
-- Excluded: id 60 (`H/AB`), confirmed `isScoring: false` — a display-only combined stat.
-
-`league.positions` is a **repeated-per-slot** flat array (e.g. three `"OF"` entries means three OF slots), not pre-counted the way OAuth's own settings response is — `pp` tallies it into the same `PositionWrite { position, count }` shape OAuth `sync` already writes. `pp` also now writes `current_week` from `weekInfo.week`.
-
-`command_snapshots` rows for `b9 m`'s scoreboard (`match_scoreboard`) and roster (`match_roster`) datasets carry `source="public_pull"` alongside existing `source="yahoo"` OAuth rows for the same `(dataset, scope)` — no migration, `source` is already part of the primary key. `b9 m`'s default view reads whichever row is freshest and not stale, regardless of source: an OAuth-authenticated operator can still see public-feed data if it's fresher than their last `sync`. Because of that, the daily-overlay decision above is made per actual fetch (which source served the roster data this time), not just once from whether OAuth is currently available — a `public_pull`-sourced roster cache hit suppresses the overlay even for an authenticated caller. `b9 m -D`/`-w`/`-a` never read or write the `public_pull` source at all, so they're unaffected by any of this.
-
-### Risk posture
-
-Yahoo's Terms of Service likely prohibit automated access to this endpoint even though the data is publicly viewable without login — this is a Director-accepted risk, not an oversight. `pp` does not evade Yahoo's anti-automation measures if they engage: it sends a normal, identifiable request (no spoofed user agent, no header/fingerprint evasion) and does not retry past a single blocked response. It only ever requests the operator's own configured league — never an arbitrary or enumerated league id.
+Scrubbed synthetic fixtures under `tests/fixtures/yahoo/` and `tests/fixtures/yahoo-public/` cover settings, standings, rosters, free agents, scoreboards, weekly statistics, ranks, redzone variants, empty collections, and malformed payloads. They contain no credentials or retained sensitive live response bodies.

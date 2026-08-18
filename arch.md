@@ -26,17 +26,17 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/providers/espn.rs`: injected ESPN scoreboard and moneyline acquisition with typed decoding and structured partial failures
 - `src/providers/mlb.rs`: injected MLB metadata, live-game, statistics, game-log, and quality-start acquisition with bounded batching and short-lived raw-payload caching
 - `src/providers/advisory.rs`: bounded provider-neutral Gemini, Groq, Mistral, Claude, and OpenAI completion adapters
-- `src/providers/yahoo.rs`: injected Yahoo OAuth, secure token refresh, and authenticated bounded raw acquisition
-- `src/providers/yahoo_fantasy.rs`: typed Yahoo league, team, roster, scoreboard, and weekly-stat acquisition
+- `src/providers/yahoo_public.rs`: bounded unauthenticated Yahoo league, roster, free-agent, scoreboard, weekly-stat, rank, and redzone acquisition
+- `src/providers/yahoo_fantasy.rs`: shared typed Yahoo payload models and normalization
 - `src/providers/mod.rs`: provider boundary exports and contextual acquisition errors
 - `src/cache.rs`: bounded b9-owned provider payload caching, atomic replacement, and explicit pruning
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
-- `src/config.rs`: private atomic selected-league and authenticated-team preferences
-- `src/sync.rs`: login, logout, status, and foreground stable-data synchronization application services
+- `src/config.rs`: private atomic selected-league and primary-team preferences
+- `src/sync.rs`: public-only setup, transitional credential cleanup, status, and foreground synchronization services
 - `src/daemon.rs`: explicit detached lifecycle, held ownership and synchronization locks, private control socket, and scheduled synchronization
-- `src/operations.rs`: raw Yahoo fetch, confirmed database reset, and bounded private daemon-log operations
+- `src/operations.rs`: confirmed database reset and bounded private daemon-log operations
 - `src/model_config.rs`: interactive advisory provider, model, validation, and secret-safe credential orchestration
-- `src/matchup.rs`: selected-period Yahoo acquisition (OAuth or, for the default weekly view, the public feed — whichever is freshest), daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
+- `src/matchup.rs`: public selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
 - `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
@@ -67,7 +67,7 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 
 ## Data And Control Flow
 
-Provider adapters construct owned acquisition records without performing orchestration or persistence. The Yahoo authentication adapter owns PKCE, credentials, refresh, request construction, retries, and terminal access errors. The Yahoo fantasy adapter interprets numeric-key and array-or-object payloads into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground, startup, and scheduled synchronization attempt the public redzone feed first, merge its league, team, roster, and player data without erasing authenticated-only fields, and then apply successful authenticated settings, standings metadata, precise roster metadata, free-agent, and team-identity supplements. Transaction-history and roster-move acquisition remain unimplemented. The matchup application owns 60-second lazy Yahoo refreshes, ISO-date-to-week resolution, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, advisory grounding, warnings, and rendering. For its default weekly view only, it also aggregates the public feed's per-player weekly stats into the same scoreboard/roster shapes OAuth produces, and prefers whichever source's durable snapshot is freshest and not stale — day, explicit-week, and advisory selection stay OAuth-only, since public-feed players aren't MLBAM-identity-reconciled. Advisory credentials remain in the operating-system keyring; provider requests use bounded shared transport and only run from a fresh complete matchup.
+Provider adapters construct owned acquisition records without performing orchestration or persistence. The public Yahoo adapter owns exact allowlisted paths, bounded requests and pagination, and numeric-key or array-or-object normalization into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground, startup, and scheduled synchronization stage settings, standings, complete rosters, free agents, and primary-team validation before one atomic fantasy-snapshot replacement. Transaction history and roster mutations remain unimplemented. The matchup application owns lazy public Yahoo refreshes, ISO-date-to-week resolution, required MLBAM identity reconciliation, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, advisory grounding, warnings, and rendering. Advisory credentials remain in the operating-system keyring; Yahoo reads do not use credentials.
 
 The roster and player-pool commands read normalized Yahoo teams, ownership, free agents, and MLB season statistics from the isolated store. Fantasy roster totals join statistics through MLBAM identity, preserving the predecessor's shared-identity aggregation for split two-way players. MLB totals refreshes supplement the bulk pitching feed with per-starter quality starts, and zero-valued bulk omissions cannot erase a previously acquired nonzero total. MLB innings retain source display notation for aggregate parity while rate calculations use true thirds internally. Synchronization fetches free agents as a bounded paginated complete set before atomic replacement. Player cards use the MLB game-log adapter as a foreground refresh path and retain a versioned per-player snapshot so a labeled compatible fallback remains available during provider failure. Primary player, roster, matchup, team, totals, and slate tables use fixed source-compatible column geometry where the Rust model owns the corresponding data; deferred analytical and rich-status cells remain documented gaps. Headers use blue 33, secondary values gray 245, available players green 34, and inactive or injured rows use the established gray and dark-yellow tiers before falling back to identical plain text.
 
@@ -102,12 +102,12 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep cache keys free of URLs, credentials, tokens, and secrets.
 - Keep cache pruning explicit and independent from successful cache writes.
 - Keep provider adapters behind the validating HTTP client boundary.
-- Keep provider authentication, endpoints, retries, parsing, and error interpretation outside shared transport.
+- Keep provider endpoints, retries, parsing, and error interpretation outside shared transport.
 - Keep provider acquisition separate from normalized persistence and command orchestration.
 - Keep partial provider degradation typed until an integration layer selects warnings or fallback.
 - Keep odds freshness, team mapping, stale fallback, and snapshots outside the ESPN adapter.
 - Keep MLB display-time status ranking, timezone formatting, doubleheader selection, team mapping, reconciliation, and normalized writes outside the MLB adapter.
-- Keep Yahoo fantasy parsing outside the Yahoo authentication adapter.
+- Keep Yahoo fantasy parsing shared by the public Yahoo adapter and command snapshots.
 - Keep stable normalized synchronization separate from lazy weekly matchup acquisition.
 - Keep weekly scoreboards and roster statistics in versioned snapshots rather than new normalized tables.
 - Keep background synchronization explicitly started and controlled through the private local endpoint.
@@ -117,17 +117,19 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 
 ### Status dashboard boundary
 
-- Keep status rendering local-first and read-only with respect to Yahoo credentials and provider traffic.
+- Keep status rendering local-first and read-only with respect to Yahoo provider traffic.
 - Store dashboard lifecycle, provider freshness, bounded failure, and circuit fields in the versioned b9 database.
-- Keep explicit login and synchronization as the only live authorization boundaries.
+- Keep status local-only and Yahoo synchronization public-only.
 - Let the daemon persist its own next-scheduled-run time to the store so status reads never contact the running daemon process.
-- Classify Yahoo HTTP 401 and 403 as distinct typed failures with distinct recovery guidance, since 403 is an external authorization condition b9 does not remediate.
+- Classify public Yahoo denial as provider unavailability with retry-later guidance and no authentication recovery path.
 
-### Public feed boundary
+### Public Yahoo boundary
 
-- Keep `b9 pp` (`pull-public`) a permanent standalone command with an unauthenticated trust boundary that never touches credentials or the OAuth circuit breaker.
-- Fetch from `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb` with a plain HTTP client — no cookies, no auth header, no browser.
-- Attempt the public redzone feed before authenticated Yahoo supplements in every foreground, startup, and scheduled `sync`.
+- Fetch only exact allowlisted paths from Yahoo's two public fantasy hosts with no cookies, authorization header, or browser.
+- Require an explicit league and primary-team selection when account-scoped discovery is unavailable.
+- Replace the prior complete Yahoo fantasy snapshot only after all required public resources and the selected team validate.
+- Preserve historical `public_pull` origin decoding while writing no new run with that origin.
+- Treat the public endpoints as unofficial and retain complete stale data across denial or incompatible responses.
 - Merge public league, team, roster, and player fields without erasing retained authenticated-only values.
 - Apply authenticated scoring metadata, standings metadata, precise roster metadata, free agents, and team identity when those requests succeed.
 - Keep transaction-history and roster-move acquisition unimplemented until a later approved provider contract.

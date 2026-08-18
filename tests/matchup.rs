@@ -348,7 +348,6 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
     assert!(
         MatchupOptions {
             day: Some("2026-04-01".into()),
-            oauth: true,
             ..MatchupOptions::default()
         }
         .validate()
@@ -371,18 +370,9 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
         .validate()
         .is_err()
     );
-    let oauth_required = MatchupOptions {
-        week: Some(2),
-        ..MatchupOptions::default()
-    }
-    .validate()
-    .unwrap_err()
-    .to_string();
-    assert!(oauth_required.contains("add -o/--oauth"));
     assert!(
         MatchupOptions {
             week: Some(2),
-            oauth: true,
             ..MatchupOptions::default()
         }
         .validate()

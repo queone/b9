@@ -6,18 +6,15 @@ Treat `99%` as functionally complete with minor parity defects still possible. R
 
 | b9 command | Workflow | Parity | State | Current focus or known gap |
 |---|---|---:|---|---|
-| root help / version | Command discovery and version output | — | Not assessed | Compare root help, command help, aliases, flags, streams, and version forms. |
-| `login` | Yahoo authentication | — | Not assessed | Compare browser flow, prompts, credential persistence, errors, and recovery. |
-| `logout` | Yahoo credential removal | — | Not assessed | Compare output, missing-credential behavior, and keychain effects. |
+| root help / version | Command discovery and version output | — | Not assessed | Compare retained commands, flags, streams, and version forms; Yahoo OAuth surfaces intentionally diverge from skout. |
+| `logout` | Retired Yahoo credential cleanup | — | Transitional | Verify exact deletion, missing-credential behavior, and removal after one released cleanup window. |
 | `st` | Status and league selection | — | Not assessed | Compare dashboard fields, colors, league selection, freshness, and daemon state. |
-| `sync` | Complete foreground synchronization | 99% | Functionally complete | Continue watching live provider completeness, retained stale data, progress output, and runtime. |
-| `pp` | Public Yahoo league pull | — | Not assessed | Compare public data coverage, league resolution, output, and persistence effects. |
+| `sync` | Complete foreground synchronization and public Yahoo setup | 99% | Functionally complete | Continue watching unofficial endpoint availability, snapshot completeness, team selection, retained stale data, progress output, and runtime. |
 | `start` | Start background synchronization | — | Not assessed | Compare already-running, stale-state, process, log, and schedule behavior. |
 | `stop` | Stop background synchronization | — | Not assessed | Compare stopped, stale-process, timeout, cleanup, and output behavior. |
 | `restart` | Restart background synchronization | — | Not assessed | Compare composed stop/start behavior and failure recovery. |
 | `log` | Read or follow daemon logs | — | Not assessed | Compare default tail, line count, follow, truncation, path, and missing-log behavior. |
 | `reset` | Remove local b9 state | — | Not assessed | Compare confirmation, cancellation, daemon interaction, deletion scope, and output. |
-| `fetch` | Raw authenticated Yahoo request | — | Not assessed | Compare path handling, JSON formatting, raw bytes, attribution, and errors. |
 | `lm` | Advisory provider and model configuration | — | Not assessed | Compare provider selection, model discovery, credentials, cancellation, and errors. |
 | `m` | Daily or weekly fantasy matchup | 99% | Functionally complete | Continue logging minor live-data, matchup-total, status, odds, color, and alignment discrepancies. |
 | `t` | MLB 40-man roster display | — | Not assessed | Compare roster membership, role/status classification, columns, sorting, and colors. |

@@ -4,12 +4,8 @@ use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-
-use crate::providers::yahoo::YahooClient;
-use crate::transport::HttpClient;
 
 const LOG_LIMIT: u64 = 5 * 1024 * 1024;
 const LINE_LIMIT: usize = 64 * 1024;
@@ -33,31 +29,6 @@ impl fmt::Display for OperationsError {
 }
 
 impl std::error::Error for OperationsError {}
-
-/// Render one bounded Yahoo response without changing non-JSON bytes.
-#[must_use]
-pub fn render_fetch(body: &[u8]) -> Vec<u8> {
-    serde_json::from_slice::<serde_json::Value>(body)
-        .ok()
-        .and_then(|value| serde_json::to_vec_pretty(&value).ok())
-        .map(|mut bytes| {
-            bytes.push(b'\n');
-            bytes
-        })
-        .unwrap_or_else(|| body.to_vec())
-}
-
-/// Fetch one authenticated Yahoo path without opening the database.
-pub fn fetch(path: &str) -> Result<Vec<u8>, OperationsError> {
-    let http =
-        Arc::new(HttpClient::production().map_err(|error| OperationsError::new("fetch", error))?);
-    let yahoo = YahooClient::production(http)
-        .map_err(|error| OperationsError::new("fetch: initialize Yahoo", error))?;
-    let response = yahoo
-        .get_raw(path)
-        .map_err(|error| OperationsError::new("fetch Yahoo path", error))?;
-    Ok(render_fetch(&response.body))
-}
 
 /// Reset an explicit database after confirmation while preserving unrelated files.
 pub fn reset_at(path: &Path, confirmed: bool) -> Result<String, OperationsError> {

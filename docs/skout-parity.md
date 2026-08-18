@@ -33,8 +33,7 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 
 | b9 surface | Disposition | Deterministic evidence | Live or residual gap |
 |---|---|---|---|
-| `login` | Required live verification | OAuth, PKCE, secure-store, and CLI tests | Live Yahoo OAuth pending |
-| `logout` | Tested Rust improvement | Credential deletion and idempotence tests | Keychain observation pending |
+| `logout` | Tested Rust improvement | Deletion-only retired-credential cleanup and idempotence tests | Transitional command; keychain observation pending |
 | `st` | Required live verification | League selection, status, and CLI tests | Live Yahoo league formats pending |
 | `sync` | Tested Rust improvement | Shared synchronization, execution-lock, atomic snapshot, and failure-retention tests | Live Yahoo pending |
 | `start` | Tested Rust improvement | Explicit daemon startup and exclusive-ownership tests | Supported-host lifecycle check pending |
@@ -42,7 +41,6 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 | `restart` | Tested Rust improvement | Private control and lifecycle tests | Supported-host lifecycle check pending |
 | `log` | Exact parity | Bounded tail/follow and truncation tests | Final terminal comparison pending |
 | `reset` | Tested Rust improvement | Scoped, confirmed, idempotent deletion tests | Reset-safe-cancel live path pending |
-| `fetch` | Required live verification | Bounded raw-response and stream-routing tests | Live Yahoo fetch pending |
 | `lm` | Required live verification | Model configuration, credential, model-list, and fake-transport tests | Keychain, model list, and provider protocols pending |
 | `i` | Tested Rust improvement | Embedded glossary, lookup, suggestion, help, and no-checkout tests | TTY ambiguity selector pending |
 | `m` | Unsupported gap | Daily/weekly/day flags, stale/local fallback, advisory, column, and color tests | Live providers plus richer source-baseline status/totals details pending |

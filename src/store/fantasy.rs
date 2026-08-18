@@ -75,69 +75,66 @@ pub struct IdentityCandidate {
 }
 
 impl Store {
-    /// Replace one complete authenticated Yahoo category collection.
-    pub fn replace_authenticated_categories(
+    /// Replace one complete source-neutral Yahoo category collection.
+    pub fn replace_fantasy_categories(
         &mut self,
         league_key: &str,
         rows: &[CategoryWrite],
     ) -> Result<(), StoreError> {
         validate_identity(
-            "replace authenticated Yahoo categories",
+            "replace source-neutral Yahoo categories",
             "league key",
             league_key,
         )?;
         let path = self.path.clone();
         self.transaction(|transaction| {
-            transaction.execute("DELETE FROM yahoo_stat_categories WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace authenticated Yahoo categories", &path, error))?;
+            transaction.execute("DELETE FROM yahoo_stat_categories WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace source-neutral Yahoo categories", &path, error))?;
             for row in rows {
-                transaction.execute("INSERT INTO yahoo_stat_categories (league_key,stat_id,abbr,name,sort_order,display_only,seq) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![league_key,row.stat_id,row.abbreviation,row.name,row.sort_order,i64::from(row.display_only),row.sequence]).map_err(|error| StoreError::operation("insert authenticated Yahoo category", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_stat_categories (league_key,stat_id,abbr,name,sort_order,display_only,seq) VALUES (?1,?2,?3,?4,?5,?6,?7)", params![league_key,row.stat_id,row.abbreviation,row.name,row.sort_order,i64::from(row.display_only),row.sequence]).map_err(|error| StoreError::operation("insert source-neutral Yahoo category", &path, error))?;
             }
             Ok(())
         })
     }
 
-    /// Merge authenticated-only Yahoo team fields.
-    pub fn merge_authenticated_teams(&mut self, teams: &[FantasyTeam]) -> Result<(), StoreError> {
-        let (_, captured_at) = self.captured_time("merge authenticated Yahoo teams")?;
+    /// Merge source-neutral Yahoo team fields.
+    pub fn merge_fantasy_team_metadata(&mut self, teams: &[FantasyTeam]) -> Result<(), StoreError> {
+        let (_, captured_at) = self.captured_time("merge source-neutral Yahoo teams")?;
         let path = self.path.clone();
         self.transaction(|transaction| {
             for team in teams {
-                transaction.execute("UPDATE yahoo_teams SET waiver_priority=?1,faab_balance=?2,moves=?3,synced_at=?4 WHERE team_key=?5", params![team.waiver_priority,team.faab_balance,team.moves,captured_at,team.team_key]).map_err(|error| StoreError::operation("merge authenticated Yahoo team", &path, error))?;
+                transaction.execute("UPDATE yahoo_teams SET waiver_priority=?1,faab_balance=?2,moves=?3,synced_at=?4 WHERE team_key=?5", params![team.waiver_priority,team.faab_balance,team.moves,captured_at,team.team_key]).map_err(|error| StoreError::operation("merge source-neutral Yahoo team", &path, error))?;
             }
             Ok(())
         })
     }
 
-    /// Merge authenticated-only Yahoo player metadata.
-    pub fn merge_authenticated_players(
-        &mut self,
-        players: &[FantasyPlayer],
-    ) -> Result<(), StoreError> {
-        let (_, captured_at) = self.captured_time("merge authenticated Yahoo players")?;
+    /// Merge source-neutral Yahoo player metadata.
+    pub fn merge_fantasy_players(&mut self, players: &[FantasyPlayer]) -> Result<(), StoreError> {
+        let (_, captured_at) = self.captured_time("merge source-neutral Yahoo players")?;
         let path = self.path.clone();
         self.transaction(|transaction| {
             for player in players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
-                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at", params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at]).map_err(|error| StoreError::operation("merge authenticated Yahoo player", &path, error))?;
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at", params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at]).map_err(|error| StoreError::operation("merge source-neutral Yahoo player", &path, error))?;
             }
             Ok(())
         })
     }
 
-    /// Replace one complete authenticated Yahoo free-agent collection.
-    pub fn replace_authenticated_free_agents(
+    /// Replace one complete source-neutral Yahoo free-agent collection.
+    pub fn replace_fantasy_free_agents(
         &mut self,
         league_key: &str,
         players: &[FantasyPlayer],
     ) -> Result<(), StoreError> {
-        self.merge_authenticated_players(players)?;
-        let (_, captured_at) = self.captured_time("replace authenticated Yahoo free agents")?;
+        self.merge_fantasy_players(players)?;
+        let (_, captured_at) = self.captured_time("replace source-neutral Yahoo free agents")?;
         let path = self.path.clone();
         self.transaction(|transaction| {
-            transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace authenticated Yahoo free agents", &path, error))?;
+            transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [league_key]).map_err(|error| StoreError::operation("replace source-neutral Yahoo free agents", &path, error))?;
             for player in players {
-                let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [player.yahoo_player_id], |row| row.get(0)).map_err(|error| StoreError::operation("resolve authenticated Yahoo free agent", &path, error))?;
-                transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![league_key,player_id,captured_at]).map_err(|error| StoreError::operation("insert authenticated Yahoo free agent", &path, error))?;
+                let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [player.yahoo_player_id], |row| row.get(0)).map_err(|error| StoreError::operation("resolve source-neutral Yahoo free agent", &path, error))?;
+                transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![league_key,player_id,captured_at]).map_err(|error| StoreError::operation("insert source-neutral Yahoo free agent", &path, error))?;
             }
             Ok(())
         })
@@ -200,41 +197,41 @@ impl Store {
         })
     }
 
-    /// Merge one complete authenticated Yahoo supplement without replacing public-owned fields.
-    pub fn merge_authenticated_fantasy_supplement(
+    /// Merge one complete source-neutral Yahoo supplement without replacing public-owned fields.
+    pub fn merge_fantasy_supplement(
         &mut self,
         snapshot: &FantasySnapshotWrite,
     ) -> Result<(), StoreError> {
         validate_snapshot(snapshot)?;
-        let (_, captured_at) = self.captured_time("merge authenticated fantasy supplement")?;
+        let (_, captured_at) = self.captured_time("merge source-neutral fantasy supplement")?;
         let path = self.path.clone();
         self.transaction(|transaction| {
             transaction.execute("DELETE FROM yahoo_stat_categories WHERE league_key=?1", [&snapshot.league.league_key])
-                .map_err(|error| StoreError::operation("replace authenticated Yahoo categories", &path, error))?;
+                .map_err(|error| StoreError::operation("replace source-neutral Yahoo categories", &path, error))?;
             for row in &snapshot.categories {
                 transaction.execute("INSERT INTO yahoo_stat_categories (league_key,stat_id,abbr,name,sort_order,display_only,seq) VALUES (?1,?2,?3,?4,?5,?6,?7)",
                     params![snapshot.league.league_key,row.stat_id,row.abbreviation,row.name,row.sort_order,i64::from(row.display_only),row.sequence])
-                    .map_err(|error| StoreError::operation("insert authenticated Yahoo category", &path, error))?;
+                    .map_err(|error| StoreError::operation("insert source-neutral Yahoo category", &path, error))?;
             }
             for team in &snapshot.teams {
                 transaction.execute("UPDATE yahoo_teams SET waiver_priority=?1,faab_balance=?2,moves=?3,synced_at=?4 WHERE team_key=?5",
                     params![team.waiver_priority,team.faab_balance,team.moves,captured_at,team.team_key])
-                    .map_err(|error| StoreError::operation("merge authenticated Yahoo team", &path, error))?;
+                    .map_err(|error| StoreError::operation("merge source-neutral Yahoo team", &path, error))?;
             }
             for player in &snapshot.players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
                 transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
                     params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
-                    .map_err(|error| StoreError::operation("merge authenticated Yahoo player", &path, error))?;
+                    .map_err(|error| StoreError::operation("merge source-neutral Yahoo player", &path, error))?;
             }
             transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [&snapshot.league.league_key])
-                .map_err(|error| StoreError::operation("replace authenticated Yahoo free agents", &path, error))?;
+                .map_err(|error| StoreError::operation("replace source-neutral Yahoo free agents", &path, error))?;
             let rostered = snapshot.slots.iter().map(|slot| slot.yahoo_player_id).collect::<BTreeSet<_>>();
             for player in snapshot.players.iter().filter(|player| !rostered.contains(&player.yahoo_player_id)) {
                 let player_id: i64 = transaction.query_row("SELECT id FROM players WHERE yahoo_player_id=?1", [player.yahoo_player_id], |row| row.get(0))
-                    .map_err(|error| StoreError::operation("resolve authenticated Yahoo free agent", &path, error))?;
+                    .map_err(|error| StoreError::operation("resolve source-neutral Yahoo free agent", &path, error))?;
                 transaction.execute("INSERT INTO yahoo_free_agents (league_key,player_id,synced_at) VALUES (?1,?2,?3)", params![snapshot.league.league_key,player_id,captured_at])
-                    .map_err(|error| StoreError::operation("insert authenticated Yahoo free agent", &path, error))?;
+                    .map_err(|error| StoreError::operation("insert source-neutral Yahoo free agent", &path, error))?;
             }
             Ok(())
         })
