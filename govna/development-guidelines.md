@@ -38,6 +38,7 @@ Sections above ## Project Practices are govna-maintained canon and update via ca
 - Static analysis and linting errors are build failures, not warnings
 - Validate installable-target declarations before compiling or installing them.
 - Follow the applicable stack guidance for release-prep evidence, validation ordering, and build-state reuse.
+- Pass release-prep evidence through the applicable stack's canonical CLI option.
 
 ## Testing Expectations
 
@@ -90,7 +91,8 @@ Sections above ## Project Practices are govna-maintained canon and update via ca
 - Skip binary installation during fallback pre-change validation.
 - Reject `--no-build` release prep when independent utility validation is required.
 - Emit a Git-visible-state validation token after each successful full build.
-- Pass current validation evidence to release prep through `GOVNA_PREP_VALIDATION_TOKEN`.
+- Pass current validation evidence to release prep through `-t, --validation-token`.
+- Retain `GOVNA_PREP_VALIDATION_TOKEN` only as a compatibility fallback.
 - Refresh validation evidence only after an exact baseline-only audit-adoption transition.
 - Run fallback pre-change validation only when evidence is missing or stale.
 - Run post-change validation package-wide.

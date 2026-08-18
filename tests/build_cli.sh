@@ -357,7 +357,7 @@ test_shared_cargo_target_ownership() {
 }
 
 test_prep_evidence_routing() {
-  local output
+  local output token='v2:head:full:reduced' stale='v2:stale:token:value'
   output=$(
     _validate_release_inputs() { return 0; }
     _validate_git_state() { return 0; }
@@ -368,11 +368,12 @@ test_prep_evidence_routing() {
     _govna_program_version_info() { printf '1.0.0\n'; }
     _validation_token() { printf 'v2:head:full:reduced\n'; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
-    GOVNA_PREP_VALIDATION_TOKEN='v2:head:full:reduced' \
-      prep_run 0 0 0 v1.0.1 release
+    GOVNA_PREP_VALIDATION_TOKEN="$stale" prep_run 0 0 0 v1.0.1 release 1 "$token"
   )
   assert_contains "$output" 'validation evidence: current'
   assert_contains "$output" 'fallback=0'
+  assert_not_contains "$output" "$token"
+  assert_not_contains "$output" "$stale"
 
   output=$(
     _validate_release_inputs() { return 0; }
@@ -384,7 +385,24 @@ test_prep_evidence_routing() {
     _govna_program_version_info() { printf '1.0.0\n'; }
     _validation_token() { printf 'v2:head:full:reduced\n'; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
-    GOVNA_PREP_VALIDATION_TOKEN='malformed' prep_run 0 0 0 v1.0.1 release 2>&1
+    GOVNA_PREP_VALIDATION_TOKEN="$token" prep_run 0 0 1 v1.0.1 release 1 malformed 2>&1
+  )
+  assert_contains "$output" 'missing or stale'
+  assert_contains "$output" 'fallback=1'
+  assert_not_contains "$output" 'malformed'
+  assert_not_contains "$output" "$token"
+
+  output=$(
+    _validate_release_inputs() { return 0; }
+    _validate_git_state() { return 0; }
+    _validate_canon_version_bump() { return 0; }
+    _cargo_version_info() { printf '1.0.0\n'; }
+    _ac_refs() { printf ''; }
+    _matching_ac_files() { printf ''; }
+    _govna_program_version_info() { printf '1.0.0\n'; }
+    _validation_token() { printf 'v2:head:full:reduced\n'; }
+    _run_isolated() { printf 'fallback=%s\n' "$6"; }
+    GOVNA_PREP_VALIDATION_TOKEN="$token" prep_run 0 0 0 v1.0.1 release 1 '' 2>&1
   )
   assert_contains "$output" 'missing or stale'
   assert_contains "$output" 'fallback=1'
@@ -392,17 +410,83 @@ test_prep_evidence_routing() {
   output=$(
     _validate_release_inputs() { return 0; }
     _validate_git_state() { return 0; }
-    _validate_canon_version_bump() { return 0; }
     _cargo_version_info() { printf '1.0.0\n'; }
     _ac_refs() { printf ''; }
     _matching_ac_files() { printf ''; }
-    _govna_program_version_info() { printf '1.0.0\n'; }
-    _validation_token() { printf 'v2:head:full:reduced\n'; }
+    _validation_token() { printf '%s\n' "$token"; }
+    _run_isolated() { printf 'fallback=%s\n' "$6"; }
+    GOVNA_PREP_VALIDATION_TOKEN="$token" prep_run 0 0 0 v1.0.1 release
+  )
+  assert_contains "$output" 'validation evidence: current'
+  assert_contains "$output" 'fallback=0'
+  assert_not_contains "$output" "$token"
+
+  output=$(
+    _validate_release_inputs() { return 0; }
+    _validate_git_state() { return 0; }
+    _cargo_version_info() { printf '1.0.0\n'; }
+    _ac_refs() { printf ''; }
+    _matching_ac_files() { printf ''; }
+    _validation_token() { printf '%s\n' "$token"; }
     _run_isolated() { printf 'fallback=%s\n' "$6"; }
     GOVNA_PREP_VALIDATION_TOKEN='' prep_run 0 0 0 v1.0.1 release 2>&1
   )
   assert_contains "$output" 'missing or stale'
   assert_contains "$output" 'fallback=1'
+  pass
+}
+
+test_prep_validation_token_cli() {
+  local output rc token='token-value-must-not-leak'
+  output=$(prep_usage)
+  assert_contains "$output" './build.sh prep [options]'
+  assert_contains "$output" '-t, --validation-token <TOKEN>'
+
+  output=$(
+    prep_run() {
+      [ "$1" -eq 0 ] && [ "$2" -eq 0 ] && [ "$3" -eq 1 ] &&
+        [ "$4" = v1.0.1 ] && [ "$5" = release ] &&
+        [ "$6" -eq 1 ] && [ "$7" = "$token" ] || return 1
+      printf 'parsed\n'
+    }
+    prep_main --verbose v1.0.1 -t "$token" release
+  )
+  assert_equal "$output" 'parsed'
+  assert_not_contains "$output" "$token"
+
+  set +e
+  output=$(prep_main -t 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 2
+  assert_contains "$output" 'validation token value is missing'
+
+  set +e
+  output=$(prep_main -t --verbose v1.0.1 release 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 2
+  assert_contains "$output" 'validation token value is missing'
+  assert_not_contains "$output" '--verbose'
+
+  set +e
+  output=$(prep_main -t "$token" --validation-token second v1.0.1 release 2>&1)
+  rc=$?
+  set -e
+  assert_equal "$rc" 2
+  assert_contains "$output" 'may be used only once'
+  assert_not_contains "$output" "$token"
+  assert_not_contains "$output" 'second'
+
+  output=$(
+    _validate_release_inputs() { return 0; }
+    _validate_git_state() { return 0; }
+    _cargo_version_info() { printf '1.0.0\n'; }
+    _ac_refs() { printf ''; }
+    _matching_ac_files() { printf ''; }
+    prep_run 1 0 0 v1.0.1 release 1 "$token"
+  )
+  assert_not_contains "$output" "$token"
   pass
 }
 
@@ -552,6 +636,7 @@ test_baseline_validation_token_refresh
 test_refresh_validation_token_cli_contract
 test_shared_cargo_target_ownership
 test_prep_evidence_routing
+test_prep_validation_token_cli
 test_fallback_failure_precedes_mutation
 test_prep_phase_output_modes
 test_successful_full_build_emits_token

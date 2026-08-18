@@ -172,7 +172,9 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Pause after Audit and await explicit Director instruction to Refine.
 - Resolve Audit findings and incorporate settled Director decisions during Refine.
 - Pause Refine when a Director-specific decision remains unresolved.
-- Edit the AC during Refine; do not begin implementation during Refine.
+- Edit the AC during Refine when an Audit finding or settled Director decision requires an AC change.
+- Complete Refine without editing the AC when no Audit finding or settled Director decision requires an AC change and no Director-specific decision remains unresolved.
+- Do not begin implementation during Refine.
 - Pause after Refine and await explicit Director implementation-ready confirmation to Implement.
 - Implement only the settled AC scope during Implement.
 - Return to Refine when Implement reveals a contract, scope, or Director decision change.

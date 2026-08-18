@@ -41,8 +41,9 @@ Note: Cargo may compile overlapping dependency graphs separately because Clippy,
 
 ### Rust Release Prep
 
-- Run `GOVNA_PREP_VALIDATION_TOKEN='<token>' ./build.sh prep vX.Y.Z "message"` during Package.
+- Run `./build.sh prep -t '<token>' vX.Y.Z "message"` during Package.
 - Use the token printed by the successful final full build reviewed during Ratify.
+- Treat `GOVNA_PREP_VALIDATION_TOKEN` as a compatibility fallback for callers that omit the option.
 - Run `./build.sh refresh-validation-token -b <scratch-baseline> -t '<token>'` after exact baseline-only audit-adoption completion.
 - Use the refreshed token as Package evidence.
 - Omit the token to require a fallback pre-change full build.
@@ -91,7 +92,7 @@ workflow request.
 
 The operator flow is two steps:
 
-1. **Run the stack-defined `./build.sh prep vX.Y.Z "message"` invocation.** Stages version bumps, inserts the CHANGELOG row, deletes completed AC files, sweeps matching AC-pointer IE lines from `plan.md`, runs stack-defined validation, and prints the canonical release command. The agent determines the version (semver classification from the AC's scope) and drafts the release message (≤ 80 characters) before invoking prep. Flags: `--dry-run`/`-n` prints intended writes without touching the working tree; `--no-build`/`-B` follows the applicable stack policy.
+1. **Run the stack-defined `./build.sh prep vX.Y.Z "message"` invocation.** Stages version bumps, inserts the CHANGELOG row, deletes completed AC files, sweeps matching AC-pointer IE lines from `plan.md`, runs stack-defined validation, and prints the canonical release command. The agent determines the version (semver classification from the AC's scope) and drafts the release message (≤ 80 characters) before invoking prep. Flags: `--validation-token`/`-t` passes current validation evidence when supported; `--dry-run`/`-n` prints intended writes without touching the working tree; `--no-build`/`-B` follows the applicable stack policy.
 
    Before running prep, satisfy this repository's declared version-target contract and keep repository/package and independently versioned utility declarations aligned as required by its Project Practices.
 2. **Run the printed release command (`./build.sh vX.Y.Z "message"`).** Shows `git status --short`, lists every git step it will execute, and prompts for interactive confirmation. On approval it orchestrates `git add → commit → tag → push tag → push branch`.

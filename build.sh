@@ -1230,15 +1230,16 @@ _remove_plan_pointers() {
 
 prep_usage() {
   cat <<'EOF'
-prep vX.Y.Z "release message" [--verbose|-v] [--dry-run|-n] [--no-build|-B]
+./build.sh prep [options] vX.Y.Z "release message"
 
 Stages a release by updating the root Cargo package version and Cargo.lock,
 inserting a CHANGELOG row, deleting completed AC files, and validating.
 
-  -h, -?, --help  show this help
-  -v, --verbose   stream complete phase command output
-  --dry-run, -n   print intended writes without modifying the working tree
-  --no-build, -B  skip post-change validation when the stack permits it
+  -h, -?, --help                 show this help
+  -t, --validation-token <TOKEN> pass current full-build validation evidence
+  -v, --verbose                  stream complete phase command output
+  --dry-run, -n                  print intended writes without modifying the working tree
+  --no-build, -B                 skip post-change validation when the stack permits it
 EOF
 }
 
@@ -1294,6 +1295,7 @@ EOF
 
 prep_run() {
   local dry="$1" nobuild="$2" verbose="$3" version="$4" message="$5"
+  local cli_token_set="${6:-0}" cli_token="${7-}" selected_token
   local stripped="${version#v}" current refs acfiles file expected fallback=1
   _validate_release_inputs prep "$version" "$message" || return 1
   _validate_git_state prep "$version" || return 1
@@ -1326,8 +1328,12 @@ EOF
   fi
 
   expected=$(_validation_token) || return 1
-  if [ -n "${GOVNA_PREP_VALIDATION_TOKEN:-}" ] &&
-    [ "$GOVNA_PREP_VALIDATION_TOKEN" = "$expected" ]; then
+  if [ "$cli_token_set" -eq 1 ]; then
+    selected_token="$cli_token"
+  else
+    selected_token="${GOVNA_PREP_VALIDATION_TOKEN:-}"
+  fi
+  if [ -n "$selected_token" ] && [ "$selected_token" = "$expected" ]; then
     fallback=0
     printf '%s\n' "$(grn3 'prep: validation evidence: current')"
   else
@@ -1346,12 +1352,33 @@ prep_main() {
   if [ "$#" -eq 1 ]; then
     case "$1" in -h | -\? | --help) prep_usage; return 0 ;; esac
   fi
-  local dry=0 nobuild=0 verbose=0 positional=() arg
-  for arg in "$@"; do
+  local dry=0 nobuild=0 verbose=0 token_set=0 token='' positional=() arg
+  while [ "$#" -gt 0 ]; do
+    arg="$1"
+    shift
     case "$arg" in
     -v | --verbose) verbose=1 ;;
     --dry-run | -n) dry=1 ;;
     --no-build | -B) nobuild=1 ;;
+    -t | --validation-token)
+      [ "$#" -gt 0 ] || {
+        _failure 'prep: validation token value is missing; use -t or --validation-token followed by TOKEN'
+        return 2
+      }
+      case "$1" in
+      -v | --verbose | --dry-run | -n | --no-build | -B | -h | -\? | --help | -t | --validation-token)
+        _failure 'prep: validation token value is missing; use -t or --validation-token followed by TOKEN'
+        return 2
+        ;;
+      esac
+      [ "$token_set" -eq 0 ] || {
+        _failure 'prep: validation token option may be used only once'
+        return 2
+      }
+      token="$1"
+      token_set=1
+      shift
+      ;;
     -h | -\? | --help)
       _failure 'help flags must be used by themselves'
       return 2
@@ -1365,7 +1392,7 @@ prep_main() {
     return 2
   fi
   prep_run "$dry" "$nobuild" "$verbose" "$(_trim "${positional[0]}")" \
-    "$(_trim "${positional[1]}")"
+    "$(_trim "${positional[1]}")" "$token_set" "$token"
 }
 
 rel_usage() {
