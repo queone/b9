@@ -1,5 +1,7 @@
 # Skout Parity Catalog
 
+> Historical reference: this catalog describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
+
 ## Source Baseline
 
 - Source repository: `<skout-repo>`

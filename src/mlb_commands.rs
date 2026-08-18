@@ -14,8 +14,7 @@ use crate::domain::{
 };
 use crate::mlb_display::{render_rosters, render_slate, render_totals};
 use crate::providers::mlb::{
-    BulkHittingSplit, BulkPitchingSplit, MlbClient, PrimaryType, QualityStartResult, ScheduleGame,
-    TeamDirectoryEntry,
+    BulkHittingSplit, BulkPitchingSplit, MlbClient, PrimaryType, ScheduleGame, TeamDirectoryEntry,
 };
 use crate::providers::oddsshark::OddsSharkClient;
 use crate::store::{RosterWrite, SeasonStatWrite, Store, SyncMode, SyncOrigin};
@@ -272,14 +271,7 @@ pub fn show_totals(force: bool) -> Result<String, MlbCommandError> {
         || {
             let standings = mlb.fetch_standings(season)?;
             let hitting = mlb.fetch_bulk_hitting_stats(season, "R")?;
-            let mut pitching = mlb.fetch_bulk_pitching_stats(season, "R")?;
-            let pitcher_ids = pitching
-                .iter()
-                .filter(|row| row.stat.games_started > 0)
-                .map(|row| row.player.person_id)
-                .collect::<Vec<_>>();
-            let quality_starts = mlb.fetch_quality_starts(season, &pitcher_ids)?;
-            merge_quality_starts(&mut pitching, &quality_starts);
+            let pitching = mlb.fetch_bulk_pitching_stats(season, "R")?;
             let team_map = teams
                 .iter()
                 .map(|team| (team.id, team.clone()))
@@ -313,6 +305,13 @@ pub fn show_totals(force: bool) -> Result<String, MlbCommandError> {
             total.yahoo_players = Some(*rostered);
             total.players_available = Some(*available);
         }
+        total.pitching.quality_starts = store
+            .mlb_roster(&total.team.abbreviation)
+            .map_err(|failure| error("team totals", "read synchronized quality starts", failure))?
+            .iter()
+            .filter(|row| row.primary_type == "P")
+            .map(|row| row.quality_starts)
+            .sum::<i64>() as i32;
     }
     record_run(
         &mut store,
@@ -808,13 +807,6 @@ fn stat_writes(
     rows
 }
 
-fn merge_quality_starts(rows: &mut [BulkPitchingSplit], result: &QualityStartResult) {
-    for row in rows {
-        if let Some(quality_starts) = result.counts.get(&row.player.person_id) {
-            row.stat.quality_starts = *quality_starts;
-        }
-    }
-}
 fn ratio(n: i64, d: i64) -> f64 {
     if d == 0 { 0.0 } else { n as f64 / d as f64 }
 }
@@ -1107,41 +1099,6 @@ mod tests {
         assert!((totals[0].batting.on_base_percentage - 6.0 / 13.0).abs() < 1e-9);
         assert!((totals[0].pitching.innings_pitched - 20.0 / 3.0).abs() < 1e-9);
         assert!((totals[0].pitching.earned_run_average - 2.7).abs() < 1e-9);
-    }
-
-    #[test]
-    fn quality_start_supplement_updates_successes_without_erasing_other_rows() {
-        let mut pitching = vec![
-            BulkPitchingSplit {
-                player: BulkPlayer {
-                    person_id: 2,
-                    full_name: "Updated".into(),
-                },
-                team: BulkTeam { team_id: 1 },
-                position: BulkPosition::default(),
-                stat: ProviderPitching {
-                    quality_starts: 0,
-                    ..ProviderPitching::default()
-                },
-            },
-            BulkPitchingSplit {
-                player: BulkPlayer {
-                    person_id: 3,
-                    full_name: "Retained".into(),
-                },
-                team: BulkTeam { team_id: 1 },
-                position: BulkPosition::default(),
-                stat: ProviderPitching {
-                    quality_starts: 4,
-                    ..ProviderPitching::default()
-                },
-            },
-        ];
-        let mut supplement = QualityStartResult::default();
-        supplement.counts.insert(2, 7);
-        merge_quality_starts(&mut pitching, &supplement);
-        assert_eq!(pitching[0].stat.quality_starts, 7);
-        assert_eq!(pitching[1].stat.quality_starts, 4);
     }
 
     #[test]

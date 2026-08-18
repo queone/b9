@@ -231,7 +231,42 @@ pub fn render_totals(
                             "—".into(),
                         )
                     });
-                output.push_str(&format!("{:<4}  {:>3}  {:>3}  {:>5}  {:>5}  {:>3}  {:>5}  {:>5}  {:>3}  {:>3}  {:>3}  {:>3}  {:>5}  {:>6}  {:>3}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}\n", row.team.abbreviation, row.wins, row.losses, pct, games_back(&row.games_back), yp, pa, obp, r, hr, rbi, sb, avg, ip, qs, w, sv, k, era, whip));
+                let context = [
+                    dim(&format!("{:>3}", row.wins), mode),
+                    dim(&format!("{:>3}", row.losses), mode),
+                    dim(&format!("{:>5}", pct), mode),
+                    dim(&format!("{:>5}", games_back(&row.games_back)), mode),
+                    dim(&format!("{:>3}", yp), mode),
+                    dim(&format!("{:>5}", pa), mode),
+                    dim(&format!("{:>5}", obp), mode),
+                ];
+                let pitching_context = [
+                    dim(&format!("{:>6}", ip), mode),
+                    dim(&format!("{:>3}", qs), mode),
+                ];
+                output.push_str(&format!(
+                    "{:<4}  {}  {}  {}  {}  {}  {}  {}  {:>3}  {:>3}  {:>3}  {:>3}  {:>5}  {}  {}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}\n",
+                    row.team.abbreviation,
+                    context[0],
+                    context[1],
+                    context[2],
+                    context[3],
+                    context[4],
+                    context[5],
+                    context[6],
+                    r,
+                    hr,
+                    rbi,
+                    sb,
+                    avg,
+                    pitching_context[0],
+                    pitching_context[1],
+                    w,
+                    sv,
+                    k,
+                    era,
+                    whip
+                ));
             }
         }
     }

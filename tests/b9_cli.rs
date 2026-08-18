@@ -32,6 +32,52 @@ fn root_help_forms_share_the_golden_surface() {
 }
 
 #[test]
+fn root_help_lists_every_command_specific_flag() {
+    let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
+    for (command, flags) in [
+        ("sync", &["-f, --force", "-o, --oauth"][..]),
+        ("log", &["-n, --lines", "-f, --follow", "-p, --path"]),
+        (
+            "m",
+            &[
+                "-w, --week",
+                "-W, --weekly",
+                "-D, --day",
+                "-a, --advise",
+                "-o, --oauth",
+            ],
+        ),
+        ("t", &["-f, --force"]),
+        ("tt", &["-f, --force"]),
+        ("sp", &["-f, --force"]),
+        ("rt", &["-w, --weekly", "-o, --oauth"]),
+        ("h", &["-s, --sort", "-p, --position", "-w, --waiver"]),
+        ("p", &["-s, --sort", "-p, --position", "-w, --waiver"]),
+    ] {
+        let lines = root.lines().collect::<Vec<_>>();
+        let command_index = lines
+            .iter()
+            .position(|line| {
+                !line.starts_with("    ")
+                    && line
+                        .strip_prefix("  ")
+                        .and_then(|value| value.split_whitespace().next())
+                        == Some(command)
+            })
+            .unwrap_or_else(|| panic!("missing root command row for {command}"));
+        let block = lines[command_index + 1..]
+            .iter()
+            .take_while(|line| line.starts_with("    "))
+            .copied()
+            .collect::<Vec<_>>()
+            .join("\n");
+        for flag in flags {
+            assert!(block.contains(flag), "missing {command} flag {flag}");
+        }
+    }
+}
+
+#[test]
 fn glossary_aliases_share_command_help() {
     for command in ["whatis", "i"] {
         let output = b9(&[command, "--help"]);

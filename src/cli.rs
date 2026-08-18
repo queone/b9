@@ -95,7 +95,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "stop",
         display_label: "stop",
-        description: "Stop the background sync daemon",
+        description: "Stop the running daemon",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -103,7 +103,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "restart",
         display_label: "restart",
-        description: "Restart the background sync daemon",
+        description: "Restart the daemon",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -280,6 +280,50 @@ const FLAGS: &[FlagDescriptor] = &[
         action: FlagAction::Help,
         routing_aliases: &["-?"],
     },
+];
+
+const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
+    (
+        "sync",
+        "-f, --force",
+        "Bypass synchronization freshness gates",
+    ),
+    (
+        "sync",
+        "-o, --oauth",
+        "Include authenticated Yahoo supplements",
+    ),
+    (
+        "log",
+        "-n, --lines <N>",
+        "Show the last N log lines (default 50)",
+    ),
+    ("log", "-f, --follow", "Follow new log output"),
+    ("log", "-p, --path", "Print only the log path"),
+    ("m", "-w, --week <WEEK>", "Show a specific matchup week"),
+    ("m", "-W, --weekly", "Show weekly running totals"),
+    (
+        "m",
+        "-D, --day <YYYY-MM-DD>",
+        "Show stats for a specific day",
+    ),
+    ("m", "-a, --advise", "Include the advisory summary"),
+    ("m", "-o, --oauth", "Use authenticated Yahoo data"),
+    ("t", "-f, --force", "Refresh provider data"),
+    ("tt", "-f, --force", "Refresh provider data"),
+    ("sp", "-f, --force", "Refresh provider data"),
+    (
+        "rt",
+        "-w, --weekly [<WEEK|DATE>]",
+        "Show current or selected weekly totals",
+    ),
+    ("rt", "-o, --oauth", "Use authenticated Yahoo data"),
+    ("h", "-s, --sort <FIELD>", "Sort by a displayed field"),
+    ("h", "-p, --position <POS>", "Filter by eligible position"),
+    ("h", "-w, --waiver", "Show waiver candidates only"),
+    ("p", "-s, --sort <FIELD>", "Sort by a displayed field"),
+    ("p", "-p, --position <POS>", "Filter by eligible position"),
+    ("p", "-w, --waiver", "Show waiver candidates only"),
 ];
 
 /// Run the b9 command using process arguments.
@@ -711,6 +755,12 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
             descriptor.display_label,
             descriptor.description,
         );
+        for (_, flag, description) in COMMAND_FLAGS
+            .iter()
+            .filter(|(command, _, _)| *command == descriptor.name)
+        {
+            push_help_row(&mut output, &format!("  {flag}"), description);
+        }
     }
     output.push('\n');
     output.push_str(&section("FLAGS", mode));

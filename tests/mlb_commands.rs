@@ -7,3 +7,10 @@ fn mlb_command_modules_keep_provider_payloads_out_of_cli_and_rendering() {
         assert!(!display.contains(forbidden));
     }
 }
+
+#[test]
+fn team_totals_reuse_synchronized_quality_starts() {
+    let commands = include_str!("../src/mlb_commands.rs");
+    assert!(!commands.contains("mlb.fetch_quality_starts("));
+    assert!(commands.contains("read synchronized quality starts"));
+}

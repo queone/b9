@@ -4,7 +4,6 @@
 
 Port `skout` from Go to Rust across multiple releases. Treat feature parity and readiness to supplant `skout` as verification outcomes rather than schedule assumptions.
 
-See [`docs/rust-port.md`](docs/rust-port.md) for the port overview, architecture, detailed parity evidence, and current capability map.
+See [`docs/skout-parity-checklist.md`](docs/skout-parity-checklist.md) for the active command parity tracker and historical reference map.
 
 ## Ideas To Explore
-

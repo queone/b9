@@ -78,6 +78,41 @@ fn totals_plain_output_matches_golden() {
 }
 
 #[test]
+fn totals_color_only_context_columns_like_skout() {
+    let team = yankees();
+    let output = render_totals(
+        &[MlbStanding {
+            team: team.clone(),
+            wins: 70,
+            losses: 50,
+            games_back: "-".into(),
+        }],
+        &[MlbTeamTotals {
+            team,
+            batting: BattingStats {
+                plate_appearances: 4500,
+                runs: 600,
+                ..Default::default()
+            },
+            pitching: PitchingStats {
+                innings_pitched: 1080.0,
+                quality_starts: 75,
+                wins: 70,
+                ..Default::default()
+            },
+            yahoo_players: Some(14),
+            players_available: Some(26),
+        }],
+        false,
+        HelpColorMode::Color,
+    );
+    assert!(output.contains("NYY   \u{1b}[38;5;245m 70\u{1b}[0m"));
+    assert!(output.contains("\u{1b}[38;5;245m1080.0\u{1b}[0m"));
+    assert!(output.contains("\u{1b}[38;5;245m 75\u{1b}[0m   70"));
+    assert!(!output.contains("\u{1b}[38;5;245m600\u{1b}[0m"));
+}
+
+#[test]
 fn probable_pitchers_plain_output_matches_golden() {
     let output = render_slate(
         &[MlbSlateRow {

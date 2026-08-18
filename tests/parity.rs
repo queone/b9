@@ -119,7 +119,7 @@ fn closure_documents_reject_stale_delivery_claims() {
         "README.md",
         "arch.md",
         "plan.md",
-        "docs/rust-port.md",
+        "docs/skout-parity-checklist.md",
         "docs/skout-parity.md",
         "docs/skout-cli-operations.md",
         "docs/skout-providers-storage.md",
