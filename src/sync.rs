@@ -626,9 +626,15 @@ fn synchronize_for_origin_reporting(
                 .map_err(|error| {
                     format!("resolve public Yahoo league: {error}; configure a league and retry")
                 })?;
-            let feed = crate::providers::yahoo_public::YahooPublicClient::shared(http.clone())
+            let client = crate::providers::yahoo_public::YahooPublicClient::shared(http.clone());
+            let mut feed = client
                 .fetch_redzone(&league_id, &league_key)
                 .map_err(|error| format!("fetch public Yahoo snapshot: {error}; retry later"))?;
+            client
+                .enrich_player_ranks(&mut feed.players)
+                .map_err(|error| {
+                    format!("fetch public Yahoo player ranks: {error}; retry later")
+                })?;
             let snapshot = crate::public_pull::public_snapshot(feed);
             let count = snapshot.players.len() as i64;
             store.merge_public_fantasy_snapshot(&snapshot)

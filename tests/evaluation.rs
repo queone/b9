@@ -1,4 +1,4 @@
-use b9::domain::StoredFantasyPlayer;
+use b9::domain::{GameIndicator, StoredFantasyPlayer};
 use b9::evaluation::{evaluate, sort_by_evaluation};
 
 fn player(name: &str, role: &str, batting: [f64; 7], pitching: [f64; 7]) -> StoredFantasyPlayer {
@@ -9,10 +9,12 @@ fn player(name: &str, role: &str, batting: [f64; 7], pitching: [f64; 7]) -> Stor
         team: String::new(),
         role: role.into(),
         positions: String::new(),
+        is_closer: false,
         status: String::new(),
         injury_note: String::new(),
         birth_date: String::new(),
         game_status: String::new(),
+        game_indicator: GameIndicator::None,
         hand: String::new(),
         rank: None,
         percent_owned: None,

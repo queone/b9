@@ -78,9 +78,12 @@ pub fn pull_with(
         .start_sync_run(SyncMode::Live, SyncOrigin::PublicPull)
         .map_err(|error| PublicPullError::context("start public pull run", error))?;
     let result = (|| -> Result<FantasySnapshotWrite, PublicPullError> {
-        let feed = client
+        let mut feed = client
             .fetch_redzone(&league_id, &league_key)
             .map_err(|error| PublicPullError::context("fetch public feed", error))?;
+        client
+            .enrich_player_ranks(&mut feed.players)
+            .map_err(|error| PublicPullError::context("fetch public player ranks", error))?;
         let snapshot = public_snapshot(feed);
         store
             .replace_fantasy_snapshot(&snapshot)

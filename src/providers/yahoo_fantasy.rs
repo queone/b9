@@ -322,6 +322,63 @@ fn decimal(map: &Map<String, Value>, key: &str) -> Option<f64> {
         .and_then(|value| value.as_f64().or_else(|| value.as_str()?.parse().ok()))
 }
 
+fn yahoo_rank(map: &Map<String, Value>) -> Option<i64> {
+    fn collect(value: &Value, overall: &mut i64, seasons: &mut BTreeMap<i32, i64>) {
+        match value {
+            Value::Object(values) => {
+                if let Some(player_rank) = values.get("player_rank") {
+                    let rank = flattened(player_rank);
+                    let value = integer(&rank, "rank_value");
+                    if value > 0 {
+                        match text(&rank, "rank_type").as_str() {
+                            "OR" => *overall = value,
+                            "S" => {
+                                if let Ok(season) = text(&rank, "rank_season").parse() {
+                                    seasons.insert(season, value);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                } else {
+                    values
+                        .values()
+                        .for_each(|value| collect(value, overall, seasons));
+                }
+            }
+            Value::Array(values) => values
+                .iter()
+                .for_each(|value| collect(value, overall, seasons)),
+            _ => {}
+        }
+    }
+
+    let mut overall = 0;
+    let mut seasons = BTreeMap::new();
+    if let Some(ranks) = map.get("player_ranks") {
+        collect(ranks, &mut overall, &mut seasons);
+    }
+    let current = seasons.last_key_value().map(|(_, rank)| *rank).unwrap_or(0);
+    let previous = seasons
+        .iter()
+        .rev()
+        .nth(1)
+        .map(|(_, rank)| *rank)
+        .unwrap_or(0);
+    let selected = if current > 0 && overall > 0 && current != overall {
+        current
+    } else if previous > 0 {
+        previous
+    } else if overall > 0 {
+        overall
+    } else if current > 0 {
+        current
+    } else {
+        integer(map, "rank_value")
+    };
+    Some(selected).filter(|rank| *rank > 0)
+}
+
 /// Parse authenticated user league discovery JSON.
 pub fn parse_user_leagues(value: &Value) -> Result<Vec<UserLeague>, YahooFantasyError> {
     let mut unique = BTreeMap::new();
@@ -494,7 +551,7 @@ pub fn parse_league_rosters(
                 eligible_positions: eligible,
                 injury_status: text(&map, "status"),
                 percent_owned: decimal(&map, "value"),
-                yahoo_rank: Some(integer(&map, "rank_value")).filter(|value| *value > 0),
+                yahoo_rank: yahoo_rank(&map),
             });
             let selected = text(&map, "position");
             slots.insert((team_key.clone(), player_id, selected));
@@ -547,7 +604,7 @@ pub fn parse_free_agents(value: &Value) -> Result<Vec<FantasyPlayer>, YahooFanta
                 eligible_positions: eligible,
                 injury_status: text(&map, "status"),
                 percent_owned: decimal(&map, "value"),
-                yahoo_rank: Some(integer(&map, "rank_value")).filter(|value| *value > 0),
+                yahoo_rank: yahoo_rank(&map),
             },
         );
     }

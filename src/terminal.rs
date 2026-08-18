@@ -147,6 +147,30 @@ pub fn injury_status(value: &str, mode: HelpColorMode) -> String {
     style(value, "38;5;196", mode)
 }
 
+/// Style a lineup marker with skout's active or subdued green/red ramp.
+pub fn lineup_indicator(
+    value: &str,
+    favorable: bool,
+    subdued: bool,
+    mode: HelpColorMode,
+) -> String {
+    if mode == HelpColorMode::Plain {
+        return value.to_owned();
+    }
+    let code = match (favorable, subdued) {
+        (true, false) => "38;5;46",
+        (true, true) => "38;5;34",
+        (false, false) => "38;5;196",
+        (false, true) => "38;5;124",
+    };
+    let restore = if subdued {
+        "\u{1b}[38;5;245m"
+    } else {
+        "\u{1b}[0m"
+    };
+    format!("\u{1b}[{code}m{value}{restore}")
+}
+
 /// Apply the active, injured-list, or off-active semantic tier to a complete row.
 pub fn roster_row(value: &str, status: &str, mode: HelpColorMode) -> String {
     if status.starts_with('D') {

@@ -1,9 +1,12 @@
 //! Deterministic roster, player-pool, totals, and detail rendering.
 
-use crate::domain::{HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
+use crate::domain::{
+    GameIndicator, HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer,
+};
 use crate::store::{StoredFantasyCategory, StoredFantasyTeam};
 use crate::terminal::{
-    HelpColorMode, available, dim, injury_status, roster_row, table_heading, title, warning,
+    HelpColorMode, available, dim, injury_status, lineup_indicator, roster_row, table_heading,
+    title, warning,
 };
 
 const PLAYER_WIDTH: usize = 26;
@@ -74,19 +77,26 @@ fn player_header(
     };
     let owner = if roster { "" } else { "  OWNER" };
     format!(
-        "{slot}{player:<26}  {:<5}  {:<17}  {hand:<1}  {:>4}  {pt1:>5}  {pt2:>5}  {s1:>3}  {s2:>3}  {s3:>4}  {s4:>5}  {s5:>5}{advanced}{owner}",
+        "{slot}{player:<26}  {:<5}  {:<17}  {hand:<1}  {:>4}  {pt1:>6}  {pt2:>5}  {s1:>3}  {s2:>3}  {s3:>4}  {s4:>5}  {s5:>5}{advanced}{owner}",
         "POS", "STATUS", "YR"
     )
 }
 
 fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -> String {
+    let uniform_row =
+        matches!(player.slot.as_deref(), Some("BN" | "IL")) || player.status.starts_with("IL");
+    let cell_mode = if uniform_row {
+        HelpColorMode::Plain
+    } else {
+        mode
+    };
     let slot = if roster {
         format!("{:<4}  ", player.slot.as_deref().unwrap_or("-"))
     } else {
         String::new()
     };
     let identity = fit(&format!("{} {}", player.name, player.team), PLAYER_WIDTH);
-    let position = fit(&display_positions(&player.positions), 5);
+    let position = display_positions(&player.positions, player.is_closer);
     let status = fit(
         if !player.status.is_empty() {
             &player.status
@@ -97,17 +107,18 @@ fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -
         },
         STATUS_WIDTH,
     );
+    let status = style_game_indicator(&status, player.game_indicator, uniform_row, mode);
     let yr = player
         .rank
         .map_or_else(|| "—".into(), |value| value.to_string());
     let owner = match &player.owner {
-        Some(owner) => dim(&fit(owner, 20), mode),
-        None if player.yahoo_player_id.is_some() => available(&fit("<available>", 20), mode),
-        None => dim(&fit("<not yet in Yahoo>", 20), mode),
+        Some(owner) => dim(&fit(owner, 20), cell_mode),
+        None if player.yahoo_player_id.is_some() => available(&fit("<available>", 20), cell_mode),
+        None => dim(&fit("<not yet in Yahoo>", 20), cell_mode),
     };
     let stats = if player.role == "B" {
         format!(
-            "{:>5.0}  {:>5}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.0}  {:>5}",
+            "{:>6.0}  {:>5}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.0}  {:>5}",
             player.batting[0],
             rate(player.batting[1], 3),
             player.batting[2],
@@ -118,7 +129,7 @@ fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -
         )
     } else {
         format!(
-            "{:>5.1}  {:>5.0}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}",
+            "{:>6.1}  {:>5.0}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}",
             player.pitching[0],
             player.pitching[1],
             player.pitching[2],
@@ -134,16 +145,11 @@ fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -
         } else {
             &player.hand
         },
-        mode,
+        cell_mode,
     );
-    let yr = dim(&format!("{yr:>4}"), mode);
-    let stats = if player.role == "B" {
-        let (pa, rest) = stats.split_at(5);
-        format!("{}{}", dim(pa, mode), dim(&rest[..7.min(rest.len())], mode))
-            + &rest[7.min(rest.len())..]
-    } else {
-        stats
-    };
+    let yr = dim(&format!("{yr:>4}"), cell_mode);
+    let (secondary, primary) = stats.split_at(13.min(stats.len()));
+    let stats = format!("{}{}", dim(secondary, cell_mode), primary);
     let advanced = if roster {
         String::new()
     } else {
@@ -158,9 +164,28 @@ fn player_row(player: &StoredFantasyPlayer, roster: bool, mode: HelpColorMode) -
         format!("{slot}{identity}  {position}  {status}  {hand}  {yr}  {stats}{advanced}{owner}");
     if player.slot.as_deref() == Some("IL") || player.status.starts_with("IL") {
         warning(&row, mode)
+    } else if player.slot.as_deref() == Some("BN") {
+        dim(&row, mode)
     } else {
         roster_row(&row, &player.status, mode)
     }
+}
+
+fn style_game_indicator(
+    status: &str,
+    indicator: GameIndicator,
+    subdued: bool,
+    mode: HelpColorMode,
+) -> String {
+    let (value, favorable) = match indicator {
+        GameIndicator::None => return status.to_owned(),
+        GameIndicator::BattingOrder(order) => (order.to_string(), true),
+        GameIndicator::StartingPitcher => ("●".into(), true),
+        GameIndicator::OutOfLineup => ("●".into(), false),
+    };
+    let needle = format!(" {value} ");
+    let replacement = format!(" {} ", lineup_indicator(&value, favorable, subdued, mode));
+    status.replacen(&needle, &replacement, 1)
 }
 
 fn advanced_values(player: &StoredFantasyPlayer) -> String {
@@ -195,20 +220,66 @@ fn advanced_values(player: &StoredFantasyPlayer) -> String {
     }
 }
 
-fn display_positions(value: &str) -> String {
-    let values = value
+fn display_positions(value: &str, is_closer: bool) -> String {
+    let all_values = value
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .collect::<Vec<_>>();
-    if values.len() <= 1 {
-        return value.to_owned();
+    let mut values = all_values
+        .iter()
+        .copied()
+        .filter(|value| !matches!(value.to_ascii_lowercase().as_str(), "uti" | "util" | "p"))
+        .collect::<Vec<_>>();
+    if values.is_empty() {
+        values = all_values;
     }
-    values
-        .into_iter()
-        .filter(|value| !matches!(value.to_ascii_lowercase().as_str(), "uti" | "util"))
-        .collect::<Vec<_>>()
-        .join(",")
+    let mut literal = if values.is_empty() && is_closer {
+        "RP".to_owned()
+    } else {
+        values.join(",")
+    };
+    if is_closer {
+        literal.push('1');
+    }
+    if literal.chars().count() <= 5 {
+        return fit(&literal, 5);
+    }
+    if values.len() >= 6 {
+        return fit(if is_closer { "All1" } else { "All" }, 5);
+    }
+    fn rank(value: &str) -> usize {
+        ["C", "1B", "2B", "3B", "SS", "OF", "SP", "RP"]
+            .iter()
+            .position(|position| *position == value)
+            .unwrap_or(usize::MAX)
+    }
+    values.sort_by_key(|value| rank(value));
+    let mut compressed = String::new();
+    for value in values {
+        let letter = match value {
+            "C" => "C".to_owned(),
+            "1B" => "1".to_owned(),
+            "2B" => "2".to_owned(),
+            "3B" => "3".to_owned(),
+            "SS" => "S".to_owned(),
+            "OF" => "O".to_owned(),
+            "SP" => "P".to_owned(),
+            "RP" => "R".to_owned(),
+            other => other.chars().next().map(String::from).unwrap_or_default(),
+        };
+        compressed.push_str(&letter);
+        if is_closer && value == "RP" {
+            compressed.push('1');
+        }
+        if compressed.chars().count() >= 5 {
+            break;
+        }
+    }
+    if is_closer && !compressed.contains('1') && compressed.chars().count() < 5 {
+        compressed.push('1');
+    }
+    fit(&compressed, 5)
 }
 
 fn roster_total_row(role: &str, players: &[&StoredFantasyPlayer], mode: HelpColorMode) -> String {
@@ -242,7 +313,7 @@ fn roster_total_row(role: &str, players: &[&StoredFantasyPlayer], mode: HelpColo
     }
     let stats = if role == "B" {
         format!(
-            "{:>5.0}  {:>5}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.0}  {:>5}",
+            "{:>6.0}  {:>5}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.0}  {:>5}",
             batting[0],
             rate(batting[1], 3),
             batting[2],
@@ -253,7 +324,7 @@ fn roster_total_row(role: &str, players: &[&StoredFantasyPlayer], mode: HelpColo
         )
     } else {
         format!(
-            "{:>5.1}  {:>5.0}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}",
+            "{:>6.1}  {:>5.0}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}",
             pitching[0],
             pitching[1],
             pitching[2],
@@ -266,7 +337,7 @@ fn roster_total_row(role: &str, players: &[&StoredFantasyPlayer], mode: HelpColo
     title(
         &format!(
             "{:<4}  {:<26}  {:<5}  {:<17}  {:<1}  {:>4}  {stats}",
-            "", "TOTAL", "", "", "", ""
+            "", "TOTAL", "", "", "", "",
         ),
         mode,
     )
@@ -500,7 +571,7 @@ pub fn render_detail(
         "{}\n{:<22}  {:<5}  {}  {:<1}  {:>3}  {:>4}\n\n",
         table_heading(&summary_header, mode),
         format!("{} {}", player.name, player.team),
-        display_positions(&player.positions),
+        display_positions(&player.positions, player.is_closer),
         status,
         if player.hand.is_empty() {
             "-"

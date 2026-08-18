@@ -38,13 +38,13 @@ Source: `<skout-repo>/go.mod`. Indirect modules are transitive evidence, not com
 
 No provider implements general retries or quota accounting. Yahoo alone implements provider-local bounded 429 retries with response tests. Authentication is not applicable outside Yahoo. Rate-limit response tests remain gaps for the other providers.
 
-### Rejected Automated Providers
+### Automated Provider Policy
 
 - Reject automated Savant acquisition because the [MLB terms reviewed 2026-08-16](https://www.mlb.com/official-information/terms-of-use) prohibit automated scripts that collect from MLB digital properties.
 - Reject automated FanGraphs acquisition because the [FanGraphs guidance reviewed 2026-08-16](https://blogs.fangraphs.com/contact/) says scraping and public API endpoints are not supported.
 - Reject FantasyPros HTML scraping; reconsider only its [authorized API reviewed 2026-08-16](https://support.fantasypros.com/hc/en-us/articles/49749297704475-How-do-I-request-access-to-the-FantasyPros-API) after separately approved production access exists.
-- Reject automated RotoWire acquisition because the [RotoWire terms reviewed 2026-08-16](https://www.rotowire.com/termsandconditions.php) prohibit crawling and spidering.
-- Retain predecessor-named compatibility columns as inert schema-version-two data only; expose no b9 command, adapter, transport, credential, synchronization, or new write path for these rejected providers.
+- Allow bounded, unauthenticated RotoWire daily-lineup acquisition only for on-demand roster status, with a two-minute cache and MLBAM fallback.
+- Retain predecessor-named compatibility columns as inert schema-version-two data only; expose no b9 command, adapter, transport, credential, synchronization, or new write path for the rejected providers.
 - Supplement bulk MLB pitching totals with bounded per-pitcher quality-start acquisition for starters, and preserve prior nonzero quality starts when a later bulk response omits them.
 
 ## Provider Operation Ledger
@@ -393,6 +393,8 @@ Extraction: literal datasets passed to snapshot save/get/stale calls in authoriz
 | FR-010 | Disk caches | Yahoo/MLB 60s; RotoWire 2m; FG cFIP memory 24h | Miss fetches live | provider/cache sources |
 | FR-011 | Command snapshots | No store TTL rejection | Producer refreshes; failure marks stale | snapshots and ledger |
 
+RotoWire confirmed daily lineups are fetched lazily by roster display, cached on disk for two minutes, and overlaid ahead of MLBAM lineup/probable-pitcher data. Fetch, parse, or match failure leaves the MLBAM result unchanged. Only confirmed batting-order sides with at least seven hitters resolved to durable league player identities replace MLBAM lineup order.
+
 ## Reconciliation
 
 | ID | Authoritative set | Replacement and partial protection | Evidence |
@@ -549,7 +551,7 @@ The MLB utility integration uses schema version two for MLB identities, 40-man r
 | Migrate to b9 database | Guarded one-time compatible-state transfer | Explicit read-only boundary; transaction and rollback burden | Selected for fantasy context needed by MLB utilities |
 | Isolated storage | Rebuild from providers at `$HOME/.config/b9/b9.db` | Simple; cold history/cache | Selected |
 
-Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-two storage, typed state and snapshots, bounded cache and transport boundaries, Yahoo PKCE authentication, numeric-key fantasy normalization, complete-league and free-agent persistence, shared foreground/background synchronization, ambiguity-safe MLB identity reconciliation, ESPN moneyline context, and bounded MLB acquisition. When b9 has no Yahoo-linked state, a guarded compatibility adapter reads the legacy database once and transactionally imports compatible fantasy context; b9 remains the sole owner of subsequent writes. Automated Savant, FanGraphs, FantasyPros HTML, and RotoWire acquisition is rejected under the recorded policy evidence. Yahoo transaction history remains deferred.
+Observable path/state/freshness/data semantics remain distinct from exact Go SQL mechanics. b9 owns isolated schema-version-two storage, typed state and snapshots, bounded cache and transport boundaries, Yahoo PKCE authentication, numeric-key fantasy normalization, complete-league and free-agent persistence, shared foreground/background synchronization, ambiguity-safe MLB identity reconciliation, ESPN moneyline context, bounded MLB acquisition, and bounded on-demand RotoWire lineup acquisition. When b9 has no Yahoo-linked state, a guarded compatibility adapter reads the legacy database once and transactionally imports compatible fantasy context; b9 remains the sole owner of subsequent writes. Automated Savant, FanGraphs, and FantasyPros HTML acquisition remains rejected under the recorded policy evidence. Yahoo transaction history remains deferred.
 
 ## Verification
 
@@ -577,7 +579,7 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | PS-2 Freshness/snapshots | PS-1 | Typed item/row/season/run state and validated durable snapshots implemented | Injected clock/version/stale/completeness implemented | Transports |
 | PS-3 Cache/transport | Ratified inventory | Bounded atomic disk cache and validating injectable HTTP executor implemented | Filesystem/request/redirect/limit contracts implemented | Parsing/auth adapters |
 | PS-4 JSON providers | PS-2/PS-3 | Yahoo authentication and fantasy data, ESPN current odds, and bounded MLB metadata/live-game/statistics acquisition implemented | Yahoo/ESPN/MLB fixtures, transport doubles, secure boundaries, parsing variants, cache boundaries, concurrency, and store rollback implemented | Other MLB/live checks |
-| PS-5 Scrapers | PS-2/PS-3 | OddsShark implemented; Savant, FanGraphs, FantasyPros HTML, and RotoWire rejected by the reviewed provider policy | OddsShark fixture coverage; official policy evidence for rejected acquisition | No rejected-provider live checks |
+| PS-5 Scrapers | PS-2/PS-3 | OddsShark and bounded on-demand RotoWire lineups implemented; Savant, FanGraphs, and FantasyPros HTML rejected by the reviewed provider policy | OddsShark and RotoWire fixture coverage; official policy evidence for rejected acquisition | No rejected-provider live checks |
 | PS-6 Integration | PS-4/PS-5 | Complete retained command shell, Yahoo sync, free agents, reconciliation, matchup snapshots, stale fallback, display, operations, daemon, and advisory configuration implemented | Fixture DB, orchestration, parity, fallback, and failure paths | Yahoo transactions and rejected providers |
 
 PS-1 through PS-6 are implemented for retained providers and commands after their acceptance tests pass. Live-provider gates and explicit excluded gaps remain tracked separately from deterministic implementation.

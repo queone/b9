@@ -84,6 +84,14 @@
                 "stats": { "28": 1, "32": 0, "42": 10, "26": 3.0, "27": 1.33, "33": 18, "37": 2, "39": 3, "34": 5, "50": 6.0 }
               },
               {
+                "id": "64813",
+                "position": "--",
+                "eligiblePositionSlots": ["SP", "P"],
+                "positionType": "P",
+                "status": "",
+                "stats": { "28": 9, "32": 9, "42": 9, "33": 27, "37": 9, "39": 9, "34": 9 }
+              },
+              {
                 "id": null,
                 "position": "BN",
                 "eligiblePositionSlots": [],
@@ -178,6 +186,20 @@
         "imageUrl": "https://example.test/70001.png",
         "isStarting": true
       },
+      "64813": {
+        "id": "64813",
+        "name": "Brandon Young",
+        "firstName": "Brandon",
+        "lastName": "Young",
+        "position": "SP",
+        "positionType": "P",
+        "team": "BAL",
+        "teamId": "1",
+        "hasPlayerNotes": false,
+        "hasNewPlayerNotes": false,
+        "imageUrl": "https://example.test/64813.png",
+        "isStarting": null
+      },
       "8658": {
         "id": "8658",
         "name": "Freddie Freeman",
@@ -214,6 +236,7 @@
       "10395": { "id": "10395", "editorialPlayerId": "10395" },
       "60129": { "id": "60129", "editorialPlayerId": "60129" },
       "70001": { "id": "70001", "editorialPlayerId": "70001" },
+      "64813": { "id": "64813", "editorialPlayerId": "64813" },
       "8658": { "id": "8658", "editorialPlayerId": "8658" },
       "70002": { "id": "70002", "editorialPlayerId": "70002" }
     }

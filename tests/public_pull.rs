@@ -11,6 +11,7 @@ use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, Valid
 use tempfile::tempdir;
 
 const REDZONE_VALID: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_valid.json");
+const PUBLIC_RANKS: &[u8] = br#"{"fantasy_content":{"league":{"players":[{"player":{"player_id":"10395","player_ranks":[{"player_rank":{"rank_type":"S","rank_value":"216","rank_season":"2026"}},{"player_rank":{"rank_type":"S","rank_position":"C","rank_value":"12","rank_season":"2026"}}]}}]}}}"#;
 
 struct FixedExecutor {
     responses: Mutex<VecDeque<Result<HttpResponse, ExecutorError>>>,
@@ -35,13 +36,18 @@ impl HttpExecutor for FixedExecutor {
 }
 
 fn ok_client() -> YahooPublicClient {
-    YahooPublicClient::new(HttpClient::new(Arc::new(FixedExecutor::new(vec![Ok(
-        HttpResponse {
+    YahooPublicClient::new(HttpClient::new(Arc::new(FixedExecutor::new(vec![
+        Ok(HttpResponse {
             status: 200,
             headers: Vec::new(),
             body: REDZONE_VALID.to_vec(),
-        },
-    )]))))
+        }),
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: PUBLIC_RANKS.to_vec(),
+        }),
+    ]))))
 }
 
 fn failing_client() -> YahooPublicClient {
@@ -79,6 +85,15 @@ fn successful_pull_writes_the_snapshot_and_records_a_complete_public_pull_run() 
 
     assert_eq!(config.current_league, "public.170874");
     assert_eq!(store.fantasy_teams("public.170874").unwrap().len(), 2);
+    assert_eq!(
+        store
+            .fantasy_players("public.170874")
+            .unwrap()
+            .iter()
+            .find(|player| player.yahoo_player_id == Some(10395))
+            .and_then(|player| player.rank),
+        Some(216)
+    );
     assert_eq!(
         store.current_data_origin(SyncMode::Live).unwrap(),
         Some(SyncOrigin::PublicPull)

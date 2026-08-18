@@ -334,7 +334,7 @@ fn redirect_loops_fail_contextually() {
 }
 
 #[test]
-fn rejected_automated_providers_have_no_reachable_acquisition_path() {
+fn automated_provider_policy_allows_rotowire_only_through_public_lineup_acquisition() {
     let providers = include_str!("../src/providers/mod.rs").to_ascii_lowercase();
     let savant = include_str!("../src/providers/savant.rs").to_ascii_lowercase();
     let commands = include_str!("../src/cli.rs").to_ascii_lowercase();
@@ -345,7 +345,11 @@ fn rejected_automated_providers_have_no_reachable_acquisition_path() {
     assert!(savant.contains("httpclient") && savant.contains(".execute("));
     assert!(!commands.contains("savant"));
     assert!(!credentials.contains("savant"));
-    for rejected in ["fangraphs", "fantasypros", "rotowire"] {
+    assert!(providers.contains("rotowire"));
+    assert!(!commands.contains("rotowire"));
+    assert!(!synchronization.contains("rotowire"));
+    assert!(!credentials.contains("rotowire"));
+    for rejected in ["fangraphs", "fantasypros"] {
         assert!(!providers.contains(rejected));
         assert!(!commands.contains(rejected));
         assert!(!synchronization.contains(rejected));

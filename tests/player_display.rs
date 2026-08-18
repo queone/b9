@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use b9::domain::{HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
+use b9::domain::{GameIndicator, HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
 use b9::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
@@ -15,10 +15,12 @@ fn hitter() -> StoredFantasyPlayer {
         team: "NYY".into(),
         role: "B".into(),
         positions: "OF".into(),
+        is_closer: false,
         status: String::new(),
         injury_note: String::new(),
         birth_date: "1992-04-26".into(),
         game_status: String::new(),
+        game_indicator: GameIndicator::None,
         hand: "R".into(),
         rank: Some(4),
         percent_owned: Some(99.0),
@@ -274,8 +276,57 @@ fn player_table_preserves_skout_palette_and_visible_column_widths() {
     let colored = render_players("Operators", &players, HelpColorMode::Color);
     assert!(colored.contains("\u{1b}[38;5;33mROSTER:\u{1b}[0m"));
     assert!(colored.contains("\u{1b}[38;5;34mOperators\u{1b}[0m"));
-    assert!(!colored.contains("\u{1b}[38;5;245mBN"));
+    assert!(colored.contains("\u{1b}[38;5;245mBN"));
     assert!(colored.contains("\u{1b}[38;5;100mIL"));
+    let bench_row = colored
+        .lines()
+        .find(|line| line.contains("Benched Hitter"))
+        .unwrap();
+    assert!(bench_row.starts_with("\u{1b}[38;5;245m"));
+    assert_eq!(bench_row.matches("\u{1b}[0m").count(), 1);
+    let injured_row = colored
+        .lines()
+        .find(|line| line.contains("Injured Hitter"))
+        .unwrap();
+    assert!(injured_row.starts_with("\u{1b}[38;5;100m"));
+    assert_eq!(injured_row.matches("\u{1b}[0m").count(), 1);
+    assert_eq!(
+        plain.lines().map(visible_width).collect::<Vec<_>>(),
+        colored.lines().map(visible_width).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn roster_status_colors_lineup_indicators_like_skout() {
+    let mut starting = hitter();
+    starting.slot = Some("OF".into());
+    starting.game_status = "7:05p 2 v BOS".into();
+    starting.game_indicator = GameIndicator::BattingOrder(2);
+    let mut excluded = hitter();
+    excluded.name = "Excluded Hitter".into();
+    excluded.slot = Some("OF".into());
+    excluded.game_status = "7:05p ● v BOS".into();
+    excluded.game_indicator = GameIndicator::OutOfLineup;
+    let mut benched = hitter();
+    benched.name = "Benched Hitter".into();
+    benched.slot = Some("BN".into());
+    benched.game_status = "7:05p ● v BOS".into();
+    benched.game_indicator = GameIndicator::OutOfLineup;
+
+    let plain = render_players(
+        "Operators",
+        &[starting.clone(), excluded.clone(), benched.clone()],
+        HelpColorMode::Plain,
+    );
+    let colored = render_players(
+        "Operators",
+        &[starting, excluded, benched],
+        HelpColorMode::Color,
+    );
+
+    assert!(colored.contains("7:05p \u{1b}[38;5;46m2\u{1b}[0m v BOS"));
+    assert!(colored.contains("7:05p \u{1b}[38;5;196m●\u{1b}[0m v BOS"));
+    assert!(colored.contains("7:05p \u{1b}[38;5;124m●\u{1b}[38;5;245m v BOS"));
     assert_eq!(
         plain.lines().map(visible_width).collect::<Vec<_>>(),
         colored.lines().map(visible_width).collect::<Vec<_>>()
@@ -323,9 +374,86 @@ fn pitcher_pool_does_not_emit_an_empty_hitter_section() {
     pitcher.positions = "SP".into();
     pitcher.batting = [0.0; 7];
     pitcher.pitching = [10.0, 1.0, 2.0, 0.0, 12.0, 2.7, 1.1];
-    let output = render_players("PITCHERS", &[pitcher], HelpColorMode::Plain);
+    let pitchers = [pitcher];
+    let output = render_players("PITCHERS", &pitchers, HelpColorMode::Plain);
     assert!(output.starts_with("PITCHER"));
     assert!(!output.contains("HITTER"));
+
+    let colored = render_players("PITCHERS", &pitchers, HelpColorMode::Color);
+    assert!(colored.contains("\u{1b}[38;5;245m  10.0      1\u{1b}[0m"));
+}
+
+#[test]
+fn position_cells_preserve_literals_and_compress_dense_eligibility() {
+    let mut literal = hitter();
+    literal.name = "Literal".into();
+    literal.positions = "2B,SS,Util".into();
+    let mut dense = hitter();
+    dense.name = "Dense".into();
+    dense.positions = "OF,SS,3B,2B,Util".into();
+    let mut closer = hitter();
+    closer.name = "Closer".into();
+    closer.role = "P".into();
+    closer.positions = "RP,P".into();
+    closer.is_closer = true;
+    let mut starter = hitter();
+    starter.name = "Starter".into();
+    starter.role = "P".into();
+    starter.positions = "SP,P".into();
+    let mut swing = hitter();
+    swing.name = "Swing".into();
+    swing.role = "P".into();
+    swing.positions = "SP,RP,P".into();
+
+    let output = render_players(
+        "Operators",
+        &[literal, dense, closer, starter, swing],
+        HelpColorMode::Plain,
+    );
+    assert!(
+        output
+            .lines()
+            .any(|line| line.contains("Literal NYY") && line.contains("2B,SS"))
+    );
+    assert!(
+        output
+            .lines()
+            .any(|line| line.contains("Dense NYY") && line.contains("23SO"))
+    );
+    assert!(
+        output
+            .lines()
+            .any(|line| line.contains("Closer NYY") && line.contains("RP1"))
+    );
+    assert!(
+        output
+            .lines()
+            .any(|line| line.contains("Starter NYY") && line.contains("SP   "))
+    );
+    assert!(
+        output
+            .lines()
+            .any(|line| line.contains("Swing NYY") && line.contains("SP,RP"))
+    );
+}
+
+#[test]
+fn pitcher_total_columns_stay_aligned_when_innings_exceed_field_width() {
+    let mut pitcher = hitter();
+    pitcher.role = "P".into();
+    pitcher.positions = "SP".into();
+    pitcher.slot = Some("SP".into());
+    pitcher.batting = [0.0; 7];
+    pitcher.pitching = [1000.0, 40.0, 20.0, 10.0, 200.0, 3.0, 1.1];
+
+    let output = render_players("Operators", &[pitcher], HelpColorMode::Plain);
+    let header = output
+        .lines()
+        .find(|line| line.contains("PITCHER"))
+        .unwrap();
+    let total = output.lines().find(|line| line.contains("TOTAL")).unwrap();
+    assert!(total.ends_with("1000.0     40   20   10   200   3.00   1.10"));
+    assert_eq!(header.len(), total.len());
 }
 
 #[test]

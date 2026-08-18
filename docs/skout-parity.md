@@ -54,7 +54,7 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 | `_daemon` | Tested Rust improvement | Hidden entry, private control, and lifecycle tests | Supported-host lifecycle check pending |
 | `whatis` | Exact parity | Compatibility-alias and help tests | None |
 
-Intentional Rust improvements are direct foreground synchronization, explicit daemon startup, private control without PID signaling, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML/RotoWire acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells.
+Intentional Rust improvements are direct foreground synchronization, explicit daemon startup, private control without PID signaling, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells. Bounded on-demand RotoWire lineup acquisition supports roster status parity.
 
 Roster totals follow the predecessor's shared-MLBAM aggregation for Yahoo split identities, including two-way players such as Shohei Ohtani. MLB innings retain the source's display notation (`6.1`/`6.2`) for aggregate parity; rate calculations still use true thirds internally.
 

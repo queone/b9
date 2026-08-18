@@ -4,13 +4,15 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::cache::DiskCache;
 use crate::config;
-use crate::domain::{Matchup, PlayerGameLog, StoredFantasyPlayer};
+use crate::domain::{GameIndicator, Matchup, PlayerGameLog, StoredFantasyPlayer};
 use crate::evaluation::sort_by_evaluation;
 use crate::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
-use crate::providers::mlb::{Boxscore, MlbClient, ScheduleGame};
+use crate::providers::mlb::{Boxscore, LineupPlayer, MlbClient, ScheduleGame};
+use crate::providers::rotowire::{DailyLineup, RotowireClient};
 use crate::providers::yahoo::YahooClient;
 use crate::providers::yahoo_fantasy::{YahooFantasyClient, YahooFantasySource};
 use crate::store::{Store, StoredFantasyTeam, WaiverCandidate};
@@ -50,11 +52,13 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
         .fantasy_teams(&league)
         .map_err(|failure| error("r", failure))?;
     let team = select_roster_team(&teams, &selected, query)?;
-    let players = store
+    let league_players = store
         .fantasy_players(&league)
-        .map_err(|failure| error("r", failure))?
-        .into_iter()
+        .map_err(|failure| error("r", failure))?;
+    let players = league_players
+        .iter()
         .filter(|player| player.owner.as_deref() == Some(team.name.as_str()))
+        .cloned()
         .collect::<Vec<_>>();
     if players.is_empty() {
         return Err(error(
@@ -64,21 +68,118 @@ pub fn show_roster(query: Option<&str>) -> Result<String, PlayerCommandError> {
     }
     let mut players = players;
     sort_roster_players(&mut players);
-    populate_game_statuses(&mut players);
+    populate_game_statuses(&mut players, &league_players);
     let output = render_players(&team.name, &players, detected_help_color_mode());
     yahoo_result_notice(&store, output)
 }
 
-fn populate_game_statuses(players: &mut [StoredFantasyPlayer]) {
+fn populate_game_statuses(players: &mut [StoredFantasyPlayer], identities: &[StoredFantasyPlayer]) {
     let Ok(http) = HttpClient::production() else {
         return;
     };
-    let client = MlbClient::production(Arc::new(http));
+    let http = Arc::new(http);
+    let client = MlbClient::production(http.clone());
     let date = utc_date(SystemTime::now());
-    let Ok(games) = client.fetch_schedule(&date) else {
+    let Ok(mut games) = client.fetch_schedule(&date) else {
         return;
     };
+    if let Ok(cache) = DiskCache::production()
+        && let Ok(lineups) = RotowireClient::production(http).fetch_cached(&cache)
+    {
+        overlay_rotowire_lineups(identities, &mut games, &lineups);
+    }
     apply_game_statuses(players, &games);
+}
+
+fn overlay_rotowire_lineups(
+    players: &[StoredFantasyPlayer],
+    games: &mut [ScheduleGame],
+    lineups: &[DailyLineup],
+) {
+    for lineup in lineups.iter().filter(|lineup| lineup.confirmed) {
+        let Some(game) = games.iter_mut().find(|game| {
+            mlb_team_abbreviation(game.away_team_id) == lineup.away_team
+                && mlb_team_abbreviation(game.home_team_id) == lineup.home_team
+        }) else {
+            continue;
+        };
+        overlay_rotowire_side(
+            players,
+            &lineup.away_team,
+            &lineup.away_players,
+            &lineup.away_pitcher,
+            &mut game.away_lineup,
+            &mut game.away_probable_pitcher_id,
+        );
+        overlay_rotowire_side(
+            players,
+            &lineup.home_team,
+            &lineup.home_players,
+            &lineup.home_pitcher,
+            &mut game.home_lineup,
+            &mut game.home_probable_pitcher_id,
+        );
+    }
+}
+
+fn overlay_rotowire_side(
+    players: &[StoredFantasyPlayer],
+    team: &str,
+    names: &[String],
+    pitcher: &str,
+    target_lineup: &mut Option<Vec<LineupPlayer>>,
+    target_pitcher: &mut Option<i64>,
+) {
+    let lineup = names
+        .iter()
+        .map(|name| LineupPlayer {
+            person_id: unique_roster_match(players, team, name).unwrap_or(0),
+            full_name: name.clone(),
+        })
+        .collect::<Vec<_>>();
+    if lineup.iter().filter(|player| player.person_id != 0).count() >= 7 {
+        *target_lineup = Some(lineup);
+    }
+    if let Some(id) = unique_roster_match(players, team, pitcher) {
+        *target_pitcher = Some(id);
+    }
+}
+
+fn unique_roster_match(players: &[StoredFantasyPlayer], team: &str, name: &str) -> Option<i64> {
+    let matches = players
+        .iter()
+        .filter(|player| player.team == team && player.mlbam_id.is_some())
+        .filter(|player| names_match(&player.name, name))
+        .filter_map(|player| player.mlbam_id)
+        .collect::<Vec<_>>();
+    if matches.len() == 1 {
+        matches.first().copied()
+    } else {
+        None
+    }
+}
+
+fn names_match(full: &str, candidate: &str) -> bool {
+    let normalize = |value: &str| {
+        value
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    if normalize(full) == normalize(candidate) {
+        return true;
+    }
+    let Some((initial, last)) = candidate.split_once('.') else {
+        return false;
+    };
+    let parts = full.split_whitespace().collect::<Vec<_>>();
+    parts.first().is_some_and(|first| {
+        normalize(first).starts_with(&normalize(initial))
+            && parts
+                .last()
+                .is_some_and(|value| normalize(value) == normalize(last))
+    })
 }
 
 fn apply_game_statuses(
@@ -87,15 +188,12 @@ fn apply_game_statuses(
 ) {
     for player in players.iter_mut().filter(|player| player.status.is_empty()) {
         let Some(game) = games.iter().find(|game| {
-            let away = mlb_team_abbreviation(game.away_team_id);
-            let home = mlb_team_abbreviation(game.home_team_id);
-            player.team.eq_ignore_ascii_case(away) || player.team.eq_ignore_ascii_case(home)
+            mlb_team_matches(&player.team, game.away_team_id)
+                || mlb_team_matches(&player.team, game.home_team_id)
         }) else {
             continue;
         };
-        let away = player
-            .team
-            .eq_ignore_ascii_case(mlb_team_abbreviation(game.away_team_id));
+        let away = mlb_team_matches(&player.team, game.away_team_id);
         let opponent = if away {
             mlb_team_abbreviation(game.home_team_id)
         } else {
@@ -104,27 +202,86 @@ fn apply_game_statuses(
         let location = if away {
             format!("@ {opponent}")
         } else {
-            format!("vs {opponent}")
+            format!("v {opponent}")
         };
+        let indicator = lineup_indicator(player, game, away);
+        player.game_indicator = indicator;
+        let indicator_text = game_indicator_text(indicator);
         player.game_status = if game.detailed_state.eq_ignore_ascii_case("final") {
             game.linescore.as_ref().map_or_else(
                 || format!("Final {location}"),
                 |score| format!("Final {}-{} {location}", score.away_runs, score.home_runs),
             )
-        } else if let Some(score) = &game.linescore {
+        } else if !game_not_started(&game.detailed_state)
+            && let Some(score) = &game.linescore
+        {
+            let (mine, theirs) = if away {
+                (score.away_runs, score.home_runs)
+            } else {
+                (score.home_runs, score.away_runs)
+            };
+            let lineup = if matches!(indicator, GameIndicator::BattingOrder(_)) {
+                format!(" {indicator_text}")
+            } else {
+                String::new()
+            };
             format!(
-                "{}{} {}-{} {location}",
+                "{}{} {mine}-{theirs}{lineup} {location}",
                 score.inning_state.chars().next().unwrap_or('T'),
                 score.inning_ordinal,
-                score.away_runs,
-                score.home_runs
             )
         } else {
             format!(
-                "{} {location}",
-                game.game_date.get(11..16).unwrap_or("Scheduled")
+                "{} {indicator_text:1} {location}",
+                crate::mlb_commands::host_local_game_time(&game.game_date),
             )
         };
+    }
+}
+
+fn lineup_indicator(
+    player: &StoredFantasyPlayer,
+    game: &crate::providers::mlb::ScheduleGame,
+    away: bool,
+) -> GameIndicator {
+    let Some(mlbam_id) = player.mlbam_id else {
+        return GameIndicator::None;
+    };
+    if player.role == "P" {
+        let probable = if away {
+            game.away_probable_pitcher_id
+        } else {
+            game.home_probable_pitcher_id
+        };
+        return if probable == Some(mlbam_id) {
+            GameIndicator::StartingPitcher
+        } else {
+            GameIndicator::None
+        };
+    }
+    let lineup = if away {
+        game.away_lineup.as_deref()
+    } else {
+        game.home_lineup.as_deref()
+    };
+    let Some(lineup) = lineup else {
+        return GameIndicator::None;
+    };
+    if let Some(index) = lineup.iter().position(|entry| entry.person_id == mlbam_id) {
+        return GameIndicator::BattingOrder(index + 1);
+    }
+    if lineup.is_empty() {
+        GameIndicator::None
+    } else {
+        GameIndicator::OutOfLineup
+    }
+}
+
+fn game_indicator_text(indicator: GameIndicator) -> String {
+    match indicator {
+        GameIndicator::None => String::new(),
+        GameIndicator::BattingOrder(order) => order.to_string(),
+        GameIndicator::StartingPitcher | GameIndicator::OutOfLineup => "●".into(),
     }
 }
 
@@ -150,7 +307,7 @@ fn utc_date(now: SystemTime) -> String {
 fn mlb_team_abbreviation(team_id: i64) -> &'static str {
     match team_id {
         108 => "LAA",
-        109 => "ARI",
+        109 => "AZ",
         110 => "BAL",
         111 => "BOS",
         112 => "CHC",
@@ -181,6 +338,11 @@ fn mlb_team_abbreviation(team_id: i64) -> &'static str {
         158 => "MIL",
         _ => "",
     }
+}
+
+fn mlb_team_matches(value: &str, team_id: i64) -> bool {
+    value.eq_ignore_ascii_case(mlb_team_abbreviation(team_id))
+        || (team_id == 109 && value.eq_ignore_ascii_case("ARI"))
 }
 
 fn sort_roster_players(players: &mut [StoredFantasyPlayer]) {
@@ -909,17 +1071,44 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        apply_game_statuses, resolve_date_matchup, select_roster_team, sort_pool_players,
-        weekly_matchup, yahoo_result_notice,
+        apply_game_statuses, overlay_rotowire_side, resolve_date_matchup, select_roster_team,
+        sort_pool_players, weekly_matchup, yahoo_result_notice,
     };
     use crate::domain::{
-        FantasyPlayer, FantasyTeam, Matchup, MatchupTeam, RosterWeekStats, StoredFantasyPlayer,
+        FantasyPlayer, FantasyTeam, GameIndicator, Matchup, MatchupTeam, RosterWeekStats,
+        StoredFantasyPlayer,
     };
-    use crate::providers::mlb::{Linescore, ScheduleGame};
+    use crate::providers::mlb::{Linescore, LineupPlayer, ScheduleGame};
     use crate::providers::yahoo_fantasy::{
         LeagueRosters, LeagueSettings, UserLeague, YahooFantasyError, YahooFantasySource,
     };
     use crate::store::{Store, StoredFantasyTeam};
+
+    fn stored_player(status: &str) -> StoredFantasyPlayer {
+        StoredFantasyPlayer {
+            yahoo_player_id: Some(1),
+            mlbam_id: Some(1),
+            name: "Ada".into(),
+            team: "NYY".into(),
+            role: "B".into(),
+            positions: "OF".into(),
+            is_closer: false,
+            status: status.into(),
+            injury_note: String::new(),
+            birth_date: String::new(),
+            game_status: String::new(),
+            game_indicator: GameIndicator::None,
+            hand: "R".into(),
+            rank: None,
+            percent_owned: None,
+            owner: None,
+            slot: None,
+            batting: [0.0; 7],
+            pitching: [0.0; 7],
+            hitting_advanced: [None; 8],
+            pitching_advanced: [None; 6],
+        }
+    }
 
     struct WeeklySource {
         requested_weeks: RefCell<Vec<i32>>,
@@ -1065,10 +1254,12 @@ mod tests {
                 team: "NYY".into(),
                 role: "B".into(),
                 positions: "OF".into(),
+                is_closer: false,
                 status: String::new(),
                 injury_note: String::new(),
                 birth_date: String::new(),
                 game_status: String::new(),
+                game_indicator: GameIndicator::None,
                 hand: String::new(),
                 rank: Some(9),
                 percent_owned: None,
@@ -1086,10 +1277,12 @@ mod tests {
                 team: "BOS".into(),
                 role: "B".into(),
                 positions: "C".into(),
+                is_closer: false,
                 status: String::new(),
                 injury_note: String::new(),
                 birth_date: String::new(),
                 game_status: String::new(),
+                game_indicator: GameIndicator::None,
                 hand: String::new(),
                 rank: Some(1),
                 percent_owned: None,
@@ -1126,27 +1319,6 @@ mod tests {
 
     #[test]
     fn game_state_fills_only_players_without_injury_status() {
-        let player = |status: &str| StoredFantasyPlayer {
-            yahoo_player_id: Some(1),
-            mlbam_id: Some(1),
-            name: "Ada".into(),
-            team: "NYY".into(),
-            role: "B".into(),
-            positions: "OF".into(),
-            status: status.into(),
-            injury_note: String::new(),
-            birth_date: String::new(),
-            game_status: String::new(),
-            hand: "R".into(),
-            rank: None,
-            percent_owned: None,
-            owner: None,
-            slot: None,
-            batting: [0.0; 7],
-            pitching: [0.0; 7],
-            hitting_advanced: [None; 8],
-            pitching_advanced: [None; 6],
-        };
         let game = ScheduleGame {
             game_id: 1,
             game_date: "2026-08-17T19:05:00Z".into(),
@@ -1169,9 +1341,127 @@ mod tests {
             away_lineup: None,
             home_lineup: None,
         };
-        let mut players = [player(""), player("DTD")];
+        let mut players = [stored_player(""), stored_player("DTD")];
         apply_game_statuses(&mut players, &[game]);
         assert_eq!(players[0].game_status, "Final 4-2 @ BOS");
         assert!(players[1].game_status.is_empty());
+    }
+
+    #[test]
+    fn scheduled_game_with_zero_linescore_displays_time_instead_of_live_score() {
+        let mut players = [stored_player("")];
+        players[0].team = "AZ".into();
+        let game = ScheduleGame {
+            game_id: 1,
+            game_date: "2026-08-17T19:05:00Z".into(),
+            detailed_state: "Scheduled".into(),
+            away_team_id: 109,
+            away_team_name: "Diamondbacks".into(),
+            home_team_id: 111,
+            home_team_name: "Red Sox".into(),
+            away_probable_pitcher_id: None,
+            away_probable_pitcher_name: String::new(),
+            home_probable_pitcher_id: None,
+            home_probable_pitcher_name: String::new(),
+            linescore: Some(Linescore {
+                inning: None,
+                inning_ordinal: String::new(),
+                inning_state: "Top".into(),
+                away_runs: 0,
+                home_runs: 0,
+            }),
+            away_lineup: None,
+            home_lineup: None,
+        };
+
+        apply_game_statuses(&mut players, &[game]);
+
+        assert!(!players[0].game_status.starts_with("T 0-0"));
+        assert!(players[0].game_status.ends_with("@ BOS"));
+    }
+
+    #[test]
+    fn scheduled_status_uses_home_marker_lineup_order_and_probable_pitcher() {
+        let game = ScheduleGame {
+            game_id: 1,
+            game_date: "2026-08-17T19:05:00Z".into(),
+            detailed_state: "Scheduled".into(),
+            away_team_id: 147,
+            away_team_name: "Yankees".into(),
+            home_team_id: 111,
+            home_team_name: "Red Sox".into(),
+            away_probable_pitcher_id: Some(2),
+            away_probable_pitcher_name: "Starter".into(),
+            home_probable_pitcher_id: None,
+            home_probable_pitcher_name: String::new(),
+            linescore: None,
+            away_lineup: Some(vec![
+                LineupPlayer {
+                    person_id: 9,
+                    full_name: "First".into(),
+                },
+                LineupPlayer {
+                    person_id: 1,
+                    full_name: "Ada".into(),
+                },
+            ]),
+            home_lineup: None,
+        };
+        let hitter = stored_player("");
+        let mut pitcher = stored_player("");
+        pitcher.mlbam_id = Some(2);
+        pitcher.role = "P".into();
+        let mut excluded = stored_player("");
+        excluded.mlbam_id = Some(3);
+        let mut home = stored_player("");
+        home.team = "BOS".into();
+
+        let mut players = [hitter, pitcher, excluded, home];
+        apply_game_statuses(&mut players, &[game]);
+        assert!(players[0].game_status.contains(" 2 @ BOS"));
+        assert_eq!(players[0].game_indicator, GameIndicator::BattingOrder(2));
+        assert!(players[1].game_status.contains(" ● @ BOS"));
+        assert_eq!(players[1].game_indicator, GameIndicator::StartingPitcher);
+        assert!(players[2].game_status.contains(" ● @ BOS"));
+        assert_eq!(players[2].game_indicator, GameIndicator::OutOfLineup);
+        assert!(players[3].game_status.contains("   v NYY"));
+        assert_eq!(players[3].game_indicator, GameIndicator::None);
+    }
+
+    #[test]
+    fn confirmed_rotowire_side_requires_seven_hitters_and_matches_roster_names() {
+        let names = [
+            "First", "Ada", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
+        ];
+        let players = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| {
+                let mut player = stored_player("");
+                player.mlbam_id = Some(index as i64 + 1);
+                player.name = (*name).into();
+                player
+            })
+            .collect::<Vec<_>>();
+        let names = names.map(str::to_owned);
+        let mut lineup = None;
+        let mut pitcher = None;
+
+        overlay_rotowire_side(&players, "NYY", &names, "Ada", &mut lineup, &mut pitcher);
+
+        assert_eq!(lineup.unwrap()[1].person_id, 2);
+        assert_eq!(pitcher, Some(2));
+
+        let mut unmatched = None;
+        let mut unmatched_pitcher = None;
+        overlay_rotowire_side(
+            &players[..6],
+            "NYY",
+            &names,
+            "",
+            &mut unmatched,
+            &mut unmatched_pitcher,
+        );
+        assert!(unmatched.is_none());
     }
 }

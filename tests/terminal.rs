@@ -1,7 +1,7 @@
 use b9::cli::render_root_help;
 use b9::terminal::{
-    ColorContext, HelpColorMode, help_color_mode, injury_status, roster_status, section, subtitle,
-    title, visible_width,
+    ColorContext, HelpColorMode, help_color_mode, injury_status, lineup_indicator, roster_status,
+    section, subtitle, title, visible_width,
 };
 
 const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  login                        Authenticate with Yahoo\n  logout                       Remove Yahoo authentication\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n  pp                           Fetch public Yahoo league data without login\n  start                        Start the background sync daemon\n  stop                         Stop the background sync daemon\n  restart                      Restart the background sync daemon\n  log                          Show or follow the daemon log\n  reset                        Delete the local b9 database\n  fetch <path>                 Perform a raw Yahoo API GET\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n  t [team]                     Show MLB 40-man rosters\n  tt                           Show MLB standings and team totals\n  sp                           Show the three-day probable-pitcher slate\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n  h [N|name]                   Browse hitters or show a player\n  p [N|name]                   Browse pitchers or show a player\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\nFantasy data provided by https://sports.yahoo.com/fantasy/\n";
@@ -94,6 +94,22 @@ fn mlb_status_roles_preserve_visible_width() {
         "\u{1b}[38;5;196mIL60\u{1b}[0m"
     );
     assert_eq!(injury_status("IL60", HelpColorMode::Plain), "IL60");
+    assert_eq!(
+        lineup_indicator("3", true, false, HelpColorMode::Color),
+        "\u{1b}[38;5;46m3\u{1b}[0m"
+    );
+    assert_eq!(
+        lineup_indicator("●", false, true, HelpColorMode::Color),
+        "\u{1b}[38;5;124m●\u{1b}[38;5;245m"
+    );
+    assert_eq!(
+        lineup_indicator("3", true, true, HelpColorMode::Color),
+        "\u{1b}[38;5;34m3\u{1b}[38;5;245m"
+    );
+    assert_eq!(
+        lineup_indicator("●", false, false, HelpColorMode::Color),
+        "\u{1b}[38;5;196m●\u{1b}[0m"
+    );
 }
 
 #[test]

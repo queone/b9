@@ -7,6 +7,7 @@ pub mod advisory;
 pub mod espn;
 pub mod mlb;
 pub mod oddsshark;
+pub mod rotowire;
 pub mod savant;
 pub mod yahoo;
 pub mod yahoo_fantasy;

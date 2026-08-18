@@ -44,6 +44,9 @@ const INNINGS_PITCHED_ID: &str = "50";
 const NON_SCORING_DISPLAY_ONLY_ID: &str = "60";
 
 const REDZONE_URL: &str = "https://pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb";
+const PUBLIC_PLAYERS_URL: &str =
+    "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.public/players";
+const RANK_BATCH_SIZE: usize = 50;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const BODY_LIMIT: usize = 8 * 1024 * 1024;
 const HIDDEN_PLACEHOLDER: &str = "--hidden--";
@@ -193,6 +196,110 @@ impl YahooPublicClient {
         })?;
         raw.into_feed(league_id, league_key)
     }
+
+    /// Supplement public roster players with Yahoo's unauthenticated season rank.
+    pub fn enrich_player_ranks(
+        &self,
+        players: &mut [FantasyPlayer],
+    ) -> Result<(), YahooPublicError> {
+        let ids = players
+            .iter()
+            .map(|player| player.yahoo_player_id)
+            .collect::<Vec<_>>();
+        let mut ranks = BTreeMap::new();
+        for batch in ids.chunks(RANK_BATCH_SIZE) {
+            let player_ids = batch
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            let response = self
+                .http
+                .execute(HttpRequest {
+                    method: HttpMethod::Get,
+                    url: format!(
+                        "{PUBLIC_PLAYERS_URL};player_ids={player_ids};out=ranks;ranks=season?format=json_f"
+                    ),
+                    headers: vec![HttpHeader {
+                        name: "Accept".into(),
+                        value: "application/json".into(),
+                    }],
+                    body: Vec::new(),
+                    timeout: REQUEST_TIMEOUT,
+                    body_limit: BODY_LIMIT,
+                })
+                .map_err(|error| YahooPublicError::Request(error.to_string()))?;
+            if response.status != 200 {
+                return Err(YahooPublicError::Blocked {
+                    status: response.status,
+                });
+            }
+            let value: serde_json::Value =
+                serde_json::from_slice(&response.body).map_err(|_| {
+                    YahooPublicError::Malformed("public player ranks are not valid JSON".into())
+                })?;
+            collect_public_ranks(&value, &mut ranks);
+        }
+        for player in players {
+            if let Some(rank) = ranks.get(&player.yahoo_player_id) {
+                player.yahoo_rank = Some(*rank);
+            }
+        }
+        Ok(())
+    }
+}
+
+fn collect_public_ranks(value: &serde_json::Value, output: &mut BTreeMap<i64, i64>) {
+    match value {
+        serde_json::Value::Object(values) => {
+            if let Some(player_id) = values.get("player_id").and_then(json_i64) {
+                let mut season_ranks = BTreeMap::new();
+                collect_season_ranks(value, &mut season_ranks);
+                if let Some((_, rank)) = season_ranks.last_key_value() {
+                    output.insert(player_id, *rank);
+                }
+            } else {
+                values
+                    .values()
+                    .for_each(|value| collect_public_ranks(value, output));
+            }
+        }
+        serde_json::Value::Array(values) => values
+            .iter()
+            .for_each(|value| collect_public_ranks(value, output)),
+        _ => {}
+    }
+}
+
+fn collect_season_ranks(value: &serde_json::Value, output: &mut BTreeMap<i64, i64>) {
+    match value {
+        serde_json::Value::Object(values) => {
+            if values.contains_key("rank_position") {
+                return;
+            }
+            if let (Some(season), Some(rank)) = (
+                values.get("rank_season").and_then(json_i64),
+                values.get("rank_value").and_then(json_i64),
+            ) && rank > 0
+            {
+                output.insert(season, rank);
+                return;
+            }
+            values
+                .values()
+                .for_each(|value| collect_season_ranks(value, output));
+        }
+        serde_json::Value::Array(values) => values
+            .iter()
+            .for_each(|value| collect_season_ranks(value, output)),
+        _ => {}
+    }
+}
+
+fn json_i64(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_str()?.parse::<i64>().ok())
 }
 
 #[derive(Deserialize)]
@@ -331,7 +438,7 @@ fn format_innings_pitched(outs: f64) -> String {
 fn aggregate_active_roster(team: &RawTeam) -> HashMap<&'static str, f64> {
     let mut sums: HashMap<&'static str, f64> = HashMap::new();
     for player in &team.players {
-        if player.invalid || matches!(player.position.as_str(), "BN" | "IL") {
+        if !is_rostered_player(player) || matches!(player.position.as_str(), "BN" | "IL") {
             continue;
         }
         for id in COUNTING_STAT_IDS {
@@ -436,7 +543,7 @@ fn player_week_stats(
     raw_player: &RawRosterPlayer,
     lookup: Option<&RawPlayerLookup>,
 ) -> Option<PlayerWeekStats> {
-    if raw_player.invalid {
+    if !is_rostered_player(raw_player) {
         return None;
     }
     let yahoo_player_id = raw_player.id.as_ref()?.parse::<i64>().ok()?;
@@ -493,6 +600,13 @@ fn player_week_stats(
             "0.00".to_owned()
         },
     })
+}
+
+fn is_rostered_player(player: &RawRosterPlayer) -> bool {
+    // Yahoo retains recently dropped players in a team's public `players`
+    // array with a real id but an unassigned `--` slot. They are historical
+    // weekly-stat rows, not current roster ownership.
+    !player.invalid && player.id.is_some() && player.position != "--"
 }
 
 impl RawRoot {
@@ -581,7 +695,7 @@ impl RawRoot {
             for raw_player in &raw_team.players {
                 // Empty roster slots are placeholders (`invalid: true`, `id: null`),
                 // not real players — skip them rather than fabricate an entry.
-                if raw_player.invalid {
+                if !is_rostered_player(raw_player) {
                     continue;
                 }
                 let Some(raw_id) = &raw_player.id else {

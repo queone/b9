@@ -364,10 +364,12 @@ pub struct StoredFantasyPlayer {
     pub team: String,
     pub role: String,
     pub positions: String,
+    pub is_closer: bool,
     pub status: String,
     pub injury_note: String,
     pub birth_date: String,
     pub game_status: String,
+    pub game_indicator: GameIndicator,
     pub hand: String,
     pub rank: Option<i64>,
     pub percent_owned: Option<f64>,
@@ -377,6 +379,16 @@ pub struct StoredFantasyPlayer {
     pub pitching: [f64; 7],
     pub hitting_advanced: [Option<f64>; 8],
     pub pitching_advanced: [Option<f64>; 6],
+}
+
+/// Semantic lineup marker embedded in a roster STATUS cell.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum GameIndicator {
+    #[default]
+    None,
+    BattingOrder(usize),
+    StartingPitcher,
+    OutOfLineup,
 }
 
 /// One rendered player-game-log line retained for an offline player card.

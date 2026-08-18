@@ -12,6 +12,16 @@ Yahoo Fantasy Sports requires OAuth 2.0 bearer authorization. Treat deterministi
 - Use `https://fantasysports.yahooapis.com/fantasy/v2` as the fantasy API root.
 - Read the public client identifier from `YAHOO_CLIENT_ID` at the production environment boundary.
 
+## Yahoo Data Source Selection
+
+- Use `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone` for unauthenticated public league, roster, matchup, and current-week data.
+- Use `pub-api-ro.fantasysports.yahoo.com/fantasy/v2` for read-only player-pool metadata such as ranks, eligible positions, ownership, and draft analysis.
+- Treat `ro` as an observed read-only frontend convention, not a documented Yahoo contract.
+- Use `fantasysports.yahooapis.com/fantasy/v2` with OAuth for account identity and fields unavailable from public endpoints.
+- Investigate the two public hosts before assuming a Yahoo field requires OAuth.
+- Verify each candidate path without authentication instead of inferring that adjacent resources are public.
+- Document the exact response shape and authentication behavior before adding a new Yahoo acquisition path.
+
 ## Roster And Player Pool
 
 - Fetch every roster through the league roster endpoint with ranks and ownership percentages.

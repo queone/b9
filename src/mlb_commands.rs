@@ -924,9 +924,12 @@ fn blank(value: &str) -> String {
         value.into()
     }
 }
-fn host_local_game_time(value: &str) -> String {
+pub(crate) fn host_local_game_time(value: &str) -> String {
+    let utc_value = value
+        .strip_suffix('Z')
+        .map_or_else(|| value.to_owned(), |value| format!("{value}+0000"));
     let mac = Command::new("date")
-        .args(["-j", "-f", "%Y-%m-%dT%H:%M:%SZ", value, "+%I:%M%p"])
+        .args(["-j", "-f", "%Y-%m-%dT%H:%M:%S%z", &utc_value, "+%I:%M%p"])
         .output();
     if let Ok(output) = mac
         && output.status.success()

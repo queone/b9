@@ -8,6 +8,7 @@ use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, Valid
 const REDZONE_VALID: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_valid.json");
 const REDZONE_MALFORMED: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_malformed.json");
 const REDZONE_NO_TEAMS: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_no_teams.json");
+const PUBLIC_RANKS: &[u8] = br#"{"fantasy_content":{"league":{"players":[{"player":{"player_id":"10395","player_ranks":[{"player_rank":{"rank_type":"S","rank_value":"216","rank_season":"2026"}},{"player_rank":{"rank_type":"S","rank_position":"C","rank_value":"12","rank_season":"2026"}}]}}]}}}"#;
 
 // Fixture provenance: hand-built from the confirmed real response shape of
 // `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb`, trimmed to two
@@ -84,15 +85,19 @@ fn valid_fixture_parses_league_teams_rosters_and_matchup_pairing() {
     assert_eq!(yankees.manager_name, "--hidden--");
     assert_eq!(yankees.team_key, "469.l.170874.t.1");
 
-    // The invalid/empty roster slot (id: null, positionType: false) is
-    // skipped, not fabricated into a player. Team 1 has 3 real rostered
-    // players (catcher, an IL batter, a pitcher) plus the one invalid slot.
+    // The invalid/empty roster slot and Yahoo's recently-dropped `--` row
+    // are skipped. Team 1 has 3 real rostered players.
     let yankees_slots: Vec<_> = feed
         .slots
         .iter()
         .filter(|slot| slot.team_key == "469.l.170874.t.1")
         .collect();
     assert_eq!(yankees_slots.len(), 3);
+    assert!(
+        feed.players
+            .iter()
+            .all(|player| player.yahoo_player_id != 64813)
+    );
 
     let kelly = feed
         .players
@@ -122,6 +127,37 @@ fn valid_fixture_parses_league_teams_rosters_and_matchup_pairing() {
         assert_ne!(name, "cookie");
         assert_ne!(name, "authorization");
     }
+}
+
+#[test]
+fn public_rank_supplement_batches_roster_ids_and_ignores_position_rank() {
+    let executor = Arc::new(FakeExecutor::new(vec![
+        response(200, REDZONE_VALID),
+        response(200, PUBLIC_RANKS),
+    ]));
+    let client = client(executor.clone());
+    let mut feed = client.fetch_redzone("170874", "469.l.170874").unwrap();
+
+    client.enrich_player_ranks(&mut feed.players).unwrap();
+
+    assert_eq!(
+        feed.players
+            .iter()
+            .find(|player| player.yahoo_player_id == 10395)
+            .and_then(|player| player.yahoo_rank),
+        Some(216)
+    );
+    let requests = executor.requests();
+    assert!(
+        requests[1]
+            .0
+            .contains("league/mlb.l.public/players;player_ids=")
+    );
+    assert!(
+        requests[1]
+            .0
+            .contains(";out=ranks;ranks=season?format=json_f")
+    );
 }
 
 #[test]

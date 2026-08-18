@@ -61,3 +61,40 @@ fn free_agent_page_retains_ranked_players() {
     assert_eq!(players[0].name, "Ada Available");
     assert_eq!(players[1].position_type, "P");
 }
+
+#[test]
+fn roster_rank_selection_prefers_actual_season_values() {
+    let response = serde_json::json!({"data": [{
+        "team_key": "mlb.l.1.t.1",
+        "players": [
+            {
+                "player_id": 101,
+                "full": "Previous Actual",
+                "position_type": "B",
+                "display_position": "OF",
+                "position": "OF",
+                "player_ranks": [
+                    {"player_rank": {"rank_type": "OR", "rank_value": "22"}},
+                    {"player_rank": {"rank_season": "2026", "rank_type": "S", "rank_value": "22"}},
+                    {"player_rank": {"rank_season": "2025", "rank_type": "S", "rank_value": "321"}}
+                ]
+            },
+            {
+                "player_id": 202,
+                "full": "Current Actual",
+                "position_type": "P",
+                "display_position": "SP",
+                "position": "SP",
+                "player_ranks": [
+                    {"player_rank": {"rank_type": "OR", "rank_value": "12"}},
+                    {"player_rank": {"rank_season": "2026", "rank_type": "S", "rank_value": "44"}},
+                    {"player_rank": {"rank_season": "2025", "rank_type": "S", "rank_value": "90"}}
+                ]
+            }
+        ]
+    }]});
+
+    let roster = parse_league_rosters("mlb.l.1", &response).unwrap();
+    assert_eq!(roster.players[0].yahoo_rank, Some(321));
+    assert_eq!(roster.players[1].yahoo_rank, Some(44));
+}

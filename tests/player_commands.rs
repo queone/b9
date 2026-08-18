@@ -1,4 +1,4 @@
-use b9::domain::StoredFantasyPlayer;
+use b9::domain::{GameIndicator, StoredFantasyPlayer};
 use b9::player_commands::{waiver_eligible, with_yahoo_result_notice};
 use b9::store::WaiverCandidate;
 
@@ -10,10 +10,12 @@ fn player(id: i64, role: &str, positions: &str) -> StoredFantasyPlayer {
         team: "NYY".into(),
         role: role.into(),
         positions: positions.into(),
+        is_closer: false,
         status: String::new(),
         injury_note: String::new(),
         birth_date: String::new(),
         game_status: String::new(),
+        game_indicator: GameIndicator::None,
         hand: String::new(),
         rank: None,
         percent_owned: None,
