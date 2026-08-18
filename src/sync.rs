@@ -631,6 +631,11 @@ fn synchronize_for_origin_reporting(
                 .fetch_redzone(&league_id, &league_key)
                 .map_err(|error| format!("fetch public Yahoo snapshot: {error}; retry later"))?;
             client
+                .enrich_team_transactions(&league_key, &mut feed.teams)
+                .map_err(|error| {
+                    format!("fetch public Yahoo team transactions: {error}; retry later")
+                })?;
+            client
                 .enrich_player_ranks(&mut feed.players)
                 .map_err(|error| {
                     format!("fetch public Yahoo player ranks: {error}; retry later")

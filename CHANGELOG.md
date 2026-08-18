@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.24.0 | Improve roster totals parity and public Yahoo standings data |
 | 0.23.1 | Fix dropped roster entries and quality starts |
 | 0.23.0 | Skout parity roster display and public data adjustments |
 | 0.22.4 | AC33 adopt govna canon v0.18.0 |

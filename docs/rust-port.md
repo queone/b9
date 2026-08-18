@@ -14,6 +14,36 @@ Available workflows include authentication, league selection, foreground and exp
 
 Yahoo's current app-access delay prevents live verification of some fantasy refresh paths. It does not block fixture-backed implementation or non-Yahoo MLB workflows.
 
+## Hands-On Command Parity Tracker
+
+Use this table as the working source of truth for ad hoc skout-to-b9 command comparisons. Update a row after manually comparing complete output and behavior, including data, formatting, colors, alignment, flags, errors, and side effects. Treat `99%` as functionally complete with minor parity defects still possible; reserve `100%` for a fresh, complete manual comparison with no known difference.
+
+| b9 command | Workflow | Parity | State | Current focus or known gap |
+|---|---|---:|---|---|
+| root help / version | Command discovery and version output | — | Not assessed | Compare root help, command help, aliases, flags, streams, and version forms. |
+| `login` | Yahoo authentication | — | Not assessed | Compare browser flow, prompts, credential persistence, errors, and recovery. |
+| `logout` | Yahoo credential removal | — | Not assessed | Compare output, missing-credential behavior, and keychain effects. |
+| `st` | Status and league selection | — | Not assessed | Compare dashboard fields, colors, league selection, freshness, and daemon state. |
+| `sync` | Complete foreground synchronization | 99% | Functionally complete | Continue watching live provider completeness, retained stale data, progress output, and runtime. |
+| `pp` | Public Yahoo league pull | — | Not assessed | Compare public data coverage, league resolution, output, and persistence effects. |
+| `start` | Start background synchronization | — | Not assessed | Compare already-running, stale-state, process, log, and schedule behavior. |
+| `stop` | Stop background synchronization | — | Not assessed | Compare stopped, stale-process, timeout, cleanup, and output behavior. |
+| `restart` | Restart background synchronization | — | Not assessed | Compare composed stop/start behavior and failure recovery. |
+| `log` | Read or follow daemon logs | — | Not assessed | Compare default tail, line count, follow, truncation, path, and missing-log behavior. |
+| `reset` | Remove local b9 state | — | Not assessed | Compare confirmation, cancellation, daemon interaction, deletion scope, and output. |
+| `fetch` | Raw authenticated Yahoo request | — | Not assessed | Compare path handling, JSON formatting, raw bytes, attribution, and errors. |
+| `lm` | Advisory provider and model configuration | — | Not assessed | Compare provider selection, model discovery, credentials, cancellation, and errors. |
+| `m` | Daily or weekly fantasy matchup | — | Not assessed | Compare every table, game state, matchup total, advisory, color, flag, and fallback path. |
+| `t` | MLB 40-man roster display | — | Not assessed | Compare roster membership, role/status classification, columns, sorting, and colors. |
+| `tt` | MLB standings and team totals | — | Not assessed | Compare standings, totals, Yahoo-player counts, sorting, formatting, and freshness. |
+| `sp` | Probable-pitcher slate and odds | — | Not assessed | Compare dates, starters, ownership, odds sources, degradation, sorting, and colors. |
+| `r` | Fantasy roster display | 99% | Functionally complete | Continue logging minor live-data, status, color, position, and alignment discrepancies. |
+| `rt` | Fantasy roster totals | — | Not assessed | Compare season and weekly modes, category order, aggregation, alignment, and flags. |
+| `h` | Hitter pool and hitter detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
+| `p` | Pitcher pool and pitcher detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
+| `i` | Glossary lookup | — | Not assessed | Compare full glossary, exact lookup, ambiguity, suggestions, selection, and formatting. |
+| `help` | Command help dispatch | — | Not assessed | Compare command routing, command-specific text, unknown commands, streams, and exits. |
+
 ## Replacement Boundary
 
 The retained command surface is implemented and deterministic closure is tracked in the four parity documents below. Full replacement readiness remains `NOT READY` while live Yahoo access is unavailable and while required terminal, keychain, model, or advisory-protocol checks remain pending.

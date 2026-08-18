@@ -466,9 +466,9 @@ fn league_totals_match_the_skout_all_team_shape_and_weight_rates() {
             team_id: 1,
             waiver_priority: 8,
             faab_balance: 65,
-            wins: 107,
-            losses: 44,
-            ties: 9,
+            wins: 128,
+            losses: 61,
+            ties: 11,
             moves: 29,
             rank: 1,
         },
@@ -496,15 +496,21 @@ fn league_totals_match_the_skout_all_team_shape_and_weight_rates() {
     let plain = render_league_totals(&teams, &[first, second], HelpColorMode::Plain);
     let header = plain.lines().next().unwrap();
     for column in [
-        "TEAM", "RANK", "WLT", "PCT", "GB", "LW", "BDGT", "WVR", "MOVES", "PA", "OBP", "R", "HR",
-        "RBI", "SB", "AVG", "IP", "QS", "W", "SV", "K", "ERA", "WHIP",
+        "TEAM", "RANK", "WLT", "PCT", "GB", "BDGT", "WVR", "MOVES", "PA", "R", "HR", "RBI", "SB",
+        "AVG", "IP", "W", "SV", "K", "ERA", "WHIP",
     ] {
         assert!(header.contains(column), "missing {column}");
     }
     assert!(plain.contains("Operators"));
-    assert!(plain.contains("107-44-9"));
+    assert!(plain.contains("128-61-11"));
+    assert!(!header.split_whitespace().any(|column| column == "LW"));
+    assert!(!header.split_whitespace().any(|column| column == "OBP"));
+    assert!(!header.split_whitespace().any(|column| column == "QS"));
+    let pct_column = header.find("PCT").unwrap();
+    let operators = plain.lines().nth(1).unwrap();
+    assert_eq!(operators.find(".667").unwrap() + 4, pct_column + 3);
     assert!(plain.contains("  400"));
-    assert!(plain.contains(" .250"));
+    assert!(plain.contains(" .225"));
     assert!(plain.contains("   30"));
     assert!(plain.contains("   10"));
     assert_eq!(plain.lines().count(), 3);

@@ -370,25 +370,22 @@ pub fn render_league_totals(
         .unwrap_or(4)
         .max(4);
     let header = format!(
-        "{:<team_width$}  {:>4}  {:>8}  {:>5}  {:>5}  {:>5}  {:>5}  {:>4}  {:>5}  {:>5}  {:>5}  {:>3}  {:>3}  {:>3}  {:>3}  {:>5}  {:>6}  {:>3}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}",
+        "{:<team_width$}  {:>4}  {:>9}  {:>5}  {:>5}  {:>5}  {:>4}  {:>5}  {:>5}  {:>3}  {:>3}  {:>3}  {:>3}  {:>5}  {:>6}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}",
         "TEAM",
         "RANK",
         "WLT",
         "PCT",
         "GB",
-        "LW",
         "BDGT",
         "WVR",
         "MOVES",
         "PA",
-        "OBP",
         "R",
         "HR",
         "RBI",
         "SB",
         "AVG",
         "IP",
-        "QS",
         "W",
         "SV",
         "K",
@@ -439,17 +436,15 @@ pub fn render_league_totals(
             pitching[6] = weighted_whip / pitching[0];
         }
         let contextual = format!(
-            "  {:>4}  {:>8}  {:>5}  {:>5}  {:>5}  {:>5}  {:>4}  {:>5}  {:>5}  {:>5}",
+            "  {:>4}  {:>9}  {:>5}  {:>5}  {:>5}  {:>4}  {:>5}  {:>5}",
             nonzero(team.rank),
             wlt(team.wins, team.losses, team.ties),
             percentage(team.wins, team.losses, team.ties),
             games_behind(team.wins, team.losses, leader),
-            "—",
             format!("${}", team.faab_balance),
             team.waiver_priority,
             team.moves,
             batting[0] as i64,
-            rate_or_dash(batting[1], 3),
         );
         output.push_str(&format!(
             "{:<team_width$}{}",
@@ -459,7 +454,7 @@ pub fn render_league_totals(
         output.push_str(&format!(
             "  {:>3.0}  {:>3.0}  {:>3.0}  {:>3.0}  {:>5}{}  {:>3.0}  {:>3.0}  {:>4.0}  {:>5.2}  {:>5.2}\n",
             batting[2], batting[3], batting[4], batting[5], rate_or_dash(batting[6], 3),
-            dim(&format!("  {:>6.1}  {:>3.0}", pitching[0], pitching[1]), mode),
+            dim(&format!("  {:>6.1}", pitching[0]), mode),
             pitching[2], pitching[3], pitching[4], pitching[5], pitching[6]
         ));
     }

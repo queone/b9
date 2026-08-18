@@ -200,7 +200,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
 }
 
 #[test]
-fn public_merge_preserves_unfetched_authenticated_fields() {
+fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
     let directory = tempdir().unwrap();
     let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
     let source = Source {
@@ -211,11 +211,9 @@ fn public_merge_preserves_unfetched_authenticated_fields() {
 
     let settings = source.league_settings("mlb.l.1").unwrap();
     let mut public_teams = source.standings("mlb.l.1").unwrap();
-    for team in &mut public_teams {
-        team.waiver_priority = 0;
-        team.faab_balance = 0;
-        team.moves = 0;
-    }
+    public_teams[0].waiver_priority = 4;
+    public_teams[0].faab_balance = 65;
+    public_teams[0].moves = 30;
     let mut public_players = source.league_rosters("mlb.l.1").unwrap().players;
     let target_id = public_players[0].yahoo_player_id;
     let mut precise = public_players[0].clone();
@@ -248,7 +246,7 @@ fn public_merge_preserves_unfetched_authenticated_fields() {
             teams[0].faab_balance,
             teams[0].moves
         ),
-        (1, 99, 2)
+        (4, 65, 30)
     );
     let players = store.fantasy_players("mlb.l.1").unwrap();
     assert_eq!(players[0].rank, Some(101));

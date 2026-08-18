@@ -9,6 +9,7 @@ const REDZONE_VALID: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_valid
 const REDZONE_MALFORMED: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_malformed.json");
 const REDZONE_NO_TEAMS: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_no_teams.json");
 const PUBLIC_RANKS: &[u8] = br#"{"fantasy_content":{"league":{"players":[{"player":{"player_id":"10395","player_ranks":[{"player_rank":{"rank_type":"S","rank_value":"216","rank_season":"2026"}},{"player_rank":{"rank_type":"S","rank_position":"C","rank_value":"12","rank_season":"2026"}}]}}]}}}"#;
+const PUBLIC_STANDINGS: &[u8] = br#"{"fantasy_content":{"league":[{"league_key":"mlb.l.1"},{"standings":[{"teams":{"0":{"team":[[{"team_key":"mlb.l.1.t.1"},{"team_id":"1"},{"name":"Operators"},{"waiver_priority":1},{"faab_balance":"65"},{"number_of_moves":29}],{"team_standings":{"rank":1}}]},"1":{"team":[[{"team_key":"mlb.l.1.t.2"},{"team_id":"2"},{"name":"Opponents"},{"waiver_priority":2},{"faab_balance":"33"},{"number_of_moves":56}],{"team_standings":{"rank":2}}]},"count":2}}]}]}}"#;
 
 // Fixture provenance: hand-built from the confirmed real response shape of
 // `pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb`, trimmed to two
@@ -157,6 +158,40 @@ fn public_rank_supplement_batches_roster_ids_and_ignores_position_rank() {
         requests[1]
             .0
             .contains(";out=ranks;ranks=season?format=json_f")
+    );
+}
+
+#[test]
+fn public_standings_supplement_populates_budget_waiver_and_moves_without_auth() {
+    let executor = Arc::new(FakeExecutor::new(vec![
+        response(200, REDZONE_VALID),
+        response(200, PUBLIC_STANDINGS),
+    ]));
+    let client = client(executor.clone());
+    let mut feed = client.fetch_redzone("170874", "mlb.l.1").unwrap();
+
+    client
+        .enrich_team_transactions("mlb.l.1", &mut feed.teams)
+        .unwrap();
+
+    let yankees = feed
+        .teams
+        .iter()
+        .find(|team| team.team_key == "mlb.l.1.t.1")
+        .unwrap();
+    assert_eq!(yankees.faab_balance, 65);
+    assert_eq!(yankees.waiver_priority, 1);
+    assert_eq!(yankees.moves, 29);
+    let requests = executor.requests();
+    assert_eq!(
+        requests[1].0,
+        "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/standings?format=json"
+    );
+    assert!(
+        requests[1]
+            .1
+            .iter()
+            .all(|header| !header.name.eq_ignore_ascii_case("authorization"))
     );
 }
 

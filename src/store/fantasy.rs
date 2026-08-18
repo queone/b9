@@ -165,7 +165,7 @@ impl Store {
                     .map_err(|error| StoreError::operation("insert public Yahoo position", &path, error))?;
             }
             for team in &snapshot.teams {
-                transaction.execute("INSERT INTO yahoo_teams (team_key,league_key,team_id,name,manager_nickname,waiver_priority,faab_balance,wins,losses,ties,moves,rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(team_key) DO UPDATE SET league_key=excluded.league_key,team_id=excluded.team_id,name=excluded.name,manager_nickname=excluded.manager_nickname,wins=excluded.wins,losses=excluded.losses,ties=excluded.ties,rank=excluded.rank,synced_at=excluded.synced_at",
+                transaction.execute("INSERT INTO yahoo_teams (team_key,league_key,team_id,name,manager_nickname,waiver_priority,faab_balance,wins,losses,ties,moves,rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(team_key) DO UPDATE SET league_key=excluded.league_key,team_id=excluded.team_id,name=excluded.name,manager_nickname=excluded.manager_nickname,waiver_priority=excluded.waiver_priority,faab_balance=excluded.faab_balance,wins=excluded.wins,losses=excluded.losses,ties=excluded.ties,moves=excluded.moves,rank=excluded.rank,synced_at=excluded.synced_at",
                     params![team.team_key,team.league_key,team.team_id,team.name,team.manager_name,team.waiver_priority,team.faab_balance,team.wins,team.losses,team.ties,team.moves,team.rank,captured_at])
                     .map_err(|error| StoreError::operation("upsert public Yahoo team", &path, error))?;
             }

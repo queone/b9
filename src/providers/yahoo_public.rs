@@ -46,6 +46,7 @@ const NON_SCORING_DISPLAY_ONLY_ID: &str = "60";
 const REDZONE_URL: &str = "https://pub-api.fantasysports.yahoo.com/fantasy/v3/redzone/mlb";
 const PUBLIC_PLAYERS_URL: &str =
     "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.public/players";
+const PUBLIC_FANTASY_URL: &str = "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2";
 const RANK_BATCH_SIZE: usize = 50;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const BODY_LIMIT: usize = 8 * 1024 * 1024;
@@ -247,6 +248,108 @@ impl YahooPublicClient {
         }
         Ok(())
     }
+
+    /// Supplement public redzone teams with waiver and transaction standings.
+    pub fn enrich_team_transactions(
+        &self,
+        league_key: &str,
+        teams: &mut [FantasyTeam],
+    ) -> Result<(), YahooPublicError> {
+        let response = self
+            .http
+            .execute(HttpRequest {
+                method: HttpMethod::Get,
+                url: format!("{PUBLIC_FANTASY_URL}/league/{league_key}/standings?format=json"),
+                headers: vec![HttpHeader {
+                    name: "Accept".into(),
+                    value: "application/json".into(),
+                }],
+                body: Vec::new(),
+                timeout: REQUEST_TIMEOUT,
+                body_limit: BODY_LIMIT,
+            })
+            .map_err(|error| YahooPublicError::Request(error.to_string()))?;
+        if response.status != 200 {
+            return Err(YahooPublicError::Blocked {
+                status: response.status,
+            });
+        }
+        let value = serde_json::from_slice(&response.body).map_err(|_| {
+            YahooPublicError::Malformed("public standings are not valid JSON".into())
+        })?;
+        let standings = public_team_transactions(&value);
+        if standings.len() != teams.len() {
+            return Err(YahooPublicError::Incomplete(
+                "public standings do not contain every league team",
+            ));
+        }
+        if teams
+            .iter()
+            .any(|team| !standings.contains_key(&team.team_key))
+        {
+            return Err(YahooPublicError::Incomplete(
+                "public standings team keys do not match the league roster",
+            ));
+        }
+        for team in teams {
+            let (waiver_priority, faab_balance, moves) = standings[&team.team_key];
+            team.waiver_priority = waiver_priority;
+            team.faab_balance = faab_balance;
+            team.moves = moves;
+        }
+        Ok(())
+    }
+}
+
+fn public_team_transactions(value: &serde_json::Value) -> HashMap<String, (i64, i64, i64)> {
+    fn field(value: &serde_json::Value, name: &str) -> Option<String> {
+        match value {
+            serde_json::Value::Object(values) => values
+                .get(name)
+                .and_then(|value| match value {
+                    serde_json::Value::String(value) => Some(value.clone()),
+                    serde_json::Value::Number(value) => Some(value.to_string()),
+                    _ => None,
+                })
+                .or_else(|| values.values().find_map(|value| field(value, name))),
+            serde_json::Value::Array(values) => values.iter().find_map(|value| field(value, name)),
+            _ => None,
+        }
+    }
+
+    fn collect(value: &serde_json::Value, output: &mut HashMap<String, (i64, i64, i64)>) {
+        match value {
+            serde_json::Value::Object(values) => {
+                if let Some(team) = values.get("team")
+                    && let Some(team_key) = field(team, "team_key")
+                {
+                    let integer = |name| {
+                        field(team, name)
+                            .and_then(|value| value.parse::<i64>().ok())
+                            .unwrap_or(0)
+                    };
+                    output.insert(
+                        team_key,
+                        (
+                            integer("waiver_priority"),
+                            integer("faab_balance"),
+                            integer("number_of_moves"),
+                        ),
+                    );
+                } else {
+                    values.values().for_each(|value| collect(value, output));
+                }
+            }
+            serde_json::Value::Array(values) => {
+                values.iter().for_each(|value| collect(value, output));
+            }
+            _ => {}
+        }
+    }
+
+    let mut output = HashMap::new();
+    collect(value, &mut output);
+    output
 }
 
 fn collect_public_ranks(value: &serde_json::Value, output: &mut BTreeMap<i64, i64>) {
