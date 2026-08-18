@@ -5,7 +5,10 @@ use std::process::ExitCode;
 
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
-use crate::glossary::{LookupResult, embedded_entries, lookup, render_entry, render_full};
+use crate::glossary::{
+    LookupResult, embedded_entries, lookup, render_entry_with_mode, render_full_with_mode,
+    select_match,
+};
 use crate::terminal::{HelpColorMode, detected_help_color_mode, section, subtitle, title};
 
 #[derive(Clone, Copy)]
@@ -47,7 +50,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "st",
         display_label: "st",
-        description: "Show status and select a league",
+        description: "Show status",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -540,6 +543,9 @@ fn push_help_row(output: &mut String, label: &str, description: &str) {
 }
 
 fn run_glossary(term: Option<&String>) -> ExitCode {
+    use std::io::{IsTerminal, Write};
+
+    let mode = detected_help_color_mode();
     let entries = match embedded_entries() {
         Ok(entries) => entries,
         Err(error) => {
@@ -548,7 +554,7 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
         }
     };
     let Some(term) = term else {
-        println!("{}", render_full(&entries));
+        println!("{}", render_full_with_mode(&entries, mode));
         return ExitCode::SUCCESS;
     };
     let term = term.trim();
@@ -558,10 +564,53 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
     }
     match lookup(&entries, term) {
         LookupResult::Match(entry) => {
-            println!("{}", render_entry(entry));
+            println!("{}", render_entry_with_mode(entry, mode));
             ExitCode::SUCCESS
         }
         LookupResult::Ambiguous(entries) => {
+            if std::io::stdin().is_terminal() && std::io::stderr().is_terminal() {
+                let mut prompt = std::io::stderr().lock();
+                if writeln!(prompt, "Multiple matches:").is_err() {
+                    eprintln!("i: show glossary choices: write failed");
+                    return ExitCode::from(1);
+                }
+                for (index, entry) in entries.iter().enumerate() {
+                    if writeln!(
+                        prompt,
+                        "  {}) {} — {} [{}]",
+                        index + 1,
+                        entry.key,
+                        entry.term,
+                        entry.class
+                    )
+                    .is_err()
+                    {
+                        eprintln!("i: show glossary choices: write failed");
+                        return ExitCode::from(1);
+                    }
+                }
+                if write!(prompt, "Select a term [1-{}]: ", entries.len())
+                    .and_then(|()| prompt.flush())
+                    .is_err()
+                {
+                    eprintln!("i: prompt for glossary selection: write failed");
+                    return ExitCode::from(1);
+                }
+                let mut answer = String::new();
+                if std::io::stdin().read_line(&mut answer).is_err() {
+                    eprintln!("i: read glossary selection: failed");
+                    return ExitCode::from(1);
+                }
+                if let Some(entry) = select_match(&entries, &answer) {
+                    println!("\n{}", render_entry_with_mode(entry, mode));
+                    return ExitCode::SUCCESS;
+                }
+                eprintln!(
+                    "i: invalid selection; enter a number from 1 through {}",
+                    entries.len()
+                );
+                return ExitCode::from(1);
+            }
             let keys = entries
                 .iter()
                 .map(|entry| entry.key.as_str())

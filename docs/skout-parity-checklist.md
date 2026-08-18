@@ -6,19 +6,19 @@ Treat `99%` as functionally complete with minor parity defects still possible. R
 
 | b9 command | Workflow | Parity | State | Current focus or known gap |
 |---|---|---:|---|---|
-| root help / version | Command discovery and version output | — | Not assessed | Compare retained commands, flags, streams, and version forms; Yahoo OAuth surfaces intentionally diverge from skout. |
-| `st` | Status and league selection | — | Not assessed | Compare dashboard fields, colors, league selection, and freshness. |
+| root help / version | Command discovery and version output | 99% | Functionally complete | Continue logging minor retained-command, flag, stream, formatting, and version-form discrepancies; retired Yahoo OAuth surfaces intentionally diverge from skout. |
+| `st` | Local status dashboard | 99% | Functionally complete | Continue logging minor dashboard-field, color, selected-league, freshness, and recovery-hint discrepancies. |
 | `sync` | Complete foreground synchronization and public Yahoo setup | 99% | Functionally complete | Continue watching unofficial endpoint availability, snapshot completeness, team selection, retained stale data, progress output, and runtime. |
-| `reset` | Remove local b9 state | — | Not assessed | Compare confirmation, cancellation, deletion scope, and output. |
+| `reset` | Remove local b9 state | 99% | Functionally complete | Continue logging minor confirmation, cancellation, deletion-scope, color, and recovery-output discrepancies; daemon shutdown is intentionally inapplicable. |
 | `m` | Daily or weekly fantasy matchup | 99% | Functionally complete | Advisory output is intentionally retired; continue logging minor live-data, matchup-total, status, odds, color, and alignment discrepancies. |
 | `t` | MLB 40-man roster display | — | Not assessed | Compare roster membership, role/status classification, columns, sorting, and colors. |
-| `tt` | MLB standings and team totals | — | Not assessed | Compare standings, totals, Yahoo-player counts, sorting, formatting, and freshness. |
-| `sp` | Probable-pitcher slate and odds | — | Not assessed | Compare dates, starters, ownership, odds sources, degradation, sorting, and colors. |
+| `tt` | MLB standings and team totals | 99% | Functionally complete | Continue logging minor standings, totals, Yahoo-player-count, sorting, color, formatting, and freshness discrepancies. |
+| `sp` | Probable-pitcher slate and odds | 99% | Functionally complete | Continue logging minor date, starter, ownership, odds-source, degradation, sorting, and color discrepancies. |
 | `r` | Fantasy roster display | 99% | Functionally complete | Continue logging minor live-data, status, color, position, and alignment discrepancies. |
 | `rt` | Fantasy roster totals | 99% | Functionally complete | Compare `-w/--weekly` for the current week, an explicit week number, and an ISO date; continue logging minor live-data, aggregation, color, and alignment discrepancies. |
 | `h` | Hitter pool and hitter detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
 | `p` | Pitcher pool and pitcher detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
-| `i` | Glossary lookup | — | Not assessed | Compare full glossary, exact lookup, ambiguity, suggestions, selection, and formatting. |
+| `i` | Glossary lookup | 99% | Functionally complete | Continue logging minor glossary-content, selection-interface, color, and formatting discrepancies. |
 
 ## Historical References
 

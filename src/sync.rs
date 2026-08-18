@@ -99,13 +99,8 @@ pub fn render_dashboard(
         status.last_run_at
     };
     let last_run = match (last_run_status, last_run_at) {
-        (Some(run_status), Some(at)) if run_status == "success" => {
-            terminal::good(&format!("{run_status} at unix {at}"), mode)
-        }
-        (Some(run_status), Some(at)) => {
-            terminal::warning(&format!("{run_status} at unix {at}"), mode)
-        }
-        _ => terminal::dim("none", mode),
+        (Some(run_status), Some(at)) => format!("{run_status} at unix {at}"),
+        _ => "none".to_owned(),
     };
     let database = format!(
         "{} ({}, schema {})",
@@ -124,15 +119,15 @@ pub fn render_dashboard(
             status.mlb_identity_count, status.yahoo_identity_count
         )
     } else {
-        terminal::dim("unavailable", mode)
+        "unavailable".to_owned()
     };
 
     let provider_freshness = if !has_snapshot {
-        terminal::dim("unavailable", mode)
+        "unavailable".to_owned()
     } else {
         status
             .provider_freshness_at
-            .map_or_else(|| terminal::dim("none", mode), |at| format!("unix {at}"))
+            .map_or_else(|| "none".to_owned(), |at| format!("unix {at}"))
     };
 
     let circuit_open = status.circuit_open && !legacy_authenticated_yahoo_failure;
@@ -143,11 +138,7 @@ pub fn render_dashboard(
     };
     let provider_failures = format!(
         "{} ({})",
-        if circuit_open {
-            terminal::warning("blocked", mode)
-        } else {
-            terminal::good("ready", mode)
-        },
+        if circuit_open { "blocked" } else { "ready" },
         provider_failure_count
     );
     let last_error = if legacy_authenticated_yahoo_failure {
@@ -159,28 +150,38 @@ pub fn render_dashboard(
     let unmatched = if has_snapshot {
         status.unmatched_player_count.to_string()
     } else {
-        terminal::dim("unavailable", mode)
+        "unavailable".to_owned()
     };
 
     let selected_league = if config.current_league.is_empty() {
-        "none"
+        terminal::injury_status("none", mode)
     } else {
-        &config.current_league
+        terminal::dim(&config.current_league, mode)
     };
 
-    let mut output = format!(
-        "Yahoo: public endpoints\n\
-         Last run: {last_run}\n\
-         Database: {database}\n\
-         Identities: {identities}\n\
-         Provider freshness: {provider_freshness}\n\
-         Provider failures: {provider_failures}\n\
-         Last provider error: {last_error}\n\
-         Unmatched players: {unmatched}\n\
-         League: {selected_league}\n\
-         Config: {}\n",
-        config_path.display()
-    );
+    let mut output = String::new();
+    for (label, value) in [
+        ("Yahoo", "public endpoints".to_owned()),
+        ("Last run", last_run),
+        ("Database", database),
+        ("Identities", identities),
+        ("Provider freshness", provider_freshness),
+        ("Provider failures", provider_failures),
+        ("Last provider error", last_error.to_owned()),
+        ("Unmatched players", unmatched),
+        ("League", selected_league),
+        (
+            "Config",
+            terminal::dim(&config_path.display().to_string(), mode),
+        ),
+    ] {
+        let value = if label == "League" || label == "Config" {
+            value
+        } else {
+            terminal::dim(&value, mode)
+        };
+        output.push_str(&format!("{label}: {value}\n"));
+    }
     if !has_snapshot {
         output.push_str("No local snapshot; run b9 sync.\n");
     }
@@ -226,6 +227,16 @@ mod tests {
         assert!(output.contains("No local snapshot; run b9 sync."));
         assert!(!output.contains("0 MLB"));
         assert!(!output.contains("Unmatched players: 0"));
+
+        let colored = render_dashboard(
+            Path::new("/absent/b9.db"),
+            Path::new("/absent/config.json"),
+            &Config::default(),
+            &StoreStatus::default(),
+            0,
+            HelpColorMode::Color,
+        );
+        assert!(colored.contains("League: \u{1b}[38;5;196mnone\u{1b}[0m"));
     }
 
     #[test]

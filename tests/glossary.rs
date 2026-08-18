@@ -1,7 +1,8 @@
 use b9::glossary::{
     GlossaryEntry, LookupResult, embedded_entries, lookup, parse_glossary, render_entry,
-    render_full, suggest_keys,
+    render_entry_with_mode, render_full, render_full_with_mode, select_match, suggest_keys,
 };
+use b9::terminal::HelpColorMode;
 
 const EXPECTED_KEYS: &str = "ab abandon active age atc available avg avg162g babip barrel_pct batters_faced bb bb_pct bench blend_window category_strategy cfip ch_pct close closer confirmed confirmed_sp cs dtd ecr empirical_bayes era exit_velo expected faab fastball_velo fb_pct fip flippable fwar g game-log gb_pct gs h2h hard_hit_pct hbp holds hr hr_fb il injured ip k k9 k_bb_pct k_pct launch_angle lineup_candidates lineup_status lost na no_game not_scheduled obp opportunity_damping ops out own_pct p_slot pa pitcher_day_state pool pos pp ppd pqs probable probable_sp protect punt push qs r rbi replacement_level roster_moves roster_moves_note roster_slot rp_available rp_slot savant sb slg sp_slot spin_rate sprint_speed stabilization_ramp steamer streaming sv sweet_spot_pct tied w waiver_wire whiff_pct whip wrc_plus xba xera xfip xobp xslg xwoba yp yr z_score zips";
 
@@ -123,4 +124,24 @@ fn rendering_is_plain_ordered_and_has_no_trailing_blank_line() {
     assert!(output.contains("\n\nTEST\n\nZulu (z)"));
     assert!(!output.ends_with("\n\n"));
     assert!(!output.contains("\u{1b}["));
+}
+
+#[test]
+fn glossary_colors_and_ambiguous_selection_follow_terminal_contract() {
+    let alpha = entry("alpha", "Alpha", &["A"]);
+    let beta = entry("beta", "Beta", &[]);
+    let entries = vec![alpha, beta];
+    let matches = entries.iter().collect::<Vec<_>>();
+
+    let colored = render_entry_with_mode(&entries[0], HelpColorMode::Color);
+    assert!(colored.starts_with("\u{1b}[38;5;33mAlpha (alpha) [test]\u{1b}[0m"));
+    assert!(colored.contains("\u{1b}[38;5;245mAliases: A\u{1b}[0m"));
+    assert!(
+        render_full_with_mode(&entries, HelpColorMode::Color)
+            .starts_with("\u{1b}[38;5;33mTEST\u{1b}[0m")
+    );
+    assert_eq!(select_match(&matches, " 2 ").unwrap().key, "beta");
+    assert!(select_match(&matches, "0").is_none());
+    assert!(select_match(&matches, "3").is_none());
+    assert!(select_match(&matches, "not-a-number").is_none());
 }

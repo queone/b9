@@ -4,7 +4,7 @@ use b9::terminal::{
     section, subtitle, title, visible_width,
 };
 
-const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local b9 database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
+const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local b9 database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
 
 fn expected_plain_help() -> &'static str {
     PLAIN_HELP.strip_suffix('\n').unwrap()
@@ -160,12 +160,12 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
         HelpColorMode::Color,
     );
     let expected = PLAIN
-        .replacen(
-            "success at unix 100",
-            "\u{1b}[38;5;34msuccess at unix 100\u{1b}[0m",
-            1,
-        )
-        .replacen("ready", "\u{1b}[38;5;34mready\u{1b}[0m", 1);
+        .lines()
+        .map(|line| {
+            let (label, value) = line.split_once(": ").expect("dashboard field");
+            format!("{label}: \u{1b}[38;5;245m{value}\u{1b}[0m\n")
+        })
+        .collect::<String>();
     assert_eq!(colored, expected);
     for line in colored.lines() {
         assert!(visible_width(line) <= 80, "line too wide: {line}");
@@ -188,7 +188,7 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
 }
 
 #[test]
-fn dashboard_colors_failed_run_and_open_circuit_distinctly() {
+fn dashboard_dims_failed_run_and_open_circuit_values() {
     use b9::config::Config;
     use b9::store::StoreStatus;
     use b9::sync::render_dashboard;
@@ -225,8 +225,8 @@ fn dashboard_colors_failed_run_and_open_circuit_distinctly() {
         60,
         HelpColorMode::Color,
     );
-    assert!(colored.contains("\u{1b}[38;5;100mfailed at unix 50\u{1b}[0m"));
-    assert!(colored.contains("\u{1b}[38;5;100mblocked\u{1b}[0m"));
+    assert!(colored.contains("Last run: \u{1b}[38;5;245mfailed at unix 50\u{1b}[0m"));
+    assert!(colored.contains("Provider failures: \u{1b}[38;5;245mblocked (5)\u{1b}[0m"));
 }
 
 #[test]

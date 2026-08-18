@@ -399,13 +399,17 @@ pub fn show_probables(force: bool) -> Result<String, MlbCommandError> {
         force,
         || {
             let mut games = Vec::new();
+            let mut official_dates = HashMap::new();
             for date in &dates {
-                games.extend(mlb.fetch_schedule(date)?);
+                let scheduled = mlb.fetch_schedule(date)?;
+                official_dates.extend(scheduled.iter().map(|game| (game.game_id, date.clone())));
+                games.extend(scheduled);
             }
             Ok::<_, crate::providers::ProviderError>(slate_rows(
                 &games,
                 &teams,
                 &today,
+                &official_dates,
                 Some(&current),
                 &future_lines,
             ))
@@ -427,10 +431,7 @@ pub fn show_probables(force: bool) -> Result<String, MlbCommandError> {
             row.home_mine = *mine;
         }
     }
-    let warnings = (stale || odds_stale)
-        .then(|| "slate is stale after provider degradation".into())
-        .into_iter()
-        .collect::<Vec<_>>();
+    let warnings = slate_warnings(stale, odds_stale);
     record_run(
         &mut store,
         directory_refreshed || slate_refreshed || odds_refreshed,
@@ -828,6 +829,7 @@ fn slate_rows(
     games: &[ScheduleGame],
     teams: &[MlbTeam],
     today: &str,
+    official_dates: &HashMap<i64, String>,
     espn: Option<&crate::providers::espn::SlateLines>,
     future: &BTreeMap<String, Vec<crate::providers::oddsshark::GameLine>>,
 ) -> Vec<MlbSlateRow> {
@@ -841,7 +843,7 @@ fn slate_rows(
         (&left.game_date, left.game_id).cmp(&(&right.game_date, right.game_id))
     });
     for game in ordered_games {
-        let date = game.game_date.chars().take(10).collect::<String>();
+        let date = game_official_date(game, official_dates);
         let away = names
             .get(&game.away_team_id)
             .cloned()
@@ -854,7 +856,7 @@ fn slate_rows(
             .iter()
             .take_while(|candidate| candidate.game_id != game.game_id)
             .filter(|candidate| {
-                candidate.game_date.starts_with(&date)
+                game_official_date(candidate, official_dates) == date
                     && same_team(&candidate.away_team_name, &game.away_team_name)
                     && same_team(&candidate.home_team_name, &game.home_team_name)
             })
@@ -908,6 +910,24 @@ fn slate_rows(
         });
     }
     rows
+}
+
+fn game_official_date(game: &ScheduleGame, dates: &HashMap<i64, String>) -> String {
+    dates
+        .get(&game.game_id)
+        .cloned()
+        .unwrap_or_else(|| game.game_date.chars().take(10).collect())
+}
+
+fn slate_warnings(slate_stale: bool, odds_stale: bool) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if slate_stale {
+        warnings.push("probable-pitcher slate is stale after MLB provider degradation".into());
+    }
+    if odds_stale {
+        warnings.push("odds are stale or unavailable after provider degradation".into());
+    }
+    warnings
 }
 fn blank(value: &str) -> String {
     if value.trim().is_empty() {
@@ -1146,5 +1166,54 @@ mod tests {
         .unwrap();
         assert_eq!(stale, (vec![1], true, false));
         assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn probable_slate_uses_mlb_official_date_across_utc_midnight() {
+        let game = ScheduleGame {
+            game_id: 1,
+            game_date: "2026-08-19T00:40:00Z".into(),
+            detailed_state: "Scheduled".into(),
+            away_team_id: 1,
+            away_team_name: "Los Angeles Dodgers".into(),
+            home_team_id: 2,
+            home_team_name: "Colorado Rockies".into(),
+            away_probable_pitcher_id: Some(10),
+            away_probable_pitcher_name: "Eric Lauer".into(),
+            home_probable_pitcher_id: Some(20),
+            home_probable_pitcher_name: "Ryan Feltner".into(),
+            linescore: None,
+            away_lineup: None,
+            home_lineup: None,
+        };
+        let teams = vec![
+            club(1, "LAD", "Los Angeles", "Dodgers"),
+            club(2, "COL", "Colorado", "Rockies"),
+        ];
+        let official_dates = HashMap::from([(1, "2026-08-18".to_owned())]);
+        let rows = slate_rows(
+            &[game],
+            &teams,
+            "2026-08-18",
+            &official_dates,
+            None,
+            &BTreeMap::new(),
+        );
+
+        assert_eq!(rows[0].date, compact_date("2026-08-18"));
+        assert_eq!(rows[0].away_pitcher, "Eric Lauer");
+    }
+
+    #[test]
+    fn probable_slate_warnings_identify_the_degraded_source() {
+        assert_eq!(
+            slate_warnings(true, false),
+            ["probable-pitcher slate is stale after MLB provider degradation"]
+        );
+        assert_eq!(
+            slate_warnings(false, true),
+            ["odds are stale or unavailable after provider degradation"]
+        );
+        assert_eq!(slate_warnings(false, false), Vec::<String>::new());
     }
 }

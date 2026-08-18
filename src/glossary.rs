@@ -3,6 +3,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use crate::terminal::{HelpColorMode, dim, table_heading};
+
 const GLOSSARY_SOURCE: &str = include_str!("../docs/glossary.md");
 const BASELINE_ENTRY_COUNT: usize = 113;
 
@@ -236,9 +238,15 @@ fn levenshtein(left: &str, right: &str) -> usize {
 
 /// Render one entry without a trailing newline or blank line.
 pub fn render_entry(entry: &GlossaryEntry) -> String {
-    let mut lines = vec![format!("{} ({}) [{}]", entry.term, entry.key, entry.class)];
+    render_entry_with_mode(entry, HelpColorMode::Plain)
+}
+
+/// Render one entry using skout's glossary color roles.
+pub fn render_entry_with_mode(entry: &GlossaryEntry, mode: HelpColorMode) -> String {
+    let header = format!("{} ({}) [{}]", entry.term, entry.key, entry.class);
+    let mut lines = vec![table_heading(&header, mode)];
     if !entry.aliases.is_empty() {
-        lines.push(format!("Aliases: {}", entry.aliases.join(", ")));
+        lines.push(dim(&format!("Aliases: {}", entry.aliases.join(", ")), mode));
     }
     lines.push(entry.definition.clone());
     lines.join("\n")
@@ -246,6 +254,11 @@ pub fn render_entry(entry: &GlossaryEntry) -> String {
 
 /// Render the complete glossary in deterministic class and key order.
 pub fn render_full(entries: &[GlossaryEntry]) -> String {
+    render_full_with_mode(entries, HelpColorMode::Plain)
+}
+
+/// Render the complete glossary using skout's glossary color roles.
+pub fn render_full_with_mode(entries: &[GlossaryEntry], mode: HelpColorMode) -> String {
     let class_rank: HashMap<_, _> = ["baseball", "fantasy", "b9", "stat"]
         .into_iter()
         .enumerate()
@@ -270,13 +283,23 @@ pub fn render_full(entries: &[GlossaryEntry]) -> String {
             if !output.is_empty() {
                 output.push_str("\n\n");
             }
-            output.push_str(&entry.class.to_uppercase());
+            output.push_str(&table_heading(&entry.class.to_uppercase(), mode));
             output.push_str("\n\n");
             previous_class = Some(&entry.class);
         } else {
             output.push_str("\n\n");
         }
-        output.push_str(&render_entry(entry));
+        output.push_str(&render_entry_with_mode(entry, mode));
     }
     output
+}
+
+/// Resolve a one-based interactive choice from ambiguous lookup matches.
+pub fn select_match<'a>(entries: &[&'a GlossaryEntry], choice: &str) -> Option<&'a GlossaryEntry> {
+    choice
+        .trim()
+        .parse::<usize>()
+        .ok()
+        .and_then(|number| number.checked_sub(1))
+        .and_then(|index| entries.get(index).copied())
 }
