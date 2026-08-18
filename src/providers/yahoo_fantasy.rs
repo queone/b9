@@ -529,7 +529,8 @@ pub fn parse_league_rosters(
         let source = team.get("players").unwrap_or(&Value::Null);
         for map in entity_maps(source, "player_id") {
             let player_id = integer(&map, "player_id");
-            if player_id <= 0 {
+            let selected = text(&map, "position");
+            if player_id <= 0 || selected == "--" {
                 continue;
             }
             let eligible = map
@@ -553,7 +554,6 @@ pub fn parse_league_rosters(
                 percent_owned: decimal(&map, "value"),
                 yahoo_rank: yahoo_rank(&map),
             });
-            let selected = text(&map, "position");
             slots.insert((team_key.clone(), player_id, selected));
         }
     }

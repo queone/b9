@@ -880,9 +880,9 @@ fn quality_start_aggregation_is_bounded_ordered_and_partial() {
     let season = client
         .fetch_quality_starts(2026, &[1, 2, 3, 4, 5, 6, 7, 1])
         .unwrap();
-    assert_eq!(season.counts.get(&1), Some(&1));
-    assert_eq!(season.counts.get(&2), Some(&0));
-    assert_eq!(season.counts.get(&7), Some(&1));
+    assert_eq!(season.counts.get(&1), Some(&3));
+    assert_eq!(season.counts.get(&2), Some(&3));
+    assert_eq!(season.counts.get(&7), Some(&3));
     assert_eq!(
         season
             .issues

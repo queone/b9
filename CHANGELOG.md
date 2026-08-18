@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.23.1 | Fix dropped roster entries and quality starts |
 | 0.23.0 | Skout parity roster display and public data adjustments |
 | 0.22.4 | AC33 adopt govna canon v0.18.0 |
 | 0.22.3 | AC32 adopt govna canon v0.17.0 |

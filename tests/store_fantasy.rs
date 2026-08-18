@@ -172,6 +172,29 @@ fn complete_free_agent_replacement_is_scoped_to_its_league() {
 }
 
 #[test]
+fn fantasy_players_ignore_legacy_unassigned_roster_slots() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("b9.db");
+    let mut store = Store::open_at(&path).unwrap();
+    store.replace_fantasy_snapshot(&snapshot()).unwrap();
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "UPDATE yahoo_roster_slots SET slot_position='--' WHERE player_id=(SELECT id FROM players WHERE yahoo_player_id=101)",
+            [],
+        )
+        .unwrap();
+
+    let players = store.fantasy_players("mlb.l.1").unwrap();
+
+    assert!(
+        players
+            .iter()
+            .all(|player| player.yahoo_player_id != Some(101))
+    );
+}
+
+#[test]
 fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("b9.db");

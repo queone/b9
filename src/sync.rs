@@ -897,7 +897,20 @@ fn synchronize_for_origin_reporting(
                 .map_err(|error| {
                     format!("fetch MLB pitching: {error}; prior pitching data was retained")
                 })?;
-            let writes = rows.iter().map(pitching_write).collect::<Vec<_>>();
+            let pitcher_ids = rows
+                .iter()
+                .filter(|row| row.stat.games_started > 0)
+                .map(|row| row.player.person_id)
+                .collect::<Vec<_>>();
+            let quality_starts =
+                mlb.fetch_quality_starts(season, &pitcher_ids)
+                    .map_err(|error| {
+                        format!(
+                            "fetch MLB quality starts: {error}; prior pitching data was retained"
+                        )
+                    })?;
+            let mut writes = rows.iter().map(pitching_write).collect::<Vec<_>>();
+            merge_quality_start_writes(&mut writes, &quality_starts.counts);
             store
                 .replace_mlb_season_stats(season, &writes)
                 .map_err(|error| {
@@ -1538,6 +1551,17 @@ fn pitching_write(row: &crate::providers::mlb::BulkPitchingSplit) -> SeasonStatW
     }
 }
 
+fn merge_quality_start_writes(
+    rows: &mut [SeasonStatWrite],
+    counts: &std::collections::BTreeMap<i64, i64>,
+) {
+    for row in rows {
+        if let Some(quality_starts) = counts.get(&row.mlbam_id) {
+            row.quality_starts = *quality_starts;
+        }
+    }
+}
+
 fn innings_outs(value: &str) -> i64 {
     let (whole, partial) = value.split_once('.').unwrap_or((value, "0"));
     whole.parse::<i64>().unwrap_or(0) * 3
@@ -1592,6 +1616,30 @@ mod provider_cycle_tests {
             self.flushes += 1;
             Ok(())
         }
+    }
+
+    #[test]
+    fn quality_start_supplement_updates_current_pitching_writes() {
+        let mut rows = vec![
+            SeasonStatWrite {
+                mlbam_id: 101,
+                stat_group: "pitching".into(),
+                quality_starts: 0,
+                ..SeasonStatWrite::default()
+            },
+            SeasonStatWrite {
+                mlbam_id: 202,
+                stat_group: "pitching".into(),
+                quality_starts: 4,
+                ..SeasonStatWrite::default()
+            },
+        ];
+        let counts = [(101, 12)].into_iter().collect();
+
+        merge_quality_start_writes(&mut rows, &counts);
+
+        assert_eq!(rows[0].quality_starts, 12);
+        assert_eq!(rows[1].quality_starts, 4);
     }
 
     #[test]

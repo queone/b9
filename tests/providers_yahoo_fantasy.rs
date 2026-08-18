@@ -98,3 +98,33 @@ fn roster_rank_selection_prefers_actual_season_values() {
     assert_eq!(roster.players[0].yahoo_rank, Some(321));
     assert_eq!(roster.players[1].yahoo_rank, Some(44));
 }
+
+#[test]
+fn league_roster_excludes_players_yahoo_marks_as_dropped() {
+    let response = serde_json::json!({"data": [{
+        "team_key": "mlb.l.1.t.1",
+        "players": [
+            {
+                "player_id": 101,
+                "full": "Active Player",
+                "position_type": "P",
+                "display_position": "SP",
+                "position": "SP"
+            },
+            {
+                "player_id": 202,
+                "full": "Dropped Player",
+                "position_type": "P",
+                "display_position": "SP",
+                "position": "--"
+            }
+        ]
+    }]});
+
+    let roster = parse_league_rosters("mlb.l.1", &response).unwrap();
+
+    assert_eq!(roster.players.len(), 1);
+    assert_eq!(roster.players[0].name, "Active Player");
+    assert_eq!(roster.slots.len(), 1);
+    assert_eq!(roster.slots[0].yahoo_player_id, 101);
+}

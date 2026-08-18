@@ -1003,17 +1003,19 @@ impl MlbClient {
         })
     }
 
-    /// Fetch season quality-start totals for each requested pitcher.
+    /// Derive season quality-start totals from each requested pitcher's game log.
     pub fn fetch_quality_starts(
         &self,
         season: i64,
         person_ids: &[i64],
     ) -> Result<QualityStartResult, ProviderError> {
         validate_season(season)?;
-        self.aggregate_quality_starts(person_ids, true, &|person_id| {
-            self.fetch_pitching_stats(person_id, season)
-                .map(|stats| stats.quality_starts)
-        })
+        self.fetch_quality_starts_by_date_range(
+            season,
+            &format!("{season:04}-01-01"),
+            &format!("{season:04}-12-31"),
+            person_ids,
+        )
     }
 
     fn aggregate_quality_starts(
