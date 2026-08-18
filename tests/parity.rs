@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 const PUBLIC_COMMANDS: &[&str] = &[
-    "st", "sync", "stop", "reset", "lm", "m", "t", "tt", "sp", "r", "rt", "h", "p", "i",
+    "st", "sync", "reset", "m", "t", "tt", "sp", "r", "rt", "h", "p", "i",
 ];
 
 fn repository_file(path: &str) -> String {
@@ -90,7 +90,6 @@ fn runtime_product_naming_is_b9_owned() {
     for path in [
         "src/cli.rs",
         "src/config.rs",
-        "src/model_config.rs",
         "src/operations.rs",
         "src/sync.rs",
     ] {

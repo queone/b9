@@ -9,4 +9,3 @@ See [`docs/skout-parity-checklist.md`](docs/skout-parity-checklist.md) for the a
 ## Ideas To Explore
 
 - IE1: Monitor the unofficial public Yahoo fantasy paths for denial or payload drift while preserving atomic replacement and last-complete-snapshot fallback.
-- IE2: Remove transitional `stop` after one released cleanup window.

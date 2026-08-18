@@ -35,11 +35,9 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 |---|---|---|---|
 | `st` | Required live verification | League selection, status, and CLI tests | Live Yahoo league formats pending |
 | `sync` | Tested Rust improvement | Foreground synchronization, persistent execution-lock, atomic snapshot, and failure-retention tests | Live Yahoo pending |
-| `stop` | Tested Rust improvement | Transitional prior-daemon control and narrow cleanup tests | Remove after one released cleanup window |
-| `reset` | Tested Rust improvement | Scoped, confirmed, transitional-shutdown, and idempotent deletion tests | Reset-safe-cancel live path pending |
-| `lm` | Required live verification | Model configuration, credential, model-list, and fake-transport tests | Keychain, model list, and provider protocols pending |
+| `reset` | Tested Rust improvement | Scoped, confirmed, and idempotent deletion tests | Reset-safe-cancel live path pending |
 | `i` | Tested Rust improvement | Embedded glossary, lookup, suggestion, help, and no-checkout tests | TTY ambiguity selector pending |
-| `m` | Unsupported gap | Daily/weekly/day flags, stale/local fallback, advisory, column, and color tests | Live providers plus richer source-baseline status/totals details pending |
+| `m` | Unsupported gap | Daily/weekly/day flags, stale/local fallback, column, and color tests | Advisory output is intentionally retired; live providers plus richer source-baseline status/totals details remain pending |
 | `r` | Unsupported gap | Team selection, stale handling, slot order, fixed columns, and semantic color tests | PQS/PQT/StartHoldScore columns and live Yahoo pending |
 | `rt` | Required live verification | League-wide season/weekly totals, shared-identity MLBAM joins, source-compatible innings notation, quality-start retention, and stale-snapshot tests | Live Yahoo and last-week record pending |
 | `t` | Required live verification | MLB fixtures, snapshots, fixed columns, and semantic color tests | Live MLB and final terminal comparison pending |
@@ -49,7 +47,7 @@ Use the pinned source manifest below as historical evidence and the detailed inv
 | `p` | Unsupported gap | Browse/detail, filters, sorts, waiver gates, columns, and color tests | Deferred analytical columns, live Yahoo, and TTY ambiguity pending |
 | `whatis` | Exact parity | Compatibility-alias and help tests | None |
 
-Intentional Rust improvements are foreground-only synchronization, a persistent cross-process execution lock, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Yahoo authentication, credential cleanup, and background daemon surfaces are intentionally retired; transitional `stop` only shuts down an older daemon. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells. Bounded on-demand RotoWire lineup acquisition supports roster status parity.
+Intentional Rust improvements are foreground-only synchronization, a persistent cross-process execution lock, isolated b9 state, embedded glossary data, bounded shared transport, atomic complete snapshots, and unreachable rejected-provider automation. Yahoo authentication, credential cleanup, background daemon, and advisory surfaces are intentionally retired. Unsupported gaps are Yahoo transaction history, automated Savant/FanGraphs/FantasyPros HTML acquisition, PQS, undefined PQT, StartHoldScore, and their dependent display cells. Bounded on-demand RotoWire lineup acquisition supports roster status parity.
 
 Roster totals follow the predecessor's shared-MLBAM aggregation for Yahoo split identities, including two-way players such as Shohei Ohtani. MLB innings retain the source's display notation (`6.1`/`6.2`) for aggregate parity; rate calculations still use true thirds internally.
 

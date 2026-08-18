@@ -12,9 +12,6 @@ fn private_atomic_configuration_round_trips_and_rejects_malformed_state() {
         current_league: "mlb.l.1".into(),
         current_team_key: "mlb.l.1.t.1".into(),
         pull_public_league_id: "1".into(),
-        advisory_provider: "openai".into(),
-        advisory_model: "gpt-4.1-mini".into(),
-        strategy_punts: vec!["ERA".into()],
     };
     write_at(&path, &expected).unwrap();
     let read = read_at(&path).unwrap();
@@ -87,17 +84,4 @@ fn legacy_public_league_id_is_read_but_not_written() {
 
     fs::write(&path, r#"{"pull_public_league_id":"170874"}"#).unwrap();
     assert_eq!(read_at(&path).unwrap().pull_public_league_id, "170874");
-}
-
-#[test]
-fn advisory_configuration_serializes_no_credential_material() {
-    let config = Config {
-        advisory_provider: "claude".into(),
-        advisory_model: "model".into(),
-        ..Config::default()
-    };
-    let serialized = serde_json::to_string(&config).unwrap();
-    assert!(serialized.contains("claude"));
-    assert!(!serialized.contains("credential"));
-    assert!(!serialized.contains("api_key"));
 }

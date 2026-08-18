@@ -4,12 +4,16 @@ use b9::terminal::{
     section, subtitle, title, visible_width,
 };
 
-const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n    -f, --force                Bypass synchronization freshness gates\n    -T, --team <TEAM>          Select the primary fantasy team\n  stop                         Stop a daemon started by an older b9 release\n  reset                        Delete the local b9 database\n  lm                           Configure the advisory provider\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n    -a, --advise               Include the advisory summary\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n  help                         Print this help\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\nFantasy data provided by https://sports.yahoo.com/fantasy/\n";
+const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status and select a league\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local b9 database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
+
+fn expected_plain_help() -> &'static str {
+    PLAIN_HELP.strip_suffix('\n').unwrap()
+}
 
 #[test]
 fn plain_help_matches_the_b9_style_golden() {
     let output = render_root_help("0.22.1", HelpColorMode::Plain);
-    assert_eq!(output, PLAIN_HELP);
+    assert_eq!(output, expected_plain_help());
     assert!(!output.contains('\u{1b}'));
     assert!(!output.ends_with("\n\n"));
 }
@@ -17,7 +21,7 @@ fn plain_help_matches_the_b9_style_golden() {
 #[test]
 fn colored_help_uses_only_the_contracted_spans() {
     let output = render_root_help("0.22.1", HelpColorMode::Color);
-    let expected = PLAIN_HELP
+    let expected = expected_plain_help()
         .replacen("b9", "\u{1b}[1;38;5;231mb9\u{1b}[0m", 1)
         .replacen(
             "Fantasy Baseball advisor — github.com/queone/b9",
@@ -26,11 +30,7 @@ fn colored_help_uses_only_the_contracted_spans() {
         )
         .replace("USAGE", "\u{1b}[38;5;255mUSAGE\u{1b}[0m")
         .replace("COMMANDS", "\u{1b}[38;5;255mCOMMANDS\u{1b}[0m")
-        .replace("\nFLAGS\n", "\n\u{1b}[38;5;255mFLAGS\u{1b}[0m\n")
-        .replace(
-            "Fantasy data provided by https://sports.yahoo.com/fantasy/",
-            "\u{1b}[38;5;245mFantasy data provided by https://sports.yahoo.com/fantasy/\u{1b}[0m",
-        );
+        .replace("\nFLAGS\n", "\n\u{1b}[38;5;255mFLAGS\u{1b}[0m\n");
     assert_eq!(output, expected);
     assert_eq!(
         title("b9", HelpColorMode::Color),

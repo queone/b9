@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use b9::advisory::{AdvisoryAction, AdvisoryResponse};
 use b9::domain::{
     GameIndicator, Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats,
     StoredFantasyPlayer,
@@ -8,8 +7,8 @@ use b9::domain::{
 use std::time::{Duration, SystemTime};
 
 use b9::matchup::{
-    LocalMatchupView, MatchupOptions, MatchupView, cached_or_fetch_at, render_advisory_response,
-    render_local_matchup, render_matchup,
+    LocalMatchupView, MatchupOptions, MatchupView, cached_or_fetch_at, render_local_matchup,
+    render_matchup,
 };
 use b9::store::Store;
 use b9::terminal::HelpColorMode;
@@ -381,7 +380,7 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
 }
 
 #[test]
-fn local_fallback_omits_opponent_categories_and_advisory() {
+fn local_fallback_omits_opponent_categories() {
     let output = render_local_matchup(
         &LocalMatchupView {
             team_name: "Operators".into(),
@@ -393,28 +392,5 @@ fn local_fallback_omits_opponent_categories_and_advisory() {
     assert!(output.contains("SLOT  HITTER"));
     assert!(output.contains("Ada Hitter NYY"));
     assert!(!output.contains("CATEGORIES"));
-    assert!(!output.contains("ADVIS"));
     assert!(!output.contains("|"));
-}
-
-#[test]
-fn advisory_surface_renders_only_grounded_response_fields() {
-    let mut output = String::new();
-    render_advisory_response(
-        &mut output,
-        &AdvisoryResponse {
-            confirmations: vec!["Leading HR".into()],
-            urgent: vec![AdvisoryAction {
-                id: "lineup-0".into(),
-                summary: "Start Ada".into(),
-            }],
-            overnight: Vec::new(),
-            risks: vec!["Ben is injured".into()],
-        },
-        HelpColorMode::Plain,
-    );
-    assert!(output.contains("ADVICE"));
-    assert!(output.contains("Leading HR"));
-    assert!(output.contains("Urgent: Start Ada"));
-    assert!(output.contains("Risk: Ben is injured"));
 }

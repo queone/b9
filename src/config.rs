@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Persisted b9 preferences; credentials never belong here.
+/// Persisted b9 preferences.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -17,12 +17,6 @@ pub struct Config {
     pub current_team_key: String,
     #[serde(default, skip_serializing)]
     pub pull_public_league_id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub advisory_provider: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub advisory_model: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub strategy_punts: Vec<String>,
 }
 
 /// One contextual configuration failure.

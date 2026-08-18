@@ -235,7 +235,6 @@ fn weekly_totals_follow_league_category_order() {
     );
     assert!(output.contains("STALE — showing the last complete Yahoo weekly snapshot."));
     assert!(output.contains("AVG    .321\nR      12"));
-    assert!(!output.contains("Fantasy data provided by Yahoo Fantasy"));
 }
 
 #[test]

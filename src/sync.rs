@@ -500,17 +500,14 @@ pub fn synchronize_with_origin(
 
 /// Synchronize the selected league's stable normalized Yahoo data in the foreground.
 pub fn synchronize(league_override: Option<&str>) -> Result<String, WorkflowError> {
-    synchronize_with_options(league_override, false, None)
+    synchronize_with_options(league_override, None)
 }
 
-/// Synchronize manually, optionally bypassing all application freshness gates.
+/// Synchronize manually with an optional primary-team override.
 pub fn synchronize_with_options(
     league_override: Option<&str>,
-    _force: bool,
     team_override: Option<&str>,
 ) -> Result<String, WorkflowError> {
-    // Stable Yahoo synchronization currently always acquires a complete snapshot. Keeping force
-    // explicit here preserves manual execution semantics when freshness gates are introduced.
     synchronize_for_origin_reporting(
         league_override,
         SyncOrigin::Manual,
@@ -523,7 +520,6 @@ pub fn synchronize_with_options(
 /// Synchronize manually while writing and flushing each completed step immediately.
 pub fn synchronize_with_options_streaming(
     league_override: Option<&str>,
-    _force: bool,
     team_override: Option<&str>,
     output: &mut dyn Write,
 ) -> Result<String, WorkflowError> {

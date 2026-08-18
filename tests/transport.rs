@@ -339,21 +339,17 @@ fn automated_provider_policy_allows_rotowire_only_through_public_lineup_acquisit
     let savant = include_str!("../src/providers/savant.rs").to_ascii_lowercase();
     let commands = include_str!("../src/cli.rs").to_ascii_lowercase();
     let synchronization = include_str!("../src/sync.rs").to_ascii_lowercase();
-    let credentials = include_str!("../src/advisory_credentials.rs").to_ascii_lowercase();
     assert!(providers.contains("savant"));
     assert!(synchronization.contains("savantclient"));
     assert!(savant.contains("httpclient") && savant.contains(".execute("));
     assert!(!commands.contains("savant"));
-    assert!(!credentials.contains("savant"));
     assert!(providers.contains("rotowire"));
     assert!(!commands.contains("rotowire"));
     assert!(!synchronization.contains("rotowire"));
-    assert!(!credentials.contains("rotowire"));
     for rejected in ["fangraphs", "fantasypros"] {
         assert!(!providers.contains(rejected));
         assert!(!commands.contains(rejected));
         assert!(!synchronization.contains(rejected));
-        assert!(!credentials.contains(rejected));
     }
     let policy = include_str!("../docs/skout-providers-storage.md");
     for official in [

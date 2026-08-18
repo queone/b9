@@ -7,18 +7,12 @@ use std::time::{Duration, SystemTime};
 
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::advisory::{
-    AdvisoryResponse, build_advisory_context, compute_category_gaps, compute_lineup_candidates,
-    compute_risk_alerts, compute_roster_moves, compute_slot_gaps, grounded_response,
-};
-use crate::advisory_credentials::{load_credential, selected_provider};
 use crate::config;
 use crate::domain::{
     Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats, StoredFantasyPlayer,
     clean_fantasy_team_name, is_valid_iso_date,
 };
 use crate::player_display::render_players as render_roster_players;
-use crate::providers::advisory::{AdvisoryClient, AdvisoryProvider};
 use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, MlbClient, ScheduleGame};
 use crate::providers::yahoo_fantasy::YahooFantasySource;
 use crate::providers::yahoo_public::{RedzoneFeed, YahooPublicClient, league_id_from_key};
@@ -31,13 +25,12 @@ use crate::transport::HttpClient;
 
 const MATCHUP_TTL: Duration = Duration::from_secs(60);
 
-/// Parsed matchup period and advisory selection.
+/// Parsed matchup period selection.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MatchupOptions {
     pub week: Option<i32>,
     pub weekly: bool,
     pub day: Option<String>,
-    pub advise: bool,
 }
 
 impl MatchupOptions {
@@ -174,7 +167,7 @@ pub fn show_with_team_options(
         .or_else(|| (!config.current_team_key.is_empty()).then(|| config.current_team_key.clone()));
 
     let source = YahooPublicClient::shared(http.clone());
-    if options.day.is_none() && !options.advise && options.week.is_none() {
+    if options.day.is_none() && options.week.is_none() {
         let public_league_id = league_id_from_key(&league_key)
             .map_err(|error| contextual("resolve public league id", error))?;
         let public_client = YahooPublicClient::production()
@@ -277,10 +270,6 @@ pub fn show_with_team_options(
     let mut output = render_matchup(&view, detected_help_color_mode());
     if let Some(day) = daily_date {
         output = format!("DAY {day}\n{output}");
-    }
-    if options.advise {
-        let response = acquire_advisory(&store, &league_key, &config, &view, http)?;
-        render_advisory_response(&mut output, &response, detected_help_color_mode());
     }
     Ok(output)
 }
@@ -663,133 +652,6 @@ fn ensure_redzone_feed<'a>(
         .map_err(|message| MatchupError(message.clone()))
 }
 
-fn acquire_advisory(
-    store: &Store,
-    league_key: &str,
-    config: &config::Config,
-    view: &MatchupView,
-    http: Arc<HttpClient>,
-) -> Result<AdvisoryResponse, MatchupError> {
-    if view.stale {
-        return Err(MatchupError(
-            "match: advisory requires a fresh complete matchup; retry after Yahoo refresh succeeds"
-                .into(),
-        ));
-    }
-    let provider_name = selected_provider(config).ok_or_else(|| {
-        MatchupError("match: advisory provider is not configured; configure lm and retry".into())
-    })?;
-    let credential = load_credential(provider_name)
-        .map_err(|error| contextual("read advisory credential", error))?
-        .ok_or_else(|| {
-            MatchupError("match: advisory credential is unavailable; configure lm and retry".into())
-        })?;
-    let provider = AdvisoryProvider::parse(provider_name)
-        .map_err(|error| contextual("select advisory provider", error))?;
-    let categories = store
-        .fantasy_categories(league_key)
-        .map_err(|error| contextual("read matchup categories", error))?
-        .into_iter()
-        .map(|category| category.abbreviation)
-        .collect::<Vec<_>>();
-    let gaps = compute_category_gaps(
-        &view.matchup.teams[0],
-        &view.matchup.teams[1],
-        &categories,
-        &config.strategy_punts,
-    );
-    let lineup_candidates = compute_lineup_candidates(&view.mine);
-    let free_agent_values = store
-        .fantasy_players(league_key)
-        .map_err(|error| contextual("read free-agent candidates", error))?
-        .into_iter()
-        .filter(|player| player.owner.is_none())
-        .flat_map(|player| free_agent_values(&player, &categories))
-        .collect::<Vec<_>>();
-    let roster_moves = compute_roster_moves(&gaps, &free_agent_values);
-    let positions = store
-        .fantasy_positions(league_key)
-        .map_err(|error| contextual("read matchup positions", error))?
-        .into_iter()
-        .map(|position| (Position::from(position.position.as_str()), position.count))
-        .collect::<Vec<_>>();
-    let slot_gaps = compute_slot_gaps(&positions, &view.mine);
-    let risks = compute_risk_alerts(&view.mine);
-    let context = build_advisory_context(&lineup_candidates, &roster_moves);
-    let response = AdvisoryClient::new(http)
-        .complete(provider, &config.advisory_model, &credential, &context)
-        .map_err(|error| contextual("request advisory", error))?;
-    let mut response = grounded_response(&context, response);
-    response.confirmations.extend(
-        gaps.iter()
-            .filter(|gap| gap.leading && !gap.punted)
-            .map(|gap| format!("Leading {}", gap.category)),
-    );
-    response.confirmations.extend(
-        slot_gaps
-            .iter()
-            .map(|gap| format!("Uncovered {} slot", gap.slot)),
-    );
-    response.risks.extend(
-        risks
-            .into_iter()
-            .map(|risk| format!("{}: {}", risk.player_name, risk.reason)),
-    );
-    Ok(response)
-}
-
-fn free_agent_values(
-    player: &StoredFantasyPlayer,
-    categories: &[String],
-) -> Vec<crate::domain::FreeAgentCategoryValue> {
-    categories
-        .iter()
-        .filter_map(|category| {
-            let value = match category.as_str() {
-                "R" => player.batting[2],
-                "HR" => player.batting[3],
-                "RBI" => player.batting[4],
-                "SB" => player.batting[5],
-                "AVG" => player.batting[6],
-                "W" => player.pitching[2],
-                "SV" => player.pitching[3],
-                "K" => player.pitching[4],
-                "ERA" => player.pitching[5],
-                "WHIP" => player.pitching[6],
-                _ => return None,
-            };
-            Some(crate::domain::FreeAgentCategoryValue {
-                player_name: player.name.clone(),
-                category: category.clone(),
-                value,
-            })
-        })
-        .collect()
-}
-
-/// Render only a grounded advisory response under the full-matchup surface.
-pub fn render_advisory_response(
-    output: &mut String,
-    response: &AdvisoryResponse,
-    mode: HelpColorMode,
-) {
-    output.push('\n');
-    output.push_str(&table_heading("ADVICE", mode));
-    output.push('\n');
-    for confirmation in &response.confirmations {
-        output.push_str(&format!("  {confirmation}\n"));
-    }
-    for action in &response.urgent {
-        output.push_str(&format!("  Urgent: {}\n", action.summary));
-    }
-    for action in &response.overnight {
-        output.push_str(&format!("  Overnight: {}\n", action.summary));
-    }
-    for risk in &response.risks {
-        output.push_str(&format!("  Risk: {risk}\n"));
-    }
-}
-
 fn cached_or_fetch<T, E, F>(
     store: &mut Store,
     dataset: &str,
@@ -1117,7 +979,7 @@ fn matchup_week_date(value: &str) -> String {
     format!("{weekday} {month_name}-{day:02}")
 }
 
-/// Render the deliberately limited fallback without matchup or advisory claims.
+/// Render the deliberately limited fallback without matchup claims.
 pub fn render_local_matchup(view: &LocalMatchupView, mode: HelpColorMode) -> String {
     let mut output = format!(
         "{}\n",

@@ -14,7 +14,7 @@ Port `skout` from Go to Rust over multiple releases.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, MLB, and advisory adapters, foreground fantasy synchronization, operational utilities, and daily or weekly matchup surfaces. Rejected scraping providers and deeper analysis remain outside the current port.
+The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, and MLB adapters, foreground fantasy synchronization, operational utilities, and daily or weekly matchup surfaces. Rejected scraping providers and deeper analysis remain outside the current port.
 
 ## Current Platform
 
@@ -25,7 +25,6 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/main.rs`: Rust executable entry point and independently versioned utility declaration
 - `src/providers/espn.rs`: injected ESPN scoreboard and moneyline acquisition with typed decoding and structured partial failures
 - `src/providers/mlb.rs`: injected MLB metadata, live-game, statistics, game-log, and quality-start acquisition with bounded batching and short-lived raw-payload caching
-- `src/providers/advisory.rs`: bounded provider-neutral Gemini, Groq, Mistral, Claude, and OpenAI completion adapters
 - `src/providers/yahoo_public.rs`: bounded unauthenticated Yahoo league, roster, free-agent, scoreboard, weekly-stat, rank, and redzone acquisition
 - `src/providers/yahoo_fantasy.rs`: shared typed Yahoo payload models and normalization
 - `src/providers/mod.rs`: provider boundary exports and contextual acquisition errors
@@ -33,9 +32,8 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/cli.rs`: root command metadata, parsing, dispatch, streams, and exit behavior
 - `src/config.rs`: private atomic selected-league and primary-team preferences
 - `src/sync.rs`: public-only setup, status, foreground synchronization, and persistent cross-process synchronization locking
-- `src/operations.rs`: confirmed database reset and transitional shutdown of a daemon started by an older b9 release
-- `src/model_config.rs`: interactive advisory provider, model, validation, and secret-safe credential orchestration
-- `src/matchup.rs`: public selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, advisory orchestration, and terminal rendering
+- `src/operations.rs`: confirmed database reset
+- `src/matchup.rs`: public selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, and terminal rendering
 - `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
@@ -66,15 +64,15 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 
 ## Data And Control Flow
 
-Provider adapters construct owned acquisition records without performing orchestration or persistence. The public Yahoo adapter owns exact allowlisted paths, bounded requests and pagination, and numeric-key or array-or-object normalization into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground synchronization stages settings, standings, complete rosters, free agents, and primary-team validation before one atomic fantasy-snapshot replacement. Transaction history and roster mutations remain unimplemented. The matchup application owns lazy public Yahoo refreshes, ISO-date-to-week resolution, required MLBAM identity reconciliation, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, advisory grounding, warnings, and rendering. Advisory credentials remain in the operating-system keyring; Yahoo reads do not use credentials.
+Provider adapters construct owned acquisition records without performing orchestration or persistence. The public Yahoo adapter owns exact allowlisted paths, bounded requests and pagination, and numeric-key or array-or-object normalization into provider-neutral league, team, roster, matchup, and weekly-stat records. Foreground synchronization stages settings, standings, complete rosters, free agents, and primary-team validation before one atomic fantasy-snapshot replacement. Transaction history and roster mutations remain unimplemented. The matchup application owns lazy public Yahoo refreshes, ISO-date-to-week resolution, required MLBAM identity reconciliation, daily MLB-stat overlays, versioned durable fallback, optional MLB schedule and ESPN moneyline enrichment, warnings, and rendering.
 
 The roster and player-pool commands read normalized Yahoo teams, ownership, free agents, and MLB season statistics from the isolated store. Fantasy roster totals join statistics through MLBAM identity, preserving the predecessor's shared-identity aggregation for split two-way players. MLB totals refreshes supplement the bulk pitching feed with per-starter quality starts, and zero-valued bulk omissions cannot erase a previously acquired nonzero total. MLB innings retain source display notation for aggregate parity while rate calculations use true thirds internally. Synchronization fetches free agents as a bounded paginated complete set before atomic replacement. Player cards use the MLB game-log adapter as a foreground refresh path and retain a versioned per-player snapshot so a labeled compatible fallback remains available during provider failure. Primary player, roster, matchup, team, totals, and slate tables use fixed source-compatible column geometry where the Rust model owns the corresponding data; deferred analytical and rich-status cells remain documented gaps. Headers use blue 33, secondary values gray 245, available players green 34, and inactive or injured rows use the established gray and dark-yellow tiers before falling back to identical plain text.
 
 Weekly roster totals use Yahoo matchup category values in the stored league order and retain weekly snapshots for stale fallback. Waiver filtering uses the durable active-26-man membership plus the predecessor-compatible 60th-percentile usage floors, keeping active-roster interpretation in the store and selection policy in the command layer.
 
-The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness, lifecycle, cache, and odds writes deterministic. The disk cache stores bounded opaque payload bytes under hashed logical keys and replaces entries atomically. Typed persistence and transport APIs return contextual failures instead of silently interpreting operational errors as missing state. Analysis, view-model, display, advisory, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
+The persistence core owns one connection to `$HOME/.config/b9/b9.db`, applies ordered migrations atomically, and exposes immediate transactions without exposing its connection. An injected thread-safe clock makes freshness, lifecycle, cache, and odds writes deterministic. The disk cache stores bounded opaque payload bytes under hashed logical keys and replaces entries atomically. Typed persistence and transport APIs return contextual failures instead of silently interpreting operational errors as missing state. Analysis, view-model, display, and CLI layers consume domain records without placing provider, storage, serialization, or terminal mechanics in the domain module.
 
-The executable passes its literal independent utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. Package preserves that independent declaration while updating Cargo package and lockfile versions, and canonical validation checks each version against its own contract. The CLI dispatches status, synchronization, operations, model configuration, and matchup work into application modules rather than provider or storage internals. Foreground synchronization holds a persistent cross-process file lock at the predecessor-compatible path. Transitional `stop` and confirmed reset can shut down a daemon started by an older b9 release through its private control socket; neither path can start or schedule background work. Reset preserves configuration, cache, historical log data, credentials, and predecessor files. A terminal presentation boundary enables contracted color roles only for supported terminal stdout and otherwise renders deterministic plain output.
+The executable passes its literal independent utility version into one CLI metadata model, whose shared descriptors drive parsing and b9 root help. Package preserves that independent declaration while updating Cargo package and lockfile versions, and canonical validation checks each version against its own contract. The CLI dispatches status, synchronization, operations, and matchup work into application modules rather than provider or storage internals. Foreground synchronization holds a persistent cross-process file lock at the predecessor-compatible path. Reset deletes only the local database and preserves configuration, cache, historical log data, and predecessor files. A terminal presentation boundary enables contracted color roles only for supported terminal stdout and otherwise renders deterministic plain output.
 
 ## AC Lifecycle Control Flow
 
@@ -111,7 +109,6 @@ The governed change path is `Draft → Audit → Refine → Implement → Ratify
 - Keep weekly scoreboards and roster statistics in versioned snapshots rather than new normalized tables.
 - Keep synchronization foreground-only and explicitly invoked.
 - Keep foreground synchronization behind one persistent cross-process execution lock.
-- Keep advisory credentials in environment or keyring boundaries and persist only provider/model selection.
 - Keep rejected automated provider acquisition unreachable from commands, synchronization, transport, and adapters.
 
 ### Status dashboard boundary

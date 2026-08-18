@@ -34,7 +34,6 @@ A full Yahoo league key such as `469.l.170874` is preserved. A bare id or legacy
 - Reject invalid league and team keys before request construction.
 - Reject non-success responses without retaining response bodies in diagnostics.
 - Avoid retrying access denial, evading blocking, or enumerating league ids.
-- Keep advisory-provider credentials isolated in their existing environment and keyring boundary.
 
 ## Setup and synchronization
 

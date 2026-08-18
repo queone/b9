@@ -18,12 +18,7 @@ fn root_help_forms_share_the_golden_surface() {
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(help, render_root_help("0.22.1", HelpColorMode::Plain));
 
-    for form in [
-        ["-h"].as_slice(),
-        ["--help"].as_slice(),
-        ["-?"].as_slice(),
-        ["help"].as_slice(),
-    ] {
+    for form in [["-h"].as_slice(), ["--help"].as_slice(), ["-?"].as_slice()] {
         let output = b9(form);
         assert!(output.status.success(), "help form {form:?}");
         assert_eq!(output.stdout, help.as_bytes(), "help form {form:?}");
@@ -35,11 +30,8 @@ fn root_help_forms_share_the_golden_surface() {
 fn root_help_lists_every_command_specific_flag() {
     let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
     for (command, flags) in [
-        ("sync", &["-f, --force", "-T, --team"][..]),
-        (
-            "m",
-            &["-w, --week", "-W, --weekly", "-D, --day", "-a, --advise"],
-        ),
+        ("sync", &["-T, --team"][..]),
+        ("m", &["-w, --week", "-W, --weekly", "-D, --day"]),
         ("t", &["-f, --force"]),
         ("tt", &["-f, --force"]),
         ("sp", &["-f, --force"]),
@@ -149,7 +141,7 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
-    for command in ["st", "sync", "stop", "reset", "lm", "m", "i", "whatis"] {
+    for command in ["st", "sync", "reset", "m", "i", "whatis"] {
         let output = b9(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
@@ -158,36 +150,26 @@ fn fantasy_commands_have_help_without_side_effects() {
 }
 
 #[test]
-fn noninteractive_model_selection_fails_cleanly() {
-    let model = b9(&["lm"]);
-    assert_eq!(model.status.code(), Some(1));
-    let stderr = String::from_utf8(model.stderr).unwrap();
-    assert!(stderr.contains("interactive terminal is required"));
-    assert!(!stderr.contains("API key"));
-}
-
-#[test]
-fn sync_help_exposes_settled_short_and_long_flags() {
+fn sync_help_exposes_only_the_team_selection_flag() {
     let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
-    assert!(sync.contains("-f, --force"));
+    assert!(!sync.contains("--force"));
     assert!(sync.contains("-T, --team"));
     assert!(sync.contains("Select the primary fantasy team"));
 }
 
 #[test]
-fn mlb_commands_have_force_help_without_yahoo_attribution() {
+fn mlb_commands_have_force_help() {
     for command in ["t", "tt", "sp"] {
         let output = b9(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
         let stdout = String::from_utf8(output.stdout).unwrap();
         assert!(stdout.contains("-f, --force"));
-        assert!(!stdout.contains("Data provided by Yahoo Fantasy Sports."));
     }
 }
 
 #[test]
-fn status_is_local_first_and_has_no_yahoo_attribution() {
+fn status_is_local_first() {
     let home = tempfile::tempdir().expect("temporary HOME");
     let output = Command::new(env!("CARGO_BIN_EXE_b9"))
         .args(["st"])
@@ -196,14 +178,12 @@ fn status_is_local_first_and_has_no_yahoo_attribution() {
         .expect("run local status");
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 status");
-    let stderr = String::from_utf8(output.stderr).expect("UTF-8 status diagnostics");
     assert!(stdout.contains("Yahoo: public endpoints"));
     assert!(stdout.contains("No local snapshot; run b9 sync."));
-    assert!(!stderr.contains("Data provided by Yahoo Fantasy Sports."));
 }
 
 #[test]
-fn retired_oauth_surfaces_are_absent() {
+fn retired_cli_surfaces_are_absent() {
     let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
     for retired in [
         "login",
@@ -215,6 +195,9 @@ fn retired_oauth_surfaces_are_absent() {
         "restart",
         "log",
         "_daemon",
+        "stop",
+        "help",
+        "lm",
     ] {
         assert!(
             !root.lines().any(|line| {
@@ -226,6 +209,7 @@ fn retired_oauth_surfaces_are_absent() {
         );
     }
     assert!(!root.contains("--oauth"));
+    assert!(!root.contains("--advise"));
     for command in [
         "login",
         "logout",
@@ -236,9 +220,13 @@ fn retired_oauth_surfaces_are_absent() {
         "restart",
         "log",
         "_daemon",
+        "stop",
+        "help",
+        "lm",
     ] {
         assert_eq!(b9(&[command]).status.code(), Some(2), "{command}");
     }
+    assert_eq!(b9(&["m", "--advise"]).status.code(), Some(2));
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use clap::{Arg, ArgAction, Command, error::ErrorKind};
 
 use crate::glossary::{LookupResult, embedded_entries, lookup, render_entry, render_full};
-use crate::terminal::{HelpColorMode, detected_help_color_mode, dim, section, subtitle, title};
+use crate::terminal::{HelpColorMode, detected_help_color_mode, section, subtitle, title};
 
 #[derive(Clone, Copy)]
 struct ArgumentDescriptor {
@@ -61,25 +61,9 @@ const COMMANDS: &[CommandDescriptor] = &[
         routes_to_root_help: false,
     },
     CommandDescriptor {
-        name: "stop",
-        display_label: "stop",
-        description: "Stop a daemon started by an older b9 release",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
         name: "reset",
         display_label: "reset",
         description: "Delete the local b9 database",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: false,
-    },
-    CommandDescriptor {
-        name: "lm",
-        display_label: "lm",
-        description: "Configure the advisory provider",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -174,14 +158,6 @@ const COMMANDS: &[CommandDescriptor] = &[
         aliases: &["whatis"],
         routes_to_root_help: false,
     },
-    CommandDescriptor {
-        name: "help",
-        display_label: "help",
-        description: "Print this help",
-        argument: None,
-        aliases: &[],
-        routes_to_root_help: true,
-    },
 ];
 
 const FLAGS: &[FlagDescriptor] = &[
@@ -226,11 +202,6 @@ const FLAGS: &[FlagDescriptor] = &[
 const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
     (
         "sync",
-        "-f, --force",
-        "Bypass synchronization freshness gates",
-    ),
-    (
-        "sync",
         "-T, --team <TEAM>",
         "Select the primary fantasy team",
     ),
@@ -241,7 +212,6 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
         "-D, --day <YYYY-MM-DD>",
         "Show stats for a specific day",
     ),
-    ("m", "-a, --advise", "Include the advisory summary"),
     ("t", "-f, --force", "Refresh provider data"),
     ("tt", "-f, --force", "Refresh provider data"),
     ("sp", "-f, --force", "Refresh provider data"),
@@ -294,7 +264,7 @@ where
     };
 
     if matches.get_flag("debug") {
-        let command = matches.subcommand_name().unwrap_or("help");
+        let command = matches.subcommand_name().unwrap_or("root");
         let league = if matches.get_one::<String>("league").is_some() {
             "override"
         } else {
@@ -312,20 +282,17 @@ where
             let mut output = std::io::stdout().lock();
             let result = crate::sync::synchronize_with_options_streaming(
                 matches.get_one::<String>("league").map(String::as_str),
-                subcommand.get_flag("force"),
                 subcommand.get_one::<String>("team").map(String::as_str),
                 &mut output,
             );
             drop(output);
             run_result(result)
         }
-        Some(("stop", _)) => run_result(crate::operations::stop_retired_daemon()),
         Some(("reset", _)) => {
             let mut input = std::io::BufReader::new(std::io::stdin().lock());
             let mut output = std::io::stdout();
             run_result(crate::operations::reset(&mut input, &mut output))
         }
-        Some(("lm", _)) => run_result(crate::model_config::configure()),
         Some(("m", subcommand)) => run_result(crate::matchup::show_with_team_options(
             matches.get_one::<String>("league").map(String::as_str),
             subcommand.get_one::<String>("team").map(String::as_str),
@@ -333,7 +300,6 @@ where
                 week: subcommand.get_one::<i32>("week").copied(),
                 weekly: subcommand.get_flag("weekly"),
                 day: subcommand.get_one::<String>("day").cloned(),
-                advise: subcommand.get_flag("advise"),
             },
         )),
         Some(("t", subcommand)) => run_result(crate::mlb_commands::show_teams(
@@ -432,12 +398,6 @@ fn root_command(version: &'static str) -> Command {
                         .long("day")
                         .value_name("YYYY-MM-DD")
                         .conflicts_with_all(["week", "weekly"]),
-                )
-                .arg(
-                    Arg::new("advise")
-                        .short('a')
-                        .long("advise")
-                        .action(ArgAction::SetTrue),
                 );
         }
         if descriptor.name == "rt" {
@@ -476,37 +436,17 @@ fn root_command(version: &'static str) -> Command {
             );
         }
         if descriptor.name == "sync" {
-            subcommand = subcommand
-                .arg(
-                    Arg::new("force")
-                        .short('f')
-                        .long("force")
-                        .help("Bypass synchronization freshness gates")
-                        .action(ArgAction::SetTrue),
-                )
-                .arg(
-                    Arg::new("team")
-                        .short('T')
-                        .long("team")
-                        .value_name("TEAM")
-                        .help("Select the primary fantasy team"),
-                );
+            subcommand = subcommand.arg(
+                Arg::new("team")
+                    .short('T')
+                    .long("team")
+                    .value_name("TEAM")
+                    .help("Select the primary fantasy team"),
+            );
         }
         if matches!(
             descriptor.name,
-            "st" | "sync"
-                | "stop"
-                | "reset"
-                | "lm"
-                | "m"
-                | "t"
-                | "tt"
-                | "sp"
-                | "r"
-                | "rt"
-                | "h"
-                | "p"
-                | "i"
+            "st" | "sync" | "reset" | "m" | "t" | "tt" | "sp" | "r" | "rt" | "h" | "p" | "i"
         ) {
             subcommand = subcommand.arg(
                 Arg::new("command_help")
@@ -592,12 +532,6 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
             descriptor.description,
         );
     }
-    output.push('\n');
-    output.push_str(&dim(
-        "Fantasy data provided by https://sports.yahoo.com/fantasy/",
-        mode,
-    ));
-    output.push('\n');
     output
 }
 

@@ -2,7 +2,7 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
-Current b9 intentionally diverges from this inventory: Yahoo reads are public-only; Yahoo authentication and credential-cleanup surfaces are removed; `sync -l/--league -T/--team` owns setup; synchronization is foreground-only; and transitional `stop` can only shut down a daemon started by an older b9 release.
+Current b9 intentionally diverges from this inventory: Yahoo reads are public-only; Yahoo authentication, credential-cleanup, and advisory surfaces are removed; `sync -l/--league -T/--team` owns setup; and synchronization is foreground-only.
 
 ## Source Baseline
 
@@ -45,7 +45,7 @@ Field key: “hooks” covers pre-run and post-run behavior; “auto/attr” cov
 
 The Rust command layer implements the retained public commands and compatibility alias `whatis`. Shared metadata owns registration and root help; every public command exposes command-specific help. The command-specific comparison rows below remain authoritative historical skout evidence for exact parity, tested Rust improvements, live checks, and explicit gaps.
 
-- Preserve `sync`, `st`, `m`, `r`, `rt`, `t`, `tt`, `sp`, `h`, `p`, `i`, `lm`, `fetch`, `reset`, and transitional `stop` as public commands.
+- Preserve `sync`, `st`, `m`, `r`, `rt`, `t`, `tt`, `sp`, `h`, `p`, `i`, `fetch`, and `reset` as public commands.
 - Preserve direct foreground `sync`, persistent cross-process synchronization locking, b9-owned state, and embedded glossary data as tested Rust improvements.
 - Preserve skout's compact title, uppercase hierarchy, fixed player and MLB columns, semantic 256-color roles, and automatic plain fallback.
 - Preserve current, explicit-week, weekly, and ISO-day matchup selection with durable stale and local-only fallbacks.
@@ -224,11 +224,9 @@ No crate, framework, or compatibility change is selected.
 
 ## Current b9 Operations Surface
 
-- `b9 sync -f/--force` performs direct foreground synchronization through public Yahoo endpoints and holds a persistent cross-process execution lock.
-- `b9 stop` is transitional and can only shut down a daemon started by an older b9 release through its private Unix control socket.
-- `b9 reset` confirms before stopping an older daemon and deleting only b9's database and verified retired-daemon artifacts; it preserves the foreground lock, configuration, cache, historical log, credentials, and every skout file.
+- `b9 sync` performs direct foreground synchronization through public Yahoo endpoints and holds a persistent cross-process execution lock.
+- `b9 reset` confirms before deleting only b9's database; it preserves the foreground lock, configuration, cache, historical log, and every skout file.
 - `b9 st` reads local status without daemon lifecycle or next-scheduled-run fields.
-- `b9 lm` configures None, Gemini, Groq/Llama, Mistral, Claude, or OpenAI interactively, keeps secrets outside configuration, and uses bounded provider validation and OpenAI model discovery.
 
 ## Verification Strategy
 
@@ -237,7 +235,6 @@ No crate, framework, or compatibility change is selected.
 - Generate command parsing and help snapshots from the command contract rows.
 - Assert exact version, attribution, stdout, stderr, and exit behavior.
 - Use temporary home/config/database/log paths for configuration, permissions, reset, PID, disabled-marker, and log tests.
-- Use a private Unix-socket fixture for transitional prior-daemon shutdown and cleanup.
 - Use injected clocks for foreground freshness and timeout behavior.
 - Use terminal and browser adapters for non-live command routing.
 - Convert every explicit gap in the command and operational tables into a named test or a justified later-workstream test.
@@ -246,7 +243,6 @@ No crate, framework, or compatibility change is selected.
 
 - Exercise Yahoo OAuth, browser launch, and OS keychain only with Director authorization and non-production credentials.
 - Exercise Yahoo-backed status and fetch only after provider/storage deterministic coverage exists.
-- Exercise transitional shutdown against a daemon started by the prior release in an isolated temporary profile.
 - Exercise terminal selectors in a supported interactive terminal.
 - Keep live failures from substituting for deterministic pre-release regression coverage.
 

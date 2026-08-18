@@ -446,57 +446,6 @@ impl RosterWeekStats {
     }
 }
 
-/// Scoring categories where a lower value is the better outcome.
-pub const LOWER_IS_BETTER_CATEGORIES: [&str; 2] = ["ERA", "WHIP"];
-
-/// One scoring category's head-to-head standing between two teams.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CategoryGap {
-    pub category: String,
-    pub mine: f64,
-    pub opponent: f64,
-    pub tied: bool,
-    pub leading: bool,
-    pub flippable: bool,
-    pub punted: bool,
-}
-
-/// One roster slot the league requires but the current roster leaves uncovered.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SlotGap {
-    pub slot: Position,
-}
-
-/// One deterministic bench-for-active lineup swap grounded in shared position eligibility.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LineupCandidate {
-    pub bench_player: String,
-    pub active_player: String,
-    pub position: Position,
-}
-
-/// One free-agent roster-move candidate grounded in a flippable category.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RosterMoveCandidate {
-    pub player_name: String,
-    pub category: String,
-}
-
-/// One free agent's season value for one scoring category, gathered by the caller.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FreeAgentCategoryValue {
-    pub player_name: String,
-    pub category: String,
-    pub value: f64,
-}
-
-/// One risk surfaced from roster or injury state.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RiskAlert {
-    pub player_name: String,
-    pub reason: String,
-}
-
 /// Standard season batting statistics.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct BattingStats {

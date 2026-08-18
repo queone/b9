@@ -637,7 +637,7 @@ fn yahoo_result_notice(store: &Store, output: String) -> Result<String, PlayerCo
     })
 }
 
-/// Label retained Yahoo output without repeating root-help attribution.
+/// Label retained Yahoo output when its snapshot is stale.
 pub fn with_yahoo_result_notice(stale: bool, output: String) -> String {
     if stale {
         format!(

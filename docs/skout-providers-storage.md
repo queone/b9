@@ -2,7 +2,7 @@
 
 > Historical reference: this inventory describes the fixed skout source baseline below. Do not treat its implementation or readiness claims as current b9 status. Use `skout-parity-checklist.md` for active parity tracking and inspect the skout source when correcting behavior.
 
-Current b9 intentionally diverges from this inventory: all read-only Yahoo workflows use exact bounded paths on the two public Yahoo fantasy hosts, account discovery is replaced by explicit league and primary-team selection, complete fantasy refreshes replace atomically, and OAuth/circuit behavior is retired. Advisory credentials remain unchanged.
+Current b9 intentionally diverges from this inventory: all read-only Yahoo workflows use exact bounded paths on the two public Yahoo fantasy hosts, account discovery is replaced by explicit league and primary-team selection, complete fantasy refreshes replace atomically, and OAuth/circuit behavior is retired. The advisory subsystem is also retired.
 
 ## Source Baseline
 
@@ -17,7 +17,7 @@ Current b9 intentionally diverges from this inventory: all read-only Yahoo workf
 | `github.com/olekukonko/tablewriter v1.1.4` | Observable tables | Analysis/display | Defer |
 | `github.com/queone/governa-color v1.4.1` | Observable color | CLI/operations | Defer |
 | `github.com/spf13/cobra v1.10.2` | Command parsing | CLI/operations | Defer |
-| `github.com/zalando/go-keyring v0.2.8` | Credential storage | CLI/operations | Preserve secure boundary through pinned `keyring =4.1.6` |
+| `github.com/zalando/go-keyring v0.2.8` | Credential storage | CLI/operations | Retired in b9 |
 | `golang.org/x/net v0.57.0` | HTML parsing | Providers/storage | Fixture-backed parser boundary |
 | `golang.org/x/oauth2 v0.36.0` | Yahoo OAuth/refresh | Providers/storage | Preserve protocol |
 | `golang.org/x/term v0.45.0` | TTY behavior | CLI/operations | Defer |
@@ -584,7 +584,7 @@ Observable path/state/freshness/data semantics remain distinct from exact Go SQL
 | PS-3 Cache/transport | Ratified inventory | Bounded atomic disk cache and validating injectable HTTP executor implemented | Filesystem/request/redirect/limit contracts implemented | Parsing/auth adapters |
 | PS-4 JSON providers | PS-2/PS-3 | Yahoo authentication and fantasy data, ESPN current odds, and bounded MLB metadata/live-game/statistics acquisition implemented | Yahoo/ESPN/MLB fixtures, transport doubles, secure boundaries, parsing variants, cache boundaries, concurrency, and store rollback implemented | Other MLB/live checks |
 | PS-5 Scrapers | PS-2/PS-3 | OddsShark and bounded on-demand RotoWire lineups implemented; Savant, FanGraphs, and FantasyPros HTML rejected by the reviewed provider policy | OddsShark and RotoWire fixture coverage; official policy evidence for rejected acquisition | No rejected-provider live checks |
-| PS-6 Integration | PS-4/PS-5 | Complete retained command shell, foreground Yahoo sync, free agents, reconciliation, matchup snapshots, stale fallback, display, operations, and advisory configuration implemented | Fixture DB, orchestration, parity, fallback, and failure paths | Yahoo transactions, retired daemon, and rejected providers |
+| PS-6 Integration | PS-4/PS-5 | Complete retained command shell, foreground Yahoo sync, free agents, reconciliation, matchup snapshots, stale fallback, display, and operations implemented | Fixture DB, orchestration, parity, fallback, and failure paths | Yahoo transactions, retired daemon, retired advisory subsystem, and rejected providers |
 
 PS-1 through PS-6 are implemented for retained providers and commands after their acceptance tests pass. Live-provider gates and explicit excluded gaps remain tracked separately from deterministic implementation.
 

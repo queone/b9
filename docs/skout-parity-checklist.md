@@ -9,10 +9,8 @@ Treat `99%` as functionally complete with minor parity defects still possible. R
 | root help / version | Command discovery and version output | — | Not assessed | Compare retained commands, flags, streams, and version forms; Yahoo OAuth surfaces intentionally diverge from skout. |
 | `st` | Status and league selection | — | Not assessed | Compare dashboard fields, colors, league selection, and freshness. |
 | `sync` | Complete foreground synchronization and public Yahoo setup | 99% | Functionally complete | Continue watching unofficial endpoint availability, snapshot completeness, team selection, retained stale data, progress output, and runtime. |
-| `stop` | Retired-daemon shutdown | — | Transitional | Remove after one released cleanup window; until then verify prior-protocol shutdown and narrow artifact cleanup. |
-| `reset` | Remove local b9 state | — | Not assessed | Compare confirmation, cancellation, transitional prior-daemon shutdown, deletion scope, and output. |
-| `lm` | Advisory provider and model configuration | — | Not assessed | Compare provider selection, model discovery, credentials, cancellation, and errors. |
-| `m` | Daily or weekly fantasy matchup | 99% | Functionally complete | Continue logging minor live-data, matchup-total, status, odds, color, and alignment discrepancies. |
+| `reset` | Remove local b9 state | — | Not assessed | Compare confirmation, cancellation, deletion scope, and output. |
+| `m` | Daily or weekly fantasy matchup | 99% | Functionally complete | Advisory output is intentionally retired; continue logging minor live-data, matchup-total, status, odds, color, and alignment discrepancies. |
 | `t` | MLB 40-man roster display | — | Not assessed | Compare roster membership, role/status classification, columns, sorting, and colors. |
 | `tt` | MLB standings and team totals | — | Not assessed | Compare standings, totals, Yahoo-player counts, sorting, formatting, and freshness. |
 | `sp` | Probable-pitcher slate and odds | — | Not assessed | Compare dates, starters, ownership, odds sources, degradation, sorting, and colors. |
@@ -21,7 +19,6 @@ Treat `99%` as functionally complete with minor parity defects still possible. R
 | `h` | Hitter pool and hitter detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
 | `p` | Pitcher pool and pitcher detail | — | Not assessed | Compare default list, sorting, position and waiver filters, detail view, data, and colors. |
 | `i` | Glossary lookup | — | Not assessed | Compare full glossary, exact lookup, ambiguity, suggestions, selection, and formatting. |
-| `help` | Command help dispatch | — | Not assessed | Compare command routing, command-specific text, unknown commands, streams, and exits. |
 
 ## Historical References
 
