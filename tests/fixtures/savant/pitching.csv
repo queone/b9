@@ -1,2 +1,2 @@
-player_id,ff_avg_speed,whiff_percent,chase_percent,groundballs_percent,k_percent,bb_percent
-700002,96.4,31.2,29.8,45.6,30.1,7.4
+player_id,pa,bbe,ff_avg_speed,whiff_percent,chase_percent,groundballs_percent,k_percent,bb_percent
+700002,180,90,96.4,31.2,29.8,45.6,30.1,7.4

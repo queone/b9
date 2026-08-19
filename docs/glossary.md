@@ -710,7 +710,7 @@ Deterministic classification of each scoring category as push, protect, or aband
 
 ### Closer (`closer`) [b9]
 
-The designated closer for each MLB team. The pinned Go baseline used FanGraphs RosterResource tags with an SV-leader fallback and displayed `RP1`. b9 retains only deterministic data available from approved providers; FanGraphs enrichment and the PQS multiplier remain deferred.
+The designated closer for each MLB team. b9 resolves FanGraphs RosterResource tags with an SV-leader fallback, displays `RP1`, and applies the settled PQS save-category multiplier.
 
 - **Where:** `internal/store/player.go` — `MarkClosers`
 - **Prompt:** no
@@ -773,10 +773,10 @@ FanGraphs rest-of-season projection system. Weight 0.40 in PP blend. Provides pr
 
 ### Player Quality Score (`pqs`) [b9]
 
-Internal quality-based model using stabilized skill signals. Not displayed to users. Hitter signals: xwOBA (0.30), K% (0.15), BB% (0.10), Sprint Speed (0.20), FB% (0.10), HR/FB (0.15). Pitcher signals: Whiff% (0.30), Chase% (0.20), GB% (0.15), Fastball Velo (0.15), K-BB% (0.20). Each signal z-scored against the player pool, clamped ±2.0, weighted, summed. Category emphasis and context multipliers applied. Stored in `players.pqs`. Feeds waiver ranking and the browse sort tiebreaker.
+On-demand quality model using stabilized skill signals. Hitter signals: xwOBA (0.30), K% (0.15), BB% (0.10), Sprint Speed (0.20), FB% (0.10), HR/FB (0.15). Pitcher signals: Whiff% (0.30), Chase% (0.20), GB% (0.15), Fastball Velo (0.15), K-BB% (0.20). Each signal is z-scored against the current player pool, clamped to ±2.0, weighted, and adjusted for opportunity, positional scarcity, and closer role. The score is computed at display time and feeds waiver ranking.
 
 - **Aliases:** PQS, TS, TalentScore (legacy)
-- **Where:** `internal/analysis/pqs.go` — `ComputePQS`
+- **Where:** `src/analysis/pqs.rs` — `pool_scores`
 - **Prompt:** yes
 
 ### Z-Score (`z_score`) [b9]

@@ -75,6 +75,35 @@ pub struct IdentityCandidate {
 }
 
 impl Store {
+    /// Atomically replace FantasyPros ECR values for the current player population.
+    pub fn replace_ecr(
+        &mut self,
+        rows: &[(Option<i64>, String, String, i64)],
+    ) -> Result<usize, StoreError> {
+        const OP: &str = "replace FantasyPros ECR";
+        if rows.is_empty() {
+            return Err(StoreError::invalid(
+                OP,
+                "a complete ECR snapshot is required",
+            ));
+        }
+        let path = self.path.clone();
+        self.transaction(|tx| {
+            let mut resolvable=0;
+            for (yahoo_id,name,team,_) in rows {
+                let count:i64=if let Some(id)=yahoo_id { tx.query_row("SELECT COUNT(*) FROM players WHERE yahoo_player_id=?1",[id],|r|r.get(0)) } else { tx.query_row("SELECT COUNT(*) FROM players WHERE LOWER(name)=LOWER(?1) AND mlb_team=?2",params![name,team],|r|r.get(0)) }.map_err(|e|StoreError::operation(OP,&path,e))?;
+                if count==1 {resolvable+=1;}
+            }
+            if resolvable==0 { return Err(StoreError::invalid(OP,"snapshot has no unambiguous player identities")); }
+            tx.execute("UPDATE players SET ecr=NULL", []).map_err(|e|StoreError::operation(OP,&path,e))?;
+            let mut written=0;
+            for (yahoo_id,name,team,rank) in rows {
+                let changed=if let Some(id)=yahoo_id { tx.execute("UPDATE players SET ecr=?1 WHERE yahoo_player_id=?2", params![rank,id]) } else { tx.execute("UPDATE players SET ecr=?1 WHERE id=(SELECT id FROM players WHERE LOWER(name)=LOWER(?2) AND mlb_team=?3 GROUP BY LOWER(name),mlb_team HAVING COUNT(*)=1)", params![rank,name,team]) }.map_err(|e|StoreError::operation(OP,&path,e))?;
+                written+=changed;
+            }
+            Ok(written)
+        })
+    }
     /// Read the durable Yahoo ownership freshness timestamp.
     pub fn ownership_synced_at(&self) -> Result<Option<i64>, StoreError> {
         self.connection()
@@ -127,7 +156,7 @@ impl Store {
         self.transaction(|transaction| {
             for player in players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
-                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at", params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at]).map_err(|error| StoreError::operation("merge source-neutral Yahoo player", &path, error))?;
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,pct_started,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=COALESCE(excluded.percent_owned,players.percent_owned),pct_started=COALESCE(excluded.pct_started,players.pct_started),yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at", params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.percentage_started,player.yahoo_rank,captured_at]).map_err(|error| StoreError::operation("merge source-neutral Yahoo player", &path, error))?;
             }
             Ok(())
         })
@@ -180,8 +209,8 @@ impl Store {
             }
             for player in &snapshot.players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
-                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET name=excluded.name,mlb_team=excluded.mlb_team,display_position=excluded.display_position,position_type=excluded.position_type,eligible_positions=excluded.eligible_positions,status=CASE WHEN players.status NOT IN ('','IL') AND excluded.status IN ('','IL') THEN players.status ELSE excluded.status END,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
-                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,pct_started,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(yahoo_player_id) DO UPDATE SET name=excluded.name,mlb_team=excluded.mlb_team,display_position=excluded.display_position,position_type=excluded.position_type,eligible_positions=excluded.eligible_positions,status=CASE WHEN players.status NOT IN ('','IL') AND excluded.status IN ('','IL') THEN players.status ELSE excluded.status END,percent_owned=COALESCE(excluded.percent_owned,players.percent_owned),pct_started=COALESCE(excluded.pct_started,players.pct_started),yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
+                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.percentage_started,player.yahoo_rank,captured_at])
                     .map_err(|error| StoreError::operation("upsert public Yahoo player", &path, error))?;
             }
             transaction.execute("DELETE FROM yahoo_roster_slots WHERE team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1)", [&snapshot.league.league_key])
@@ -232,8 +261,8 @@ impl Store {
             }
             for player in &snapshot.players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
-                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
-                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,pct_started,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(yahoo_player_id) DO UPDATE SET status=excluded.status,percent_owned=COALESCE(excluded.percent_owned,players.percent_owned),pct_started=COALESCE(excluded.pct_started,players.pct_started),yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
+                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.percentage_started,player.yahoo_rank,captured_at])
                     .map_err(|error| StoreError::operation("merge source-neutral Yahoo player", &path, error))?;
             }
             transaction.execute("DELETE FROM yahoo_free_agents WHERE league_key=?1", [&snapshot.league.league_key])
@@ -284,8 +313,8 @@ impl Store {
             }
             for player in &snapshot.players {
                 let eligible = player.eligible_positions.iter().map(ToString::to_string).collect::<Vec<_>>().join(",");
-                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(yahoo_player_id) DO UPDATE SET name=excluded.name,mlb_team=excluded.mlb_team,display_position=excluded.display_position,position_type=excluded.position_type,eligible_positions=excluded.eligible_positions,status=excluded.status,percent_owned=excluded.percent_owned,yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
-                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.yahoo_rank,captured_at])
+                transaction.execute("INSERT INTO players (yahoo_player_id,name,mlb_team,display_position,position_type,eligible_positions,status,percent_owned,pct_started,yahoo_rank,synced_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(yahoo_player_id) DO UPDATE SET name=excluded.name,mlb_team=excluded.mlb_team,display_position=excluded.display_position,position_type=excluded.position_type,eligible_positions=excluded.eligible_positions,status=excluded.status,percent_owned=COALESCE(excluded.percent_owned,players.percent_owned),pct_started=COALESCE(excluded.pct_started,players.pct_started),yahoo_rank=COALESCE(excluded.yahoo_rank,players.yahoo_rank),synced_at=excluded.synced_at",
+                    params![player.yahoo_player_id,player.name,player.mlb_team,player.display_position,player.position_type,eligible,player.injury_status,player.percent_owned,player.percentage_started,player.yahoo_rank,captured_at])
                     .map_err(|error| StoreError::operation("upsert Yahoo player", &path, error))?;
             }
             transaction.execute("DELETE FROM yahoo_roster_slots WHERE team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1)", [&snapshot.league.league_key])
@@ -447,13 +476,19 @@ impl Store {
 COALESCE(h.pa,0),COALESCE(h.obp,0),COALESCE(h.r,0),COALESCE(h.hr,0),COALESCE(h.rbi,0),COALESCE(h.sb,0),COALESCE(h.avg,0),
 COALESCE(q.ip,0),COALESCE(q.qs,0),COALESCE(q.w,0),COALESCE(q.sv,0),COALESCE(q.k,0),COALESCE(q.era,0),COALESCE(q.whip,0),COALESCE(p.bat_side,''),COALESCE(NULLIF(p.injury_note,''),p.mlbam_injury_note,''),COALESCE(p.birth_date,''),
 sh.xwoba,sh.exit_velo_avg,sh.barrel_pct,sh.hard_hit_pct,sh.strikeout_pct,sh.walk_pct,sh.sprint_speed,sh.ops,
-sp.fastball_velo,sp.whiff_pct,sp.chase_pct,sp.gb_pct,sp.strikeout_pct,sp.walk_pct,COALESCE(p.is_closer,0)
+sp.fastball_velo,sp.whiff_pct,sp.chase_pct,sp.gb_pct,sp.strikeout_pct,sp.walk_pct,COALESCE(p.is_closer,0),COALESCE(p.pct_started,0),p.ecr,fg.fb_pct,fg.hr_fb_pct,
+COALESCE(h.pa,0),COALESCE(h.so_bat,0),COALESCE(h.bb,0),COALESCE(q.bf,0),COALESCE(q.k,0),COALESCE(q.bb_pit,0),
+COALESCE(sh.pa,0),COALESCE(sh.bbe,0),COALESCE(sp.pa,0),COALESCE(sp.bbe,0)
+,COALESCE(hp.pa,0),COALESCE(hp.so_bat,0),COALESCE(hp.bb,0),COALESCE(qp.bf,0),COALESCE(qp.k,0),COALESCE(qp.bb_pit,0),COALESCE((SELECT MAX(g) FROM mlbam_season_stats WHERE stat_group='hitting' AND season=(SELECT MAX(season) FROM mlbam_season_stats)),0)
 FROM players p LEFT JOIN yahoo_roster_slots ys ON ys.player_id=p.id AND ys.slot_position<>'--' AND ys.team_key IN (SELECT team_key FROM yahoo_teams WHERE league_key=?1) LEFT JOIN yahoo_teams t ON t.team_key=ys.team_key
 LEFT JOIN yahoo_free_agents fa ON fa.player_id=p.id AND fa.league_key=?1
 LEFT JOIN mlbam_season_stats h ON h.player_id=(SELECT hs.player_id FROM mlbam_season_stats hs JOIN players hp ON hp.id=hs.player_id WHERE hp.mlbam_id=p.mlbam_id AND hs.stat_group='hitting' AND hs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY CASE WHEN hp.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,hs.synced_at DESC,hs.player_id LIMIT 1) AND h.stat_group='hitting' AND h.season=(SELECT MAX(season) FROM mlbam_season_stats)
 LEFT JOIN mlbam_season_stats q ON q.player_id=(SELECT qs.player_id FROM mlbam_season_stats qs JOIN players qp ON qp.id=qs.player_id WHERE qp.mlbam_id=p.mlbam_id AND qs.stat_group='pitching' AND qs.season=(SELECT MAX(season) FROM mlbam_season_stats) ORDER BY CASE WHEN qp.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,qs.synced_at DESC,qs.player_id LIMIT 1) AND q.stat_group='pitching' AND q.season=(SELECT MAX(season) FROM mlbam_season_stats)
+LEFT JOIN mlbam_season_stats hp ON hp.player_id=h.player_id AND hp.stat_group='hitting' AND hp.season=h.season-1
+LEFT JOIN mlbam_season_stats qp ON qp.player_id=q.player_id AND qp.stat_group='pitching' AND qp.season=q.season-1
 LEFT JOIN statcast_seasons sh ON sh.player_id=(SELECT p2.id FROM players p2 WHERE p2.mlbam_id=p.mlbam_id ORDER BY CASE WHEN p2.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,p2.yahoo_player_id IS NULL,p2.id LIMIT 1) AND sh.stat_group='batting' AND sh.season=(SELECT MAX(season) FROM statcast_seasons)
 LEFT JOIN statcast_seasons sp ON sp.player_id=(SELECT p2.id FROM players p2 WHERE p2.mlbam_id=p.mlbam_id ORDER BY CASE WHEN p2.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,p2.yahoo_player_id IS NULL,p2.id LIMIT 1) AND sp.stat_group='pitching' AND sp.season=(SELECT MAX(season) FROM statcast_seasons)
+LEFT JOIN fangraphs_batted_ball fg ON fg.player_id=(SELECT p2.id FROM players p2 WHERE p2.mlbam_id=p.mlbam_id ORDER BY CASE WHEN p2.mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,p2.yahoo_player_id IS NULL,p2.id LIMIT 1) AND fg.season=(SELECT MAX(season) FROM fangraphs_batted_ball)
 WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id IS NOT NULL) ORDER BY COALESCE(p.yahoo_rank,999999),p.name";
         let mut statement = self
             .connection()
@@ -477,6 +512,8 @@ WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id 
                     hand: row.get(25)?,
                     rank: row.get(7)?,
                     percent_owned: row.get(8)?,
+                    percentage_started: row.get(43)?,
+                    expert_consensus_rank: row.get(44)?,
                     owner: row
                         .get::<_, Option<String>>(9)?
                         .map(|name| clean_fantasy_team_name(&name)),
@@ -517,6 +554,25 @@ WHERE p.yahoo_player_id IS NOT NULL AND (t.team_key IS NOT NULL OR fa.player_id 
                         row.get(40)?,
                         row.get(41)?,
                     ],
+                    fangraphs_batted_ball: [row.get(45)?, row.get(46)?],
+                    pqs_counting: [
+                        row.get(47)?,
+                        row.get(48)?,
+                        row.get(49)?,
+                        row.get(50)?,
+                        row.get(51)?,
+                        row.get(52)?,
+                    ],
+                    statcast_samples: [row.get(53)?, row.get(54)?, row.get(55)?, row.get(56)?],
+                    pqs_prior_counting: [
+                        row.get(57)?,
+                        row.get(58)?,
+                        row.get(59)?,
+                        row.get(60)?,
+                        row.get(61)?,
+                        row.get(62)?,
+                    ],
+                    league_games_played: row.get(63)?,
                 })
             })
             .map_err(|error| StoreError::operation("query fantasy players", &self.path, error))?;

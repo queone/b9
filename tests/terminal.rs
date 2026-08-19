@@ -135,7 +135,7 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
         ..Config::default()
     };
 
-    const PLAIN: &str = "Yahoo: public endpoints\nLast run: success at unix 100\nDatabase: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nProvider failures: ready (0)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/b9/.config/b9/config.json\n";
+    const PLAIN: &str = "Yahoo: public endpoints\nLast run: success at unix 100\nDatabase: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nFanGraphs: none\nFantasyPros: none\nProvider failures: ready (0)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/b9/.config/b9/config.json\n";
 
     let plain = render_dashboard(
         Path::new("/srv/b9/.config/b9/b9.db"),

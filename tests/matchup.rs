@@ -47,12 +47,19 @@ fn stored_hitter() -> StoredFantasyPlayer {
         hand: "R".into(),
         rank: Some(12),
         percent_owned: None,
+        percentage_started: 0.0,
+        expert_consensus_rank: None,
         owner: Some("Operators".into()),
         slot: Some("OF".into()),
         batting: [100.0, 0.35, 20.0, 5.0, 18.0, 3.0, 0.275],
         pitching: [0.0; 7],
         hitting_advanced: [None; 8],
         pitching_advanced: [None; 6],
+        fangraphs_batted_ball: [None; 2],
+        pqs_counting: [0.0; 6],
+        statcast_samples: [0.0; 4],
+        pqs_prior_counting: [0.0; 6],
+        league_games_played: 0,
     }
 }
 

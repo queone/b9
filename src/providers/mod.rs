@@ -4,6 +4,9 @@ use std::error::Error;
 use std::fmt;
 
 pub mod espn;
+pub mod fangraphs;
+pub mod fangraphs_closer_chart;
+pub mod fantasypros;
 pub mod mlb;
 pub mod oddsshark;
 pub mod rotowire;

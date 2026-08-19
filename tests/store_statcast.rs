@@ -7,6 +7,8 @@ fn row(id: i64) -> StatcastWrite {
         mlbam_id: id,
         season: 2026,
         stat_group: "batting".into(),
+        plate_appearances: 240,
+        batted_ball_events: 160,
         xwoba: Some(0.401),
         exit_velo_avg: Some(94.2),
         barrel_pct: Some(15.3),

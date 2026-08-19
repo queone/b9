@@ -14,15 +14,18 @@ use rusqlite::{
 
 const SCHEMA: &str = include_str!("store/schema.sql");
 
+mod fangraphs_batted_ball;
 mod fantasy;
 mod freshness;
 mod mlb;
 mod odds;
+mod projections;
 mod seasons;
 mod snapshots;
 mod statcast;
 mod sync_runs;
 
+pub use fangraphs_batted_ball::FangraphsBattedBallWrite;
 pub use fantasy::{
     CategoryWrite, FantasySnapshotWrite, IdentityCandidate, PositionWrite, StoredFantasyCategory,
     StoredFantasyTeam,
@@ -32,13 +35,14 @@ pub use freshness::{
 };
 pub use mlb::{RosterWrite, SeasonStatWrite, StoredRosterPlayer, WaiverCandidate};
 pub use odds::{MoneylineQuote, StoredMoneyline};
+pub use projections::{ProjectionRow, ProjectionWrite};
 pub use seasons::{SeasonState, SeasonSyncStatus};
 pub use snapshots::CommandSnapshot;
 pub use statcast::StatcastWrite;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for b9-owned databases.
-pub const CURRENT_SCHEMA_VERSION: i64 = 4;
+pub const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 /// Read-only production status fields used by `b9 st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -57,6 +61,8 @@ pub struct StoreStatus {
     pub mlb_identity_count: i64,
     pub yahoo_identity_count: i64,
     pub unmatched_player_count: i64,
+    pub fangraphs_sync: Option<String>,
+    pub fantasypros_sync: Option<String>,
 }
 
 /// Durable provider fields used by the local status dashboard.
@@ -160,6 +166,14 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
             |row| row.get(0),
         )
         .map_err(|error| StoreError::operation("count unmatched players", path, error))?;
+    let provider_state = |source: &str| -> Result<Option<String>, StoreError> {
+        connection.query_row(
+            "SELECT status || CASE WHEN last_successful_at IS NULL THEN '' ELSE ' at unix ' || last_successful_at END || CASE WHEN error_message='' THEN '' ELSE ': ' || error_message END FROM sync_item_state WHERE source=?1 ORDER BY last_attempted_at DESC LIMIT 1",
+            [source], |row| row.get(0),
+        ).optional().map_err(|error| StoreError::operation("read provider item status", path, error))
+    };
+    let fangraphs_sync = provider_state("fangraphs")?;
+    let fantasypros_sync = provider_state("fantasypros")?;
     Ok(StoreStatus {
         latest_sync_status,
         latest_sync_at,
@@ -175,6 +189,8 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
         mlb_identity_count,
         yahoo_identity_count,
         unmatched_player_count,
+        fangraphs_sync,
+        fantasypros_sync,
     })
 }
 
@@ -669,19 +685,56 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
     if version == 1 {
         migrate_v1_to_v2(connection, path)?;
         migrate_v2_to_v3(connection, path)?;
-        return migrate_v3_to_v4(connection, path);
+        migrate_v3_to_v4(connection, path)?;
+        return migrate_v4_to_v5(connection, path);
     }
     if version == 2 {
         migrate_v2_to_v3(connection, path)?;
-        return migrate_v3_to_v4(connection, path);
+        migrate_v3_to_v4(connection, path)?;
+        return migrate_v4_to_v5(connection, path);
     }
     if version == 3 {
-        return migrate_v3_to_v4(connection, path);
+        migrate_v3_to_v4(connection, path)?;
+        return migrate_v4_to_v5(connection, path);
+    }
+    if version == 4 {
+        return migrate_v4_to_v5(connection, path);
     }
     Err(StoreError::unsupported(
         path,
         format!("database schema version {version} is not a supported b9 migration source"),
     ))
+}
+
+fn migrate_v4_to_v5(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| StoreError::operation("begin schema migration", path, error))?;
+    transaction.execute_batch(
+        "CREATE TABLE dashboard_status_v5 (
+           id INTEGER PRIMARY KEY CHECK (id = 1), last_run_at INTEGER,
+           last_run_status TEXT, next_run_at INTEGER, provider_last_success_at INTEGER,
+           provider_last_failure_at INTEGER, provider_failure_count INTEGER NOT NULL DEFAULT 0,
+           circuit_open INTEGER NOT NULL DEFAULT 0, last_error TEXT NOT NULL DEFAULT '',
+           provider_freshness_at INTEGER
+         );
+         INSERT INTO dashboard_status_v5
+           SELECT id,last_run_at,last_run_status,next_run_at,provider_last_success_at,
+                  provider_last_failure_at,provider_failure_count,circuit_open,last_error,
+                  provider_freshness_at
+           FROM dashboard_status;
+         DROP TABLE dashboard_status;
+         ALTER TABLE dashboard_status_v5 RENAME TO dashboard_status;
+         DROP TABLE IF EXISTS projection_seasons;
+         CREATE TABLE IF NOT EXISTS player_projections (player_id INTEGER NOT NULL, season INTEGER NOT NULL, source TEXT NOT NULL, stat_group TEXT NOT NULL, pa REAL, ip REAL, hr REAL, r REAL, rbi REAL, sb REAL, avg REAL, obp REAL, slg REAL, era REAL, whip REAL, k REAL, w REAL, sv REAL, bb REAL, fetched_at INTEGER NOT NULL, PRIMARY KEY(player_id,season,source,stat_group));
+         CREATE TABLE IF NOT EXISTS fangraphs_batted_ball (player_id INTEGER NOT NULL, season INTEGER NOT NULL, fb_pct REAL, hr_fb_pct REAL, fetched_at INTEGER NOT NULL, PRIMARY KEY(player_id,season));"
+    ).map_err(|error| StoreError::operation("apply version-five schema migration", path, error))?;
+    transaction
+        .execute("UPDATE schema_version SET version=5", [])
+        .map_err(|error| StoreError::operation("write schema version", path, error))?;
+    transaction
+        .commit()
+        .map_err(|error| StoreError::operation("commit schema migration", path, error))
 }
 
 fn migrate_v1_to_v2(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {

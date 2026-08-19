@@ -48,6 +48,14 @@ struct FlagDescriptor {
 
 const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
+        name: "fetch",
+        display_label: "fetch <host> <path>",
+        description: "Fetch a raw provider path for debugging",
+        argument: None,
+        aliases: &[],
+        routes_to_root_help: false,
+    },
+    CommandDescriptor {
         name: "st",
         display_label: "st",
         description: "Show status",
@@ -277,6 +285,31 @@ where
     }
 
     match matches.subcommand() {
+        Some(("fetch", subcommand)) => {
+            eprintln!(
+                "b9 fetch: {}",
+                subcommand
+                    .get_one::<String>("host")
+                    .map_or("", String::as_str)
+            );
+            match crate::fetch_command::run(
+                subcommand
+                    .get_one::<String>("host")
+                    .map_or("", String::as_str),
+                subcommand
+                    .get_one::<String>("path")
+                    .map_or("", String::as_str),
+            ) {
+                Ok(output) => {
+                    print!("{output}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         Some(("i", matches)) => run_glossary(matches.get_one::<String>("term")),
         Some(("st", _)) => run_result(crate::sync::status(
             matches.get_one::<String>("league").map(String::as_str),
@@ -429,6 +462,11 @@ fn root_command(version: &'static str) -> Command {
                         .action(ArgAction::SetTrue),
                 );
         }
+        if descriptor.name == "fetch" {
+            subcommand = subcommand
+                .arg(Arg::new("host").value_name("HOST").required(true))
+                .arg(Arg::new("path").value_name("PATH").required(true));
+        }
         if matches!(descriptor.name, "t" | "tt" | "sp") {
             subcommand = subcommand.arg(
                 Arg::new("force")
@@ -513,6 +551,9 @@ pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
     output.push_str(&section("COMMANDS", mode));
     output.push('\n');
     for descriptor in COMMANDS {
+        if descriptor.name == "fetch" {
+            continue;
+        }
         push_help_row(
             &mut output,
             descriptor.display_label,

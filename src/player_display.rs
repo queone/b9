@@ -72,10 +72,11 @@ fn player_header(
         ""
     } else if player == "HITTER" {
         return format!(
-            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>3}  {:>3}  {:>4}  {:>4}  {:>5}  OWNER",
+            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>4}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>3}  {:>3}  {:>4}  {:>4}  {:>5}  OWNER",
             "POS",
             "STATUS",
             "YR",
+            "ECR",
             "xwOBA",
             "EV",
             "BRL%",
@@ -94,10 +95,11 @@ fn player_header(
         );
     } else {
         return format!(
-            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>5}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>4}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}  OWNER",
+            "{player:<26}  {:<5}  {:<8}  {hand:<1}  {:>4}  {:>4}  {:>5}  {:>6}  {:>5}  {:>5}  {:>5}  {:>5}  {:>5}  {:>4}  {:>3}  {:>3}  {:>4}  {:>5}  {:>5}  OWNER",
             "POS",
             "STATUS",
             "YR",
+            "ECR",
             "FBV",
             "WHIFF%",
             "CH%",
@@ -253,6 +255,9 @@ fn hitter_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String 
     let rank = player
         .rank
         .map_or_else(|| "—".into(), |rank| rank.to_string());
+    let ecr = player
+        .expert_consensus_rank
+        .map_or_else(|| "—".into(), |rank| rank.to_string());
     let advanced = format!(
         "{}  {}  {}  {}  {}  {}  {}",
         advanced(player.hitting_advanced[0], 6, 3, false),
@@ -285,9 +290,10 @@ fn hitter_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String 
         None => dim(&fit("<not yet in Yahoo>", 20), mode),
     };
     format!(
-        "{identity}  {position}  {status}  {}  {}  {}  {}  {stats}  {owner}",
+        "{identity}  {position}  {status}  {}  {}  {}  {}  {}  {stats}  {owner}",
         dim(hand, mode),
         dim(&format!("{rank:>4}"), mode),
+        dim(&format!("{ecr:>4}"), mode),
         dim(&advanced, mode),
         dim(&context, mode)
     )
@@ -327,6 +333,9 @@ fn pitcher_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String
     let rank = player
         .rank
         .map_or_else(|| "—".into(), |rank| rank.to_string());
+    let ecr = player
+        .expert_consensus_rank
+        .map_or_else(|| "—".into(), |rank| rank.to_string());
     let advanced = format!(
         "{}  {}  {}  {}  {}  {}",
         advanced(player.pitching_advanced[0], 5, false),
@@ -353,9 +362,10 @@ fn pitcher_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String
     };
     let styled_stats = format!("{}{}", dim(&stats[..11], mode), &stats[11..]);
     format!(
-        "{identity}  {position}  {status}  {}  {}  {}  {}  {owner}",
+        "{identity}  {position}  {status}  {}  {}  {}  {}  {}  {owner}",
         dim(hand, mode),
         dim(&format!("{rank:>4}"), mode),
+        dim(&format!("{ecr:>4}"), mode),
         dim(&advanced, mode),
         styled_stats
     )
@@ -724,6 +734,7 @@ pub fn render_detail(
     player: &StoredFantasyPlayer,
     logs: &[PlayerGameLog],
     average: Option<&HitterAverage>,
+    next_projection: Option<&str>,
     stale: bool,
     today: &str,
     mode: HelpColorMode,
@@ -770,6 +781,10 @@ pub fn render_detail(
     output.push('\n');
     output.push_str(&detail_split(player, average, mode));
     output.push('\n');
+    if let Some(next) = next_projection {
+        output.push_str(next);
+        output.push('\n');
+    }
     if stale {
         output.push_str("GAME LOG data may be stale — refresh unavailable.\n");
     }

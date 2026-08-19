@@ -24,12 +24,19 @@ fn hitter() -> StoredFantasyPlayer {
         hand: "R".into(),
         rank: Some(4),
         percent_owned: Some(99.0),
+        percentage_started: 80.0,
+        expert_consensus_rank: None,
         owner: None,
         slot: None,
         batting: [10.0, 0.3, 2.0, 1.0, 3.0, 1.0, 0.25],
         pitching: [0.0; 7],
         hitting_advanced: [None; 8],
         pitching_advanced: [None; 6],
+        fangraphs_batted_ball: [None; 2],
+        pqs_counting: [0.0; 6],
+        statcast_samples: [0.0; 4],
+        pqs_prior_counting: [0.0; 6],
+        league_games_played: 0,
     }
 }
 
@@ -56,6 +63,7 @@ fn detail_renders_recent_game_log_and_stale_label() {
             "fixtures/player/game-log.json"
         ))
         .unwrap(),
+        None,
         None,
         true,
         "2026-04-10",
@@ -98,6 +106,7 @@ fn detail_renders_recent_game_log_and_stale_label() {
         &player,
         &[],
         None,
+        None,
         false,
         "2026-04-10",
         HelpColorMode::Color,
@@ -111,6 +120,7 @@ fn detail_renders_recent_game_log_and_stale_label() {
     let status_only = render_detail(
         &player,
         &[],
+        None,
         None,
         false,
         "2026-04-10",
@@ -143,6 +153,7 @@ fn hitter_detail_matches_completed_average_and_game_context_columns() {
         &hitter(),
         &logs,
         Some(&average),
+        None,
         false,
         "2026-08-17",
         HelpColorMode::Plain,
@@ -173,6 +184,7 @@ fn pitcher_detail_uses_pitching_statcast_and_missing_value_fallbacks() {
         &player,
         &[],
         None,
+        None,
         false,
         "2026-04-10",
         HelpColorMode::Plain,
@@ -188,6 +200,7 @@ fn pitcher_detail_uses_pitching_statcast_and_missing_value_fallbacks() {
     let missing_hitter = render_detail(
         &hitter(),
         &[],
+        None,
         None,
         false,
         "2026-04-10",
@@ -377,7 +390,7 @@ fn pitcher_pool_does_not_emit_an_empty_hitter_section() {
     let output = render_players("PITCHERS", &pitchers, HelpColorMode::Plain);
     assert!(output.starts_with("PITCHER"));
     assert!(!output.contains("HITTER"));
-    assert!(output.contains("YR    FBV  WHIFF%    CH%    GB%     K%    BB%     IP"));
+    assert!(output.contains("YR   ECR    FBV  WHIFF%    CH%    GB%     K%    BB%     IP"));
 
     let colored = render_players("PITCHERS", &pitchers, HelpColorMode::Color);
     assert!(colored.contains("\u{1b}[38;5;245m 10.0     1\u{1b}[0m"));
@@ -422,7 +435,7 @@ fn hitter_pool_places_statcast_first_and_formats_percentages() {
     ];
 
     let output = render_players("HITTERS", &[player], HelpColorMode::Plain);
-    assert!(output.contains("YR   xwOBA     EV   BRL%    HH%     K%    BB%    SPD     PA"));
+    assert!(output.contains("YR   ECR   xwOBA     EV   BRL%    HH%     K%    BB%    SPD     PA"));
     assert!(output.contains("6:40p"));
     assert!(!output.contains("  A  "));
     assert!(output.contains(".401   94.2  20.0%  52.1%  28.7%  11.0%   29.5"));

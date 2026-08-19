@@ -352,6 +352,7 @@ pub struct FantasyPlayer {
     pub eligible_positions: Vec<Position>,
     pub injury_status: String,
     pub percent_owned: Option<f64>,
+    pub percentage_started: Option<f64>,
     pub yahoo_rank: Option<i64>,
 }
 
@@ -373,12 +374,19 @@ pub struct StoredFantasyPlayer {
     pub hand: String,
     pub rank: Option<i64>,
     pub percent_owned: Option<f64>,
+    pub percentage_started: f64,
+    pub expert_consensus_rank: Option<i64>,
     pub owner: Option<String>,
     pub slot: Option<String>,
     pub batting: [f64; 7],
     pub pitching: [f64; 7],
     pub hitting_advanced: [Option<f64>; 8],
     pub pitching_advanced: [Option<f64>; 6],
+    pub fangraphs_batted_ball: [Option<f64>; 2],
+    pub pqs_counting: [f64; 6],
+    pub statcast_samples: [f64; 4],
+    pub pqs_prior_counting: [f64; 6],
+    pub league_games_played: i64,
 }
 
 /// Semantic lineup marker embedded in a roster STATUS cell.

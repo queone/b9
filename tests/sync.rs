@@ -102,6 +102,7 @@ fn player(id: i64, name: &str) -> FantasyPlayer {
         eligible_positions: vec![Position::Outfield],
         injury_status: String::new(),
         percent_owned: Some(90.0),
+        percentage_started: Some(80.0),
         yahoo_rank: Some(id),
     }
 }

@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.32.0 | AC37: add player analysis, projections, and fetch diagnostics |
 | 0.31.2 | Retire legacy migration and predecessor references |
 | 0.31.1 | Retire completed predecessor parity documentation |
 | 0.31.0 | Improve player pool and MLB team roster parity |

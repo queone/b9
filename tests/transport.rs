@@ -334,7 +334,7 @@ fn redirect_loops_fail_contextually() {
 }
 
 #[test]
-fn automated_provider_policy_allows_rotowire_only_through_public_lineup_acquisition() {
+fn automated_provider_policy_matches_the_approved_acquisition_surfaces() {
     let providers = include_str!("../src/providers/mod.rs").to_ascii_lowercase();
     let savant = include_str!("../src/providers/savant.rs").to_ascii_lowercase();
     let commands = include_str!("../src/cli.rs").to_ascii_lowercase();
@@ -346,9 +346,9 @@ fn automated_provider_policy_allows_rotowire_only_through_public_lineup_acquisit
     assert!(providers.contains("rotowire"));
     assert!(!commands.contains("rotowire"));
     assert!(!synchronization.contains("rotowire"));
-    for rejected in ["fangraphs", "fantasypros"] {
-        assert!(!providers.contains(rejected));
-        assert!(!commands.contains(rejected));
-        assert!(!synchronization.contains(rejected));
+    for analysis_provider in ["fangraphs", "fantasypros"] {
+        assert!(providers.contains(analysis_provider));
+        assert!(synchronization.contains(analysis_provider));
+        assert!(!commands.contains(analysis_provider));
     }
 }

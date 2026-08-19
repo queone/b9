@@ -4,10 +4,10 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::analysis::pqs::sort_by_pqs;
 use crate::cache::DiskCache;
 use crate::config;
 use crate::domain::{GameIndicator, Matchup, PlayerGameLog, StoredFantasyPlayer};
-use crate::evaluation::sort_by_evaluation;
 use crate::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
@@ -547,10 +547,30 @@ pub fn show_pool(
                     .transpose()
                     .map_err(|failure| error(role, failure))?
                     .flatten();
+                let projection = player
+                    .mlbam_id
+                    .map(|id| {
+                        store.blended_projection(
+                            id,
+                            season,
+                            if player.role == "P" {
+                                "pitching"
+                            } else {
+                                "batting"
+                            },
+                        )
+                    })
+                    .transpose()
+                    .map_err(|failure| error(role, failure))?
+                    .flatten();
+                let next_projection = projection
+                    .as_ref()
+                    .map(|projection| next_projection_line(player, projection, &logs));
                 let output = render_detail(
                     player,
                     &logs,
                     average.as_ref(),
+                    next_projection.as_deref(),
                     stale,
                     &utc_date(SystemTime::now()),
                     detected_help_color_mode(),
@@ -598,7 +618,7 @@ pub fn show_pool(
                 .is_none_or(|candidates| waiver_eligible(player, position, candidates))
     });
     if waiver && sort.is_none() {
-        sort_by_evaluation(&mut players);
+        sort_by_pqs(&mut players);
     } else {
         sort_pool_players(&mut players, sort.unwrap_or("rank"));
     }
@@ -614,6 +634,122 @@ pub fn show_pool(
     yahoo_result_notice(&store, output)
 }
 
+fn line_value(line: &str, label: &str) -> f64 {
+    let fields = line.split_whitespace().collect::<Vec<_>>();
+    fields
+        .windows(2)
+        .find(|pair| pair[0] == label)
+        .and_then(|pair| pair[1].parse().ok())
+        .unwrap_or(0.0)
+}
+
+fn innings_value(line: &str) -> f64 {
+    let value = line_value(line, "IP");
+    let whole = value.trunc();
+    let outs = ((value - whole) * 10.0).round();
+    whole + outs / 3.0
+}
+
+fn next_projection_line(
+    player: &StoredFantasyPlayer,
+    projection: &crate::store::ProjectionRow,
+    logs: &[crate::domain::PlayerGameLog],
+) -> String {
+    if player.role == "P" {
+        let window = if crate::analysis::pitcher_role::classify(&player.positions)
+            == crate::analysis::pitcher_role::PitcherRole::Starter
+        {
+            10.0
+        } else {
+            3.0
+        };
+        let mut recent = crate::analysis::window_proj::PitcherWindow::default();
+        for log in logs.iter().rev() {
+            let ip = innings_value(&log.line);
+            recent.ip += ip;
+            recent.w += line_value(&log.line, "W");
+            recent.sv += line_value(&log.line, "SV");
+            recent.k += line_value(&log.line, "K");
+            recent.qs += line_value(&log.line, "QS");
+            if ip > 0.0 {
+                recent.era += line_value(&log.line, "ERA") * ip;
+                recent.whip += line_value(&log.line, "WHIP") * ip;
+            }
+            if recent.ip >= window {
+                break;
+            }
+        }
+        if recent.ip > 0.0 {
+            recent.era /= recent.ip;
+            recent.whip /= recent.ip;
+        }
+        let projected = crate::analysis::window_proj::PitcherWindow {
+            ip: projection.ip,
+            w: projection.w,
+            sv: projection.sv,
+            k: projection.k,
+            era: projection.era,
+            whip: projection.whip,
+            qs: 0.0,
+        };
+        let next = crate::analysis::window_proj::next_pitcher(
+            Some(projected),
+            (recent.ip > 0.0).then_some(recent),
+            window,
+        );
+        format!(
+            "NEXT{:02}IP  IP {:>4.1}  QS {:>3.0}  W {:>3.0}  SV {:>3.0}  K {:>4.0}  ERA {:>5.2}  WHIP {:>5.2}",
+            window as i64, next.ip, next.qs, next.w, next.sv, next.k, next.era, next.whip
+        )
+    } else {
+        let mut recent = crate::analysis::window_proj::HitterWindow::default();
+        let mut hits = 0.0;
+        let mut at_bats = 0.0;
+        let mut weighted_obp = 0.0;
+        let mut weighted_ops = 0.0;
+        for log in logs.iter().rev() {
+            let pa = line_value(&log.line, "PA");
+            let ab = line_value(&log.line, "AB");
+            recent.pa += pa;
+            at_bats += ab;
+            hits += line_value(&log.line, "H");
+            recent.r += line_value(&log.line, "R");
+            recent.hr += line_value(&log.line, "HR");
+            recent.rbi += line_value(&log.line, "RBI");
+            recent.sb += line_value(&log.line, "SB");
+            weighted_obp += line_value(&log.line, "OBP") * pa;
+            weighted_ops += line_value(&log.line, "OPS") * pa;
+            if recent.pa >= 20.0 {
+                break;
+            }
+        }
+        if recent.pa > 0.0 {
+            recent.avg = if at_bats > 0.0 { hits / at_bats } else { 0.0 };
+            recent.obp = weighted_obp / recent.pa;
+            recent.ops = weighted_ops / recent.pa;
+        }
+        let projected = crate::analysis::window_proj::HitterWindow {
+            pa: projection.pa,
+            r: projection.r,
+            hr: projection.hr,
+            rbi: projection.rbi,
+            sb: projection.sb,
+            avg: projection.avg,
+            obp: projection.obp,
+            ops: projection.obp + projection.slg,
+        };
+        let next = crate::analysis::window_proj::next_hitter(
+            Some(projected),
+            (recent.pa > 0.0).then_some(recent),
+            20.0,
+        );
+        format!(
+            "NEXT20PA  PA {:>3.0}  R {:>3.0}  HR {:>3.0}  RBI {:>3.0}  SB {:>3.0}  AVG {:.3}  OBP {:.3}  OPS {:.3}",
+            next.pa, next.r, next.hr, next.rbi, next.sb, next.avg, next.obp, next.ops
+        )
+    }
+}
+
 fn sort_pool_players(players: &mut [StoredFantasyPlayer], field: &str) {
     match field.to_ascii_lowercase().as_str() {
         "name" | "player" => players.sort_by(|left, right| left.name.cmp(&right.name)),
@@ -621,6 +757,7 @@ fn sort_pool_players(players: &mut [StoredFantasyPlayer], field: &str) {
         "position" | "pos" => players.sort_by(|left, right| left.positions.cmp(&right.positions)),
         "team" => players.sort_by(|left, right| left.team.cmp(&right.team)),
         "yr" | "rank" => players.sort_by_key(|player| player.rank.unwrap_or(i64::MAX)),
+        "ecr" => players.sort_by_key(|player| player.expert_consensus_rank.unwrap_or(i64::MAX)),
         "pa" => players.sort_by(|left, right| right.batting[0].total_cmp(&left.batting[0])),
         "ip" => players.sort_by(|left, right| right.pitching[0].total_cmp(&left.pitching[0])),
         _ => players.sort_by_key(|player| player.rank.unwrap_or(i64::MAX)),
@@ -792,8 +929,18 @@ fn game_logs(
                                 status: String::new(),
                                 batting_order: 0,
                                 line: format!(
-                                    "IP {}  W {}  SV {}  K {}  ERA {}  WHIP {}",
+                                    "IP {}  QS {}  W {}  SV {}  K {}  ERA {}  WHIP {}",
                                     entry.stat.innings_pitched,
+                                    if innings_value(&format!(
+                                        "IP {}",
+                                        entry.stat.innings_pitched
+                                    )) >= 6.0
+                                        && entry.stat.earned_runs <= 3
+                                    {
+                                        1
+                                    } else {
+                                        0
+                                    },
                                     entry.stat.wins,
                                     entry.stat.saves,
                                     entry.stat.strikeouts,
@@ -820,7 +967,8 @@ fn game_logs(
                                 status: String::new(),
                                 batting_order: 0,
                                 line: format!(
-                                    "AB {}  H {}  R {}  HR {}  RBI {}  SB {}  AVG {}",
+                                    "PA {}  AB {}  H {}  R {}  HR {}  RBI {}  SB {}  AVG {}  OBP {}  OPS {}",
+                                    entry.stat.plate_appearances,
                                     entry.stat.at_bats,
                                     entry.stat.hits,
                                     entry.stat.runs,
@@ -828,6 +976,8 @@ fn game_logs(
                                     entry.stat.rbi,
                                     entry.stat.stolen_bases,
                                     entry.stat.average,
+                                    entry.stat.on_base_percentage,
+                                    entry.stat.on_base_plus_slugging,
                                 ),
                             })
                             .collect()
@@ -1074,12 +1224,13 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        apply_game_statuses, overlay_rotowire_side, resolve_date_matchup, select_roster_team,
-        sort_pool_players, weekly_matchup, yahoo_result_notice,
+        apply_game_statuses, innings_value, next_projection_line, overlay_rotowire_side,
+        resolve_date_matchup, select_roster_team, sort_pool_players, weekly_matchup,
+        yahoo_result_notice,
     };
     use crate::domain::{
-        FantasyPlayer, FantasyTeam, GameIndicator, Matchup, MatchupTeam, RosterWeekStats,
-        StoredFantasyPlayer,
+        FantasyPlayer, FantasyTeam, GameIndicator, Matchup, MatchupTeam, PlayerGameLog,
+        RosterWeekStats, StoredFantasyPlayer,
     };
     use crate::providers::mlb::{Linescore, LineupPlayer, ScheduleGame};
     use crate::providers::yahoo_fantasy::{
@@ -1104,12 +1255,19 @@ mod tests {
             hand: "R".into(),
             rank: None,
             percent_owned: None,
+            percentage_started: 0.0,
+            expert_consensus_rank: None,
             owner: None,
             slot: None,
             batting: [0.0; 7],
             pitching: [0.0; 7],
             hitting_advanced: [None; 8],
             pitching_advanced: [None; 6],
+            fangraphs_batted_ball: [None; 2],
+            pqs_counting: [0.0; 6],
+            statcast_samples: [0.0; 4],
+            pqs_prior_counting: [0.0; 6],
+            league_games_played: 0,
         }
     }
 
@@ -1260,12 +1418,19 @@ mod tests {
                 hand: String::new(),
                 rank: Some(9),
                 percent_owned: None,
+                percentage_started: 0.0,
+                expert_consensus_rank: None,
                 owner: Some("Zulu Owner".into()),
                 slot: None,
                 batting: [1.0; 7],
                 pitching: [0.0; 7],
                 hitting_advanced: [None; 8],
                 pitching_advanced: [None; 6],
+                fangraphs_batted_ball: [None; 2],
+                pqs_counting: [0.0; 6],
+                statcast_samples: [0.0; 4],
+                pqs_prior_counting: [0.0; 6],
+                league_games_played: 0,
             },
             crate::domain::StoredFantasyPlayer {
                 yahoo_player_id: Some(2),
@@ -1283,12 +1448,19 @@ mod tests {
                 hand: String::new(),
                 rank: Some(1),
                 percent_owned: None,
+                percentage_started: 0.0,
+                expert_consensus_rank: None,
                 owner: None,
                 slot: None,
                 batting: [2.0; 7],
                 pitching: [0.0; 7],
                 hitting_advanced: [None; 8],
                 pitching_advanced: [None; 6],
+                fangraphs_batted_ball: [None; 2],
+                pqs_counting: [0.0; 6],
+                statcast_samples: [0.0; 4],
+                pqs_prior_counting: [0.0; 6],
+                league_games_played: 0,
             },
         ];
         for (field, expected) in [
@@ -1460,5 +1632,48 @@ mod tests {
             &mut unmatched_pitcher,
         );
         assert!(unmatched.is_none());
+    }
+
+    #[test]
+    fn next_windows_use_plate_appearances_baseball_innings_and_recent_quality_starts() {
+        let hitter_projection = crate::store::ProjectionWrite {
+            pa: 100.0,
+            avg: 0.200,
+            obp: 0.300,
+            slg: 0.400,
+            ..Default::default()
+        };
+        let hitter_log = PlayerGameLog {
+            date: "2026-08-18".into(),
+            game_id: 1,
+            opponent: "BOS".into(),
+            status: String::new(),
+            batting_order: 1,
+            line: "PA 10 AB 8 H 4 R 1 HR 1 RBI 2 SB 0 AVG .500 OBP .500 OPS 1.000".into(),
+        };
+        let hitter = next_projection_line(&stored_player(""), &hitter_projection, &[hitter_log]);
+        assert!(hitter.contains("NEXT20PA") && hitter.contains("AVG 0.290"));
+        assert!(hitter.contains("OBP 0.360") && hitter.contains("OPS 0.790"));
+
+        let mut pitcher = stored_player("");
+        pitcher.role = "P".into();
+        pitcher.positions = "SP".into();
+        let pitcher_projection = crate::store::ProjectionWrite {
+            ip: 100.0,
+            era: 4.0,
+            whip: 1.3,
+            ..Default::default()
+        };
+        let pitcher_log = PlayerGameLog {
+            date: "2026-08-18".into(),
+            game_id: 2,
+            opponent: "BOS".into(),
+            status: String::new(),
+            batting_order: 0,
+            line: "IP 6.2 QS 1 W 1 SV 0 K 8 ERA 2.70 WHIP 1.05".into(),
+        };
+        let pitcher = next_projection_line(&pitcher, &pitcher_projection, &[pitcher_log]);
+        assert!(pitcher.contains("NEXT10IP") && pitcher.contains("QS   2"));
+        assert_eq!(innings_value("IP 6.2"), 6.0 + 2.0 / 3.0);
     }
 }

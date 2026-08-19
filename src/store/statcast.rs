@@ -8,6 +8,8 @@ pub struct StatcastWrite {
     pub mlbam_id: i64,
     pub season: i64,
     pub stat_group: String,
+    pub plate_appearances: i64,
+    pub batted_ball_events: i64,
     pub xwoba: Option<f64>,
     pub exit_velo_avg: Option<f64>,
     pub barrel_pct: Option<f64>,
@@ -53,7 +55,7 @@ impl Store {
             for row in rows {
                 let player_id = transaction.query_row("SELECT id FROM players WHERE mlbam_id=?1 ORDER BY CASE WHEN mlbam_match_source='seed' THEN 0 ELSE 1 END DESC,yahoo_player_id IS NULL,id LIMIT 1", [row.mlbam_id], |result| result.get::<_, i64>(0)).optional().map_err(|error| StoreError::operation("resolve Statcast player identity", &path, error))?;
                 let Some(player_id) = player_id else { continue; };
-                transaction.execute("INSERT INTO statcast_seasons(player_id,season,stat_group,xwoba,exit_velo_avg,barrel_pct,hard_hit_pct,sprint_speed,strikeout_pct,walk_pct,ops,fastball_velo,whiff_pct,chase_pct,gb_pct,fetched_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)", params![player_id,season,group,row.xwoba,row.exit_velo_avg,row.barrel_pct,row.hard_hit_pct,row.sprint_speed,row.strikeout_pct,row.walk_pct,row.ops,row.fastball_velo,row.whiff_pct,row.chase_pct,row.gb_pct,now]).map_err(|error| StoreError::operation("write Statcast snapshot", &path, error))?;
+                transaction.execute("INSERT INTO statcast_seasons(player_id,season,stat_group,pa,bbe,xwoba,exit_velo_avg,barrel_pct,hard_hit_pct,sprint_speed,strikeout_pct,walk_pct,ops,fastball_velo,whiff_pct,chase_pct,gb_pct,fetched_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)", params![player_id,season,group,row.plate_appearances,row.batted_ball_events,row.xwoba,row.exit_velo_avg,row.barrel_pct,row.hard_hit_pct,row.sprint_speed,row.strikeout_pct,row.walk_pct,row.ops,row.fastball_velo,row.whiff_pct,row.chase_pct,row.gb_pct,now]).map_err(|error| StoreError::operation("write Statcast snapshot", &path, error))?;
                 written += 1;
             }
             Ok(written)

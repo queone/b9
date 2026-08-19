@@ -166,6 +166,20 @@ pub fn render_dashboard(
         ("Database", database),
         ("Identities", identities),
         ("Provider freshness", provider_freshness),
+        (
+            "FanGraphs",
+            status
+                .fangraphs_sync
+                .clone()
+                .unwrap_or_else(|| "none".into()),
+        ),
+        (
+            "FantasyPros",
+            status
+                .fantasypros_sync
+                .clone()
+                .unwrap_or_else(|| "none".into()),
+        ),
         ("Provider failures", provider_failures),
         ("Last provider error", last_error.to_owned()),
         ("Unmatched players", unmatched),
@@ -250,6 +264,8 @@ mod tests {
             last_run_at: Some(100),
             database_bytes: Some(1024),
             schema_version: Some(3),
+            fangraphs_sync: Some("failed: truncated".into()),
+            fantasypros_sync: Some("complete at unix 90".into()),
             ..StoreStatus::default()
         };
         let config = Config {
@@ -270,6 +286,8 @@ mod tests {
         assert!(output.contains("Database: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)"));
         assert!(output.contains("Identities: 512 MLB, 480 Yahoo"));
         assert!(output.contains("Provider freshness: unix 100"));
+        assert!(output.contains("FanGraphs: failed: truncated"));
+        assert!(output.contains("FantasyPros: complete at unix 90"));
         assert!(output.contains("Unmatched players: 6"));
         assert!(output.contains("League: 431.l.12345"));
         assert!(!output.contains("No local snapshot"));
@@ -970,6 +988,188 @@ fn synchronize_for_origin_reporting(
             reporter,
         )?;
     }
+
+    record_outcome(
+        &mut outcomes,
+        run_sync_item(
+            &mut store,
+            "fangraphs",
+            "snapshot",
+            &season.to_string(),
+            origin,
+            force,
+            |store| {
+                use crate::providers::fangraphs::{
+                    FangraphsClient, LeaderRow, ProjectionRow as FgProjection,
+                };
+                let client = FangraphsClient::new(http.clone());
+                let leaders:Vec<LeaderRow>=client.fetch_json(&format!("https://www.fangraphs.com/api/leaders/major-league/data?pos=all&stats=bat&lg=all&qual=0&season={season}&season1={season}&type=8&month=0&pageItems=2000&ind=0")).map_err(|e|format!("fetch FanGraphs leaderboard: {e}; prior data was retained"))?;
+                if leaders.len() < 100 {
+                    return Err("validate FanGraphs leaderboard: fewer than 100 rows; prior data was retained".into());
+                }
+                let crosswalk = leaders
+                    .iter()
+                    .filter_map(|r| r.mlbam_id.map(|id| (r.fangraphs_id, id)))
+                    .collect::<BTreeMap<_, _>>();
+                let batted = leaders
+                    .iter()
+                    .filter_map(|r| {
+                        r.mlbam_id.map(|id| crate::store::FangraphsBattedBallWrite {
+                            mlbam_id: id,
+                            season,
+                            fb_pct: r.fb_pct,
+                            hr_fb_pct: r.hr_fb_pct,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let systems = [("steamer", 0.40), ("zips", 0.35), ("atc", 0.25)];
+                let mut raw = Vec::new();
+                for (system, _) in systems {
+                    for group in ["bat", "pit"] {
+                        let rows:Vec<FgProjection>=client.fetch_json(&format!("https://www.fangraphs.com/api/projections?type={system}&stats={group}&pos=all&season={season}&sortstat=ADP&sortorder=desc&page=1_5000")).map_err(|e|format!("fetch FanGraphs {system} projections: {e}; prior data was retained"))?;
+                        for r in rows {
+                            if let Some(id) = crosswalk.get(&r.fangraphs_id) {
+                                raw.push(crate::store::ProjectionWrite {
+                                    mlbam_id: *id,
+                                    season,
+                                    source: system.into(),
+                                    stat_group: if group == "bat" {
+                                        "batting"
+                                    } else {
+                                        "pitching"
+                                    }
+                                    .into(),
+                                    pa: r.pa,
+                                    ip: r.ip,
+                                    hr: r.hr,
+                                    r: r.r,
+                                    rbi: r.rbi,
+                                    sb: r.sb,
+                                    avg: r.avg,
+                                    obp: r.obp,
+                                    slg: r.slg,
+                                    era: r.era,
+                                    whip: r.whip,
+                                    k: r.k,
+                                    w: r.w,
+                                    sv: r.sv,
+                                    bb: r.bb,
+                                });
+                            }
+                        }
+                    }
+                }
+                if raw.len() < 100 {
+                    return Err("validate FanGraphs projections: fewer than 100 resolved rows; prior data was retained".into());
+                }
+                let mut grouped: BTreeMap<(i64, String), Vec<crate::store::ProjectionWrite>> =
+                    BTreeMap::new();
+                for row in &raw {
+                    grouped
+                        .entry((row.mlbam_id, row.stat_group.clone()))
+                        .or_default()
+                        .push(row.clone());
+                }
+                for ((id, group), rows) in grouped {
+                    let total = rows
+                        .iter()
+                        .map(|r| {
+                            systems
+                                .iter()
+                                .find(|(s, _)| *s == r.source)
+                                .map_or(0.0, |(_, w)| *w)
+                        })
+                        .sum::<f64>();
+                    if total > 0.0 {
+                        let mut blend = crate::store::ProjectionWrite {
+                            mlbam_id: id,
+                            season,
+                            source: "blend".into(),
+                            stat_group: group,
+                            ..Default::default()
+                        };
+                        for r in rows {
+                            let w = systems
+                                .iter()
+                                .find(|(s, _)| *s == r.source)
+                                .map_or(0.0, |(_, w)| *w)
+                                / total;
+                            blend.pa += r.pa * w;
+                            blend.ip += r.ip * w;
+                            blend.hr += r.hr * w;
+                            blend.r += r.r * w;
+                            blend.rbi += r.rbi * w;
+                            blend.sb += r.sb * w;
+                            blend.avg += r.avg * w;
+                            blend.obp += r.obp * w;
+                            blend.slg += r.slg * w;
+                            blend.era += r.era * w;
+                            blend.whip += r.whip * w;
+                            blend.k += r.k * w;
+                            blend.w += r.w * w;
+                            blend.sv += r.sv * w;
+                            blend.bb += r.bb * w;
+                        }
+                        raw.push(blend)
+                    }
+                }
+                let chart = crate::providers::fangraphs_closer_chart::fetch(http.clone())
+                    .map_err(|e| e.to_string())?;
+                if chart
+                    .iter()
+                    .map(|row| &row.team)
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    < 30
+                {
+                    return Err("validate FanGraphs closer chart: fewer than 30 teams; prior data was retained".into());
+                }
+                let closers = chart
+                    .into_iter()
+                    .filter(|r| {
+                        matches!(r.role.as_str(), "Closer" | "Co-Closer" | "Closer Committee")
+                    })
+                    .map(|r| (r.team, r.name))
+                    .collect::<Vec<_>>();
+                let count = store
+                    .replace_fangraphs_snapshot(season, &raw, &batted, &closers)
+                    .map_err(|e| e.to_string())?;
+                Ok(count as i64)
+            },
+        ),
+        reporter,
+    )?;
+
+    record_outcome(
+        &mut outcomes,
+        run_sync_item(
+            &mut store,
+            "fantasypros",
+            "ecr",
+            &season.to_string(),
+            origin,
+            force,
+            |store| {
+                let rows = crate::providers::fantasypros::fetch(http.clone())
+                    .map_err(|e| format!("fetch FantasyPros ECR: {e}; prior data was retained"))?;
+                if rows.len() < 100 {
+                    return Err(
+                        "validate FantasyPros ECR: fewer than 100 rows; prior data was retained"
+                            .into(),
+                    );
+                }
+                let writes = rows
+                    .into_iter()
+                    .map(|r| (r.yahoo_player_id, r.name, r.team, r.rank))
+                    .collect::<Vec<_>>();
+                store
+                    .replace_ecr(&writes)
+                    .map(|n| n as i64)
+                    .map_err(|e| e.to_string())
+            },
+        ),
+        reporter,
+    )?;
 
     let espn_outcome = run_sync_item(
         &mut store,

@@ -1,10 +1,11 @@
 //! Reusable b9 application library.
 
+pub mod analysis;
 pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod domain;
-pub mod evaluation;
+pub mod fetch_command;
 pub mod glossary;
 pub mod matchup;
 pub mod mlb_commands;

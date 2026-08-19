@@ -438,9 +438,9 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
         vec![
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/settings?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/standings?format=json",
-            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/teams/roster/players;out=ranks,percent_owned?format=json",
-            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=0;count=25;out=ranks,percent_owned?format=json",
-            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=25;count=25;out=ranks,percent_owned?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/teams/roster/players;out=ranks,percent_owned,percent_started?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=0;count=25;out=ranks,percent_owned,percent_started?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=25;count=25;out=ranks,percent_owned,percent_started?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.1/roster;week=7/players/stats;type=week;week=7?format=json",
         ]

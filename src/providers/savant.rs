@@ -14,6 +14,8 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 const BODY_LIMIT: usize = 16 * 1024 * 1024;
 const BATTING_HEADERS: &[&[&str]] = &[
     &["player_id", "playerid", "id"],
+    &["pa", "plate_appearances"],
+    &["bbe", "batted_ball_events"],
     &["est_woba", "xwoba"],
     &["exit_velocity_avg", "avg_hit_speed", "ev"],
     &["brl_percent", "barrel_batted_rate", "barrel_pct"],
@@ -25,6 +27,8 @@ const BATTING_HEADERS: &[&[&str]] = &[
 ];
 const PITCHING_HEADERS: &[&[&str]] = &[
     &["player_id", "playerid", "id"],
+    &["pa", "bf", "batters_faced"],
+    &["bbe", "batted_ball_events"],
     &["ff_avg_speed", "fastball_velo", "fbv"],
     &["whiff_percent", "whiff_pct"],
     &["chase_percent", "oz_swing_percent", "ch_pct"],
@@ -110,9 +114,9 @@ impl SavantClient {
         }
         let mut url = self.endpoints.root.clone();
         let selections = if group == "batting" {
-            "xwoba,exit_velocity_avg,barrel_batted_rate,hard_hit_percent,k_percent,bb_percent,sprint_speed,on_base_plus_slg"
+            "pa,bbe,xwoba,exit_velocity_avg,barrel_batted_rate,hard_hit_percent,k_percent,bb_percent,sprint_speed,on_base_plus_slg"
         } else {
-            "ff_avg_speed,whiff_percent,oz_swing_percent,groundballs_percent,k_percent,bb_percent"
+            "pa,bbe,ff_avg_speed,whiff_percent,oz_swing_percent,groundballs_percent,k_percent,bb_percent"
         };
         url.query_pairs_mut()
             .append_pair("year", &season.to_string())
@@ -225,10 +229,12 @@ pub fn parse_csv(
                 format!("row {} lacks a positive player id", offset + 2),
             ));
         }
-        rows.push(StatcastWrite {
+        let row = StatcastWrite {
             mlbam_id,
             season,
             stat_group: group.into(),
+            plate_appearances: integer(&map, &["pa", "bf", "plate_appearances", "batters_faced"]),
+            batted_ball_events: integer(&map, &["bbe", "batted_ball_events"]),
             xwoba: number(&map, &["est_woba", "xwoba"]),
             exit_velo_avg: number(&map, &["exit_velocity_avg", "avg_hit_speed", "ev"]),
             barrel_pct: number(&map, &["brl_percent", "barrel_batted_rate", "barrel_pct"]),
@@ -241,7 +247,27 @@ pub fn parse_csv(
             whiff_pct: number(&map, &["whiff_percent", "whiff_pct"]),
             chase_pct: number(&map, &["chase_percent", "oz_swing_percent", "ch_pct"]),
             gb_pct: number(&map, &["groundballs_percent", "gb_percent", "gb_pct"]),
-        });
+        };
+        let needs_pa = if group == "batting" {
+            row.xwoba.is_some()
+        } else {
+            row.fastball_velo.is_some() || row.whiff_pct.is_some() || row.chase_pct.is_some()
+        };
+        let needs_bbe = if group == "batting" {
+            row.exit_velo_avg.is_some() || row.barrel_pct.is_some() || row.hard_hit_pct.is_some()
+        } else {
+            row.gb_pct.is_some()
+        };
+        if (needs_pa && row.plate_appearances <= 0) || (needs_bbe && row.batted_ball_events <= 0) {
+            return Err(ProviderError::invalid(
+                "parse Baseball Savant leaderboard",
+                format!(
+                    "row {} lacks a required PA/BF or BBE denominator",
+                    offset + 2
+                ),
+            ));
+        }
+        rows.push(row);
     }
     if rows.is_empty() {
         return Err(ProviderError::invalid(

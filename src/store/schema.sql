@@ -290,8 +290,6 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 
 CREATE TABLE IF NOT EXISTS dashboard_status (
     id                         INTEGER PRIMARY KEY CHECK (id = 1),
-    daemon_started_at          INTEGER,
-    daemon_stopped_at          INTEGER,
     last_run_at                INTEGER,
     last_run_status            TEXT,
     next_run_at                INTEGER,
@@ -303,7 +301,7 @@ CREATE TABLE IF NOT EXISTS dashboard_status (
     provider_freshness_at      INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS projection_seasons (
+CREATE TABLE IF NOT EXISTS player_projections (
     player_id   INTEGER NOT NULL,
     season      INTEGER NOT NULL,
     source      TEXT    NOT NULL,   -- 'steamer', 'zips', 'atc', 'blend'
@@ -325,6 +323,15 @@ CREATE TABLE IF NOT EXISTS projection_seasons (
     bb          REAL,
     fetched_at  INTEGER NOT NULL,
     PRIMARY KEY (player_id, season, source, stat_group)
+);
+
+CREATE TABLE IF NOT EXISTS fangraphs_batted_ball (
+    player_id   INTEGER NOT NULL,
+    season      INTEGER NOT NULL,
+    fb_pct      REAL,
+    hr_fb_pct   REAL,
+    fetched_at  INTEGER NOT NULL,
+    PRIMARY KEY (player_id, season)
 );
 
 CREATE TABLE IF NOT EXISTS yahoo_transactions (

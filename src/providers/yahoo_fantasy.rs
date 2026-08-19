@@ -418,6 +418,7 @@ pub fn parse_league_rosters(
                 eligible_positions: eligible,
                 injury_status: text(&map, "status"),
                 percent_owned: decimal(&map, "value"),
+                percentage_started: nested_decimal(&map, "percent_started"),
                 yahoo_rank: yahoo_rank(&map),
             });
             slots.insert((team_key.clone(), player_id, selected));
@@ -470,11 +471,18 @@ pub fn parse_free_agents(value: &Value) -> Result<Vec<FantasyPlayer>, YahooFanta
                 eligible_positions: eligible,
                 injury_status: text(&map, "status"),
                 percent_owned: decimal(&map, "value"),
+                percentage_started: nested_decimal(&map, "percent_started"),
                 yahoo_rank: yahoo_rank(&map),
             },
         );
     }
     Ok(players.into_values().collect())
+}
+
+fn nested_decimal(map: &Map<String, Value>, key: &str) -> Option<f64> {
+    map.get(key)
+        .map(flattened)
+        .and_then(|values| decimal(&values, "value"))
 }
 
 /// Parse one weekly scoreboard response.

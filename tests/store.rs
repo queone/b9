@@ -6,15 +6,16 @@ use b9::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path, inspec
 use rusqlite::Connection;
 use tempfile::tempdir;
 
-const TABLES: [&str; 22] = [
+const TABLES: [&str; 23] = [
     "command_snapshots",
     "dashboard_status",
+    "fangraphs_batted_ball",
     "mlb_game_schedule",
     "mlb_odds",
     "mlb_team_active_rosters",
     "mlbam_season_stats",
     "players",
-    "projection_seasons",
+    "player_projections",
     "schema_version",
     "season_sync_status",
     "statcast_seasons",
@@ -217,6 +218,9 @@ fn version_three_migration_adds_computed_statcast_rates_without_losing_rows() {
     let path = directory.path().join("version-three.db");
     Store::open_at(&path).unwrap().close().unwrap();
     let connection = Connection::open(&path).unwrap();
+    connection
+        .execute("UPDATE dashboard_status SET last_error='kept'", [])
+        .unwrap();
     connection.execute_batch(
         "ALTER TABLE statcast_seasons RENAME TO statcast_seasons_v4;
          CREATE TABLE statcast_seasons (
@@ -230,9 +234,43 @@ fn version_three_migration_adds_computed_statcast_rates_without_losing_rows() {
     drop(connection);
 
     let store = Store::open_at(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 4);
+    assert_eq!(store.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     store.close().unwrap();
     let connection = Connection::open(&path).unwrap();
+    let dashboard_columns = connection
+        .prepare("PRAGMA table_info(dashboard_status)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        !dashboard_columns
+            .iter()
+            .any(|name| name.starts_with("daemon_"))
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT last_error FROM dashboard_status", [], |row| row
+                .get::<_, String>(
+                0
+            ))
+            .unwrap(),
+        "kept"
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM sqlite_schema WHERE name='{}'",
+                    concat!("projection_", "seasons")
+                ),
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+        0
+    );
     let row: (f64, Option<f64>, Option<f64>, Option<f64>) = connection
         .query_row(
             "SELECT xwoba,strikeout_pct,walk_pct,ops FROM statcast_seasons WHERE player_id=7",

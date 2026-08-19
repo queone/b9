@@ -421,7 +421,7 @@ impl YahooFantasySource for YahooPublicClient {
         parse_league_rosters(
             league_key,
             &self.get_json(format!(
-                "{PUBLIC_FANTASY_URL}/league/{league_key}/teams/roster/players;out=ranks,percent_owned?format=json"
+                "{PUBLIC_FANTASY_URL}/league/{league_key}/teams/roster/players;out=ranks,percent_owned,percent_started?format=json"
             ))?,
         )
     }
@@ -432,7 +432,7 @@ impl YahooFantasySource for YahooPublicClient {
         for page in 0..MAX_FREE_AGENT_PAGES {
             let offset = page * FREE_AGENT_PAGE_SIZE;
             let rows = parse_free_agents(&self.get_json(format!(
-                "{PUBLIC_FANTASY_URL}/league/{league_key}/players;status=A;start={offset};count={FREE_AGENT_PAGE_SIZE};out=ranks,percent_owned?format=json"
+                "{PUBLIC_FANTASY_URL}/league/{league_key}/players;status=A;start={offset};count={FREE_AGENT_PAGE_SIZE};out=ranks,percent_owned,percent_started?format=json"
             ))?)?;
             if rows.is_empty() {
                 break;
@@ -1010,6 +1010,7 @@ impl RawRoot {
                         eligible_positions,
                         injury_status: raw_player.status.clone(),
                         percent_owned: None,
+                        percentage_started: None,
                         yahoo_rank: None,
                     });
                 slots.push(FantasyRosterSlot {

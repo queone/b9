@@ -72,6 +72,7 @@ fn snapshot() -> FantasySnapshotWrite {
                 eligible_positions: vec![Position::Outfield],
                 injury_status: String::new(),
                 percent_owned: Some(99.0),
+                percentage_started: Some(80.0),
                 yahoo_rank: Some(1),
             },
             FantasyPlayer {
@@ -83,6 +84,7 @@ fn snapshot() -> FantasySnapshotWrite {
                 eligible_positions: vec![Position::Outfield],
                 injury_status: String::new(),
                 percent_owned: Some(98.0),
+                percentage_started: Some(70.0),
                 yahoo_rank: Some(2),
             },
         ],
@@ -128,6 +130,16 @@ fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
             .as_deref(),
         Some("Two")
     );
+    assert_eq!(
+        store
+            .fantasy_players("mlb.l.1")
+            .unwrap()
+            .into_iter()
+            .find(|player| player.yahoo_player_id == Some(102))
+            .unwrap()
+            .percentage_started,
+        70.0
+    );
     let mut invalid = snapshot();
     invalid.slots[0].team_key = "other".into();
     assert!(store.replace_fantasy_snapshot(&invalid).is_err());
@@ -148,6 +160,7 @@ fn complete_free_agent_replacement_is_scoped_to_its_league() {
         eligible_positions: vec![Position::Outfield],
         injury_status: String::new(),
         percent_owned: Some(10.0),
+        percentage_started: Some(20.0),
         yahoo_rank: Some(3),
     });
     store.replace_fantasy_snapshot(&first).unwrap();

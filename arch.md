@@ -14,7 +14,7 @@ Maintain a local-first Rust fantasy-baseball utility.
 
 ## System Summary
 
-The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, and MLB adapters, foreground fantasy synchronization, operational utilities, and daily or weekly matchup surfaces. Rejected scraping providers and deeper analysis remain outside the current port.
+The repository contains a metadata-driven Rust CLI, reusable domain records, an embedded glossary, private configuration, isolated SQLite persistence, bounded caching and HTTP, typed Yahoo, ESPN, MLB, FanGraphs, and FantasyPros adapters, foreground fantasy synchronization, operational utilities, and daily or weekly matchup surfaces. The analysis boundary computes PQS, early-season blends, waiver thresholds, and window projections from durable provider facts.
 
 ## Current Platform
 
@@ -34,10 +34,10 @@ The repository contains a metadata-driven Rust CLI, reusable domain records, an 
 - `src/sync.rs`: public-only setup, status, foreground synchronization, and persistent cross-process synchronization locking
 - `src/operations.rs`: confirmed database reset
 - `src/matchup.rs`: public selected-period Yahoo acquisition, daily MLB-stat overlays, snapshot fallback, and terminal rendering
-- `src/evaluation.rs`: deterministic durable-season ranking used by roster and waiver ordering
+- `src/analysis/`: on-demand PQS ranking, current/prior blending, waiver thresholds, pitcher roles, and projection windows
 - `src/glossary.rs`: embedded glossary parsing, lookup, suggestions, and plain-text rendering
 - `src/store.rs`: isolated SQLite ownership, schema migration, inspection, and transaction boundary
-- `src/store/schema.sql`: embedded b9 schema-version-two table definitions
+- `src/store/schema.sql`: embedded current b9 schema definitions
 - `src/store/freshness.rs`: typed item and row freshness policies and lifecycle state
 - `src/store/odds.rs`: validated atomic moneyline replacement and typed game-scoped reads
 - `src/store/snapshots.rs`: validated durable command snapshots and stale metadata
