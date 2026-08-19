@@ -60,6 +60,7 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - State "Govna contract loaded." before the first substantive govna-governed action of a session, and only after internalizing AGENTS.md.
 - Treat planning, editing, reviewing, command choice, and implementation work as substantive actions.
 - Before any file change, confirm the gate set: AC status, explicit authorization, scoped edits, tests in the same pass, and no agent-run commits.
+- Treat changed-content integrity, AC-template structure, Instruction Style, and applicable Pre-Implementation Verification as the tests-in-the-same-pass gate when a change pass creates or edits only an active AC document.
 - Resolve instruction conflicts in this order: user instruction within authorized scope, then AGENTS.md, then referenced govna docs, then model defaults.
 - Stop and ask when a request bypasses a required govna gate or lacks required authorization, scope, or context.
 
@@ -174,6 +175,8 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Pause Refine when a Director-specific decision remains unresolved.
 - Edit the AC during Refine when an Audit finding or settled Director decision requires an AC change.
 - Complete Refine without editing the AC when no Audit finding or settled Director decision requires an AC change and no Director-specific decision remains unresolved.
+- Validate AC-document-only Draft and Refine edits with the required document checks.
+- Keep AC-document-only Draft and Refine edits outside canonical validation cycles.
 - Do not begin implementation during Refine.
 - Pause after Refine and await explicit Director implementation-ready confirmation to Implement.
 - Implement only the settled AC scope during Implement.
@@ -338,6 +341,8 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 
 ### Build Verification
 
+- Treat a change pass that creates or edits only an active AC document as outside a canonical validation cycle.
+- Validate an AC-document-only change pass with the document checks in `### Session Entry`.
 - Start a validation cycle when an authorized change pass is ready for validation.
 - Run `./build.sh` as the first validation command in every validation cycle.
 - Use `./build.sh` for repository-wide formatting validation, testing, vetting, linting, static analysis, and compilation checks.
@@ -368,8 +373,10 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 
 - Label each acceptance test with source axis (`[Automated]` / `[Manual]`) and timing axis (`[Pre-release gate]` default; `[Post-release verification]` explicit). See `govna/ac-template.md`.
 - Name test identifiers, output labels, comments, and errors by behavior.
-- Reserve AC, AT, Class, Part, Round, and IE numbers for CHANGELOG rows, commit messages, `plan.md`'s own `IE<N>:` bullets, and `Historical:` comments.
-- Treat every Markdown documentation file as out of bounds for bare AC, AT, Class, Part, Round, and IE numbers, except `plan.md`'s own `IE<N>:` bullets.
+- Reserve bare AC and AT identifiers for CHANGELOG rows, commit messages, active `govna/ac<N>-<slug>.md` documents, literal examples in `govna/ac-template.md`, and `Historical:` comments.
+- Reserve bare Class, Part, and Round identifiers for CHANGELOG rows, commit messages, and `Historical:` comments.
+- Reserve bare IE identifiers for CHANGELOG rows, commit messages, `plan.md`'s own `IE<N>:` bullets, and `Historical:` comments.
+- Treat every other Markdown documentation file as out of bounds for bare AC, AT, Class, Part, Round, and IE identifiers.
 - Use the `Historical:` prefix on a comment only when it references a shipped AC and the context aids the reader; delete the reference if no longer relevant.
 
 ### Code Style and Conventions
