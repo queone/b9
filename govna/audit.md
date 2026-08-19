@@ -1,8 +1,6 @@
 # Audit
 
-`govna audit` compares an adopted repo's governance artifacts against what `govna render` would produce for it now, and emits a `govna/ac<N>-audit-<canon-version>.md` stub listing the divergences for the Director to resolve.
-
-Run it from the consumer repo root (no positional arguments) after `govna render` or `govna apply`.
+Run `govna audit` without positional arguments from an adopted consumer root to compare governance with current render output and emit a Director-routed divergence AC when needed.
 
 ## Usage
 
@@ -19,7 +17,7 @@ Flags:
 - `-n, --repo-name <name>` — override repo name (default: basename of the target directory).
 - `-h, --help` — show this help.
 
-Preconditions: the target must be a govna-adopted repo (`AGENTS.md` present, plus a govna adoption signal — one of `govna/ac-template.md`, `govna/release.md`, `govna/build-release.md`, or a `CHANGELOG.md` row referencing `govna apply` or `govna render`) and a git worktree (`.git/` present, `git` on `PATH`).
+Require `AGENTS.md`, Git worktree support, and an adoption signal: an AC/release/build-release canon file or a CHANGELOG reference to `govna apply` or `govna render`.
 
 ## Classification
 

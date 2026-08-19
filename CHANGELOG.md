@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.32.2 | AC39: adopt Govna v0.22.2 canon |
 | 0.32.1 | AC38: adopt Govna v0.21.0 canon |
 | 0.32.0 | AC37: add player analysis, projections, and fetch diagnostics |
 | 0.31.2 | Retire legacy migration and predecessor references |
