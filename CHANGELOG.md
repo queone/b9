@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.34.0 | Rename b9 to skout |
 | 0.33.2 | Refresh b9 product and architecture documentation |
 | 0.33.1 | AC40: adopt Govna v0.23.0 canon |
 | 0.33.0 | Fix matchup daily and historical data displays |
