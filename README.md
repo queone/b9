@@ -119,7 +119,7 @@ ESPN and OddsShark are supplemental sources and do not own command success. Odds
 Requires a Rust toolchain with edition 2024 support.
 
 ```bash
-./build.sh                                      # format, lint, test, build, and install
+./build.sh                                     # format, lint, test, build, and install
 ./build.sh prep v1.2.3 "release message"       # prepare release metadata
 ./build.sh v1.2.3 "release message"            # tagged release workflow
 ```
