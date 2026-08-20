@@ -82,7 +82,7 @@ Use namespace `mlb`, logical keys `hitting-range-<season>-<start>-<end>` and `pi
 
 ## Fixture Provenance
 
-The fixtures were derived from predecessor executable contracts, MLB provider tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
+The fixtures were derived from b9's typed provider contracts, adapter tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
 
 | Fixture | Exact endpoint or query | Origin |
 |---|---|---|
@@ -107,6 +107,6 @@ Exercise every implemented endpoint live and compare its shape with the committe
 
 Foreground synchronization uses regular-season bulk hitting and pitching identities to reconcile uniquely matching Yahoo players by normalized name, team abbreviation, and role. It stores the current season plus the five completed seasons, independently manifests hitting and pitching completeness, and requires at least 200 hitting or 150 pitching rows before replacing completed-season data. Player cards exclude the current season from AVG162G and compute the rolling pace with cumulative rate formulas.
 
-Sync requires the team directory to contain 30 unique current clubs before dispatching 40-man requests. Each team replaces independently, retains its prior roster on failure, and records a durable team result; foreground output reports one aggregate roster line. Authenticated Yahoo injury status remains primary, with `D7`, `D10`, `D15`, and `D60` roster codes supplying `IL7`, `IL10`, `IL15`, and `IL60` only when precise Yahoo status is unavailable.
+Sync requires the team directory to contain 30 unique current clubs before dispatching 40-man requests. Each team replaces independently, retains its prior roster on failure, and records a durable team result; foreground output reports one aggregate roster line. Public Yahoo injury status remains primary, with `D7`, `D10`, `D15`, and `D60` roster codes supplying `IL7`, `IL10`, `IL15`, and `IL60` only when Yahoo status is unavailable.
 
 Hitter detail walks the last ten calendar days through schedule data and joins player statistics by MLB game ID. It uses boxscore batting order for the start marker, derives opponent and final result from the player's team perspective, and stores successful schedule and boxscore payloads in `player_card_schedule` and `player_card_boxscore` command snapshots for independent stale fallback. The baseline matchup uses the current UTC schedule only for optional game and ESPN moneyline context; MLB failure does not suppress valid Yahoo output.

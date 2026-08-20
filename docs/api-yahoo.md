@@ -21,9 +21,10 @@ b9 acquires read-only Yahoo fantasy data without OAuth, cookies, browser state, 
 - Fetch `/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned?format=json` until the first empty page for active free agents.
 - Fetch `/league/{league_key}/scoreboard[;week={week}]?format=json` for current or historical matchup scoreboards.
 - Fetch `/team/{team_key}/roster;week={week}/players/stats;type=week;week={week}?format=json` for weekly roster statistics.
+- Fetch `/team/{team_key}/roster;date={date}/players/stats;type=date;date={date}?format=json` for one active-season matchup day.
 - Fetch `/league/mlb.l.public/players;player_ids={ids};out=ranks;ranks=season?format=json_f` in bounded batches for public season ranks.
 
-A full Yahoo league key such as `469.l.170874` is preserved. A bare id or legacy `public.170874` value is normalized to `mlb.l.170874`, the public alias accepted by the league-scoped host. Historical `public_pull` storage origins remain readable but are never newly written.
+A full Yahoo league key such as `469.l.170874` is preserved. A bare ID is normalized to `mlb.l.<id>`, the public alias accepted by the league-scoped host.
 
 ## Transport and security
 
@@ -50,12 +51,11 @@ Ambiguous, missing, or stale selections fail without guessing. Synchronization f
 ## Command behavior
 
 - Use public Yahoo data for foreground `sync`.
-- Use public Yahoo scoreboards and weekly team statistics for `m` and `rt --weekly`, including explicit weeks and ISO dates.
+- Use public Yahoo scoreboards and period statistics for `m` and `rt --weekly`, including explicit weeks and active-season `MMM-DD` matchup days.
 - Require MLBAM identity reconciliation before daily matchup overlays; report unresolved players instead of silently applying an empty overlay.
 - Populate waiver candidates from the complete public free-agent snapshot.
 - Keep `st` local-only.
-- Remove `login`, `pp`, `pull-public`, authenticated `fetch`, and Yahoo `-o/--oauth` flags.
-- Keep Yahoo authentication and credential-cleanup commands absent.
+- Keep the command surface free of Yahoo authentication, credential cleanup, and roster-mutation operations.
 
 ## Response contracts
 

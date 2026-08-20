@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.33.2 | Refresh b9 product and architecture documentation |
 | 0.33.1 | AC40: adopt Govna v0.23.0 canon |
 | 0.33.0 | Fix matchup daily and historical data displays |
 | 0.32.2 | AC39: adopt Govna v0.22.2 canon |

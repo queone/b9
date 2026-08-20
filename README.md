@@ -1,35 +1,131 @@
 # b9
 
-## MLB utilities
-
-Run `b9 t` to show compact 40-man roster tables or `b9 t [team]` to select a club by abbreviation, city, or nickname. The roster rows include season statistics and locally cached Yahoo rank, eligibility, and owner context when available. Run `b9 tt` for division-grouped MLB standings with inline team totals. Run `b9 sp` for three compact host-local slate days with paired probable pitchers, matchup odds bars, and optional local roster context.
-
-Use `-f` or `--force` with any MLB utility command to bypass its freshness gate. These commands use unauthenticated MLB, ESPN, and OddsShark data and never require or refresh Yahoo authorization. Complete cached snapshots remain available with a stale warning when a provider refresh fails. OddsShark is an unofficial future-game source and may degrade without failing the MLB slate.
-
-`b9` is a Rust fantasy-baseball utility with fixture-backed deterministic behavior, isolated state, foreground synchronization, bounded transport, and snapshot recovery.
+Read-only decision-support CLI for Yahoo Fantasy Baseball.
 
 ## Why
 
-Provide fast, local-first fantasy-baseball decisions from public data sources.
+Fantasy baseball managers make dozens of small decisions every day: who to start, who to bench, which categories to chase, and who to pick up. The useful data is spread across Yahoo, MLB, Baseball Savant, FanGraphs, FantasyPros, and game and odds providers. b9 assembles that context into compact terminal views so you can understand the matchup, act on it, and move on.
 
-## Current CLI
+## Overview
 
-Run `b9` or `b9 --help` to see the implemented command surface in b9's compact Usage format. Supported 256-color terminals receive the b9 title and section hierarchy; redirected output, `NO_COLOR`, `TERM=dumb`, and terminals without advertised 256-color support receive the same layout as plain text. Run `b9 --version` to print the independently versioned binary contract.
+b9 reads a configured public Yahoo league, enriches its players with MLB and analytical data, and presents matchup-aware roster, player-pool, standings, and probable-pitcher views. The primary workflow centers on `b9 m`, which combines the current head-to-head matchup with today's player statistics and game state. `b9 m -W` shows the running weekly player totals instead.
 
-Use `b9 i [TERM]` to browse the full glossary or look up one term. The glossary is compiled into the binary and works offline without the repository checkout. Ambiguous non-interactive lookups report matching keys and ask for an exact key.
+b9 never changes a Yahoo roster. Yahoo access is unauthenticated and public-only: no developer application, OAuth token, browser login, cookie, or Keychain entry is required. Data is synchronized in the foreground and stored locally in complete snapshots so the last usable state remains available when a provider refresh fails.
 
-Use `b9 sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic Yahoo setup and foreground refresh. In an interactive terminal, `sync` prompts for a missing league or primary team and saves both selections. Use `st` for local status; `m`, `r`, `rt`, `h`, and `p` for fantasy decisions; `t`, `tt`, and `sp` for MLB context; and `reset` for explicit local-state removal. Player-pool views use PQS analysis, FanGraphs projections and closer roles, and FantasyPros ECR when those snapshots are available. Use `b9 fetch <host> <path>` only to inspect a provider adapter's raw request and response; it never writes local data. Yahoo fantasy reads use unauthenticated public endpoints and never consult the Keychain. Background synchronization and Yahoo authentication commands are retired. Tables use fixed-width hierarchy, semantic 256-color roles, and an equivalent plain redirected fallback.
+For architecture and design details, see [arch.md](arch.md).
 
-`b9 sync` refreshes Yahoo league settings, standings, complete rosters, and free agents alongside MLB and odds data. Yahoo resources are staged and validated before one atomic fantasy-snapshot replacement. Each completed foreground step appears immediately, followed by one aggregate result. A provider failure retains that provider's last complete data and does not block unrelated sources; retry later after checking network access.
+## Setup
 
-Yahoo's public fantasy endpoints are unofficial and may change, deny access, or return incompatible payloads without notice. b9 sends no Yahoo cookies or authorization headers, performs no league enumeration or access-denial evasion, and retains the last complete snapshot when refresh fails.
+Select your Yahoo league and fantasy team with one foreground sync:
+
+```bash
+b9 sync -l 170874 -T Toros
+```
+
+The league may be a numeric ID or full Yahoo league key. The team may be a team key or name. In an interactive terminal, `b9 sync` prompts when either selection is missing and saves the result for later commands.
+
+```bash
+b9 st       # show local provider and snapshot status
+b9 sync     # refresh the saved league and team
+```
+
+Yahoo's public fantasy endpoints are unofficial and may deny access or change without notice. b9 does not attempt to bypass those restrictions; it retains the last complete snapshot and reports recovery guidance.
+
+## Usage
+
+```bash
+# Matchup — the primary command
+b9 m                     # today's player stats and current matchup totals
+b9 m -W                  # weekly running player totals
+b9 m -D jul-01           # one day from the active season
+b9 m -w 3                # a specific matchup week (weekly view)
+
+# Roster inspection
+b9 r                     # your fantasy roster
+b9 r "team name"         # another fantasy roster
+b9 rt                    # roster category totals
+b9 rt -w                 # current weekly totals
+
+# Player pools and detail cards
+b9 h                     # browse hitters
+b9 p                     # browse pitchers
+b9 h 50                  # show 50 hitters
+b9 h "player name"       # hitter detail card
+b9 p "player name"       # pitcher detail card
+b9 h -w                  # hitter waiver candidates
+b9 p -w                  # pitcher waiver candidates
+b9 h -s ops              # sort by a displayed field
+b9 h -p OF               # filter by eligible position
+
+# MLB-wide views
+b9 t                     # every MLB 40-man roster
+b9 t pirates             # select by abbreviation, city, or nickname
+b9 tt                    # MLB standings and team season totals
+b9 sp                    # three-day probable-pitcher slate
+b9 sp -f                 # bypass the slate freshness gate
+
+# Reference and diagnostics
+b9 i                     # browse the embedded glossary
+b9 i xwoba               # look up one term
+b9 fetch <host> <path>   # inspect an allowlisted provider response
+
+# Local state
+b9 reset                 # explicitly delete the local b9 database
+```
+
+Use `-l <league-key>` on fantasy commands to override the saved league for one run. Use `-d` or `--debug` to print operation diagnostics. Run `b9 --help` for the complete command surface.
+
+Player-pool views incorporate PQS analysis, FanGraphs projections and closer roles, FantasyPros ECR, and locally synchronized Yahoo rank and ownership when available. Fixed-width tables use semantic color in supported 256-color terminals and equivalent plain text when redirected, when `NO_COLOR` is set, or when `TERM=dumb`.
+
+## Example Use Case
+
+It is Thursday morning and your head-to-head categories are close. Start with the daily matchup:
+
+```bash
+b9 m
+```
+
+The side-by-side view shows today's player results and game state while the totals and W/T/L summary retain the whole matchup week's score. If you need to inspect every player's contribution for the week, switch views:
+
+```bash
+b9 m -W
+```
+
+If stolen bases or home runs are within reach, browse the waiver pool and inspect a candidate:
+
+```bash
+b9 h -w
+b9 h "player name"
+```
+
+The detail card combines identity, ownership, season performance, projections, Statcast context, and recent game history. b9 remains advisory; make any roster move directly in Yahoo.
+
+## Data Sources
+
+| Source | Authentication | Used for |
+|--------|----------------|----------|
+| Yahoo Fantasy public endpoints | None | League settings, standings, rosters, free agents, ownership, ranks, and matchup statistics |
+| [MLB StatsAPI](https://statsapi.mlb.com/api/v1) | None | Rosters, player identities, statistics, schedules, injuries, and game logs |
+| [Baseball Savant](https://baseballsavant.mlb.com) | None | Statcast hitting and pitching metrics |
+| [FanGraphs](https://www.fangraphs.com) | None | Projections, advanced statistics, and closer roles |
+| [FantasyPros](https://www.fantasypros.com) | None | Expert Consensus Rankings |
+| ESPN | None | Current-day game and odds context |
+| OddsShark | None | Optional future-game odds |
+
+ESPN and OddsShark are supplemental sources and do not own command success. OddsShark is unofficial and may degrade without failing the probable-pitcher slate.
+
+## Building from Source
+
+Requires a Rust toolchain with edition 2024 support.
+
+```bash
+./build.sh                                      # format, lint, test, build, and install
+./build.sh prep v1.2.3 "release message"       # prepare release metadata
+./build.sh v1.2.3 "release message"            # tagged release workflow
+```
+
+`./build.sh` is the canonical repository validation and release command. A successful normal build installs the `b9` binary under the active Cargo home.
 
 ## Governance
 
-This repo is governed by an explicit session-entry contract for AI coding agents — see [`govna/operator-contract-rationale.md`](govna/operator-contract-rationale.md) for the design reasoning and [`AGENTS.md`](AGENTS.md) for the operational rules.
-
-## AC Workflow
-
-Here, "AC" names both the acceptance-criteria document—the change blueprint—and the governed change it tracks from Draft through Package.
-
-Use the standalone action vocabulary `Draft → Audit → Refine → Implement → Ratify → Package` for an active AC. Draft creates the AC; Audit, Refine, Implement, and Ratify are the four AC phases; Package is post-Ratify release preparation. Accept lowercase forms for the phase actions and `package`, `pack`, or `prep` for Package. Ordinary coding phrases such as `build`, `prepare the build`, and `package the binary` do not advance the workflow.
+This repository is governed by an explicit session-entry contract for AI coding agents. See [govna/operator-contract-rationale.md](govna/operator-contract-rationale.md) for the design reasoning and [AGENTS.md](AGENTS.md) for the operational rules.
