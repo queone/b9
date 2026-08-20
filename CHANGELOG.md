@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.33.1 | AC40: adopt Govna v0.23.0 canon |
 | 0.33.0 | Fix matchup daily and historical data displays |
 | 0.32.2 | AC39: adopt Govna v0.22.2 canon |
 | 0.32.1 | AC38: adopt Govna v0.21.0 canon |
