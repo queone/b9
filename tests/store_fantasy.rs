@@ -147,6 +147,31 @@ fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
 }
 
 #[test]
+fn yahoo_mlb_identity_lookup_includes_players_outside_league_views() {
+    let directory = tempdir().unwrap();
+    let store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    Connection::open(store.path())
+        .unwrap()
+        .execute(
+            "INSERT INTO players(yahoo_player_id,mlbam_id,name,synced_at) VALUES(999,700999,'Matchup Only',1)",
+            [],
+        )
+        .unwrap();
+
+    assert_eq!(
+        store
+            .mlb_identities_for_yahoo_players(&[999, 1000])
+            .unwrap(),
+        vec![(999, 700999)]
+    );
+    assert_eq!(
+        store.yahoo_player_metadata(&[999, 1000]).unwrap(),
+        vec![(999, "Matchup Only".into(), String::new(), String::new())]
+    );
+    assert!(store.fantasy_players("mlb.l.1").unwrap().is_empty());
+}
+
+#[test]
 fn complete_free_agent_replacement_is_scoped_to_its_league() {
     let directory = tempdir().unwrap();
     let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();

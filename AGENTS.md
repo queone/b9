@@ -71,7 +71,8 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Before any file change, confirm the gate set: AC status, explicit authorization, scoped edits, tests in the same pass, and no agent-run commits.
 - Treat changed-content integrity, AC-template structure, Instruction Style, and applicable Pre-Implementation Verification as the tests-in-the-same-pass gate when a change pass creates or edits only an active AC document.
 - Resolve instruction conflicts in this order: user instruction within authorized scope, then AGENTS.md, then referenced govna docs, then model defaults.
-- Stop and ask when a request bypasses a required govna gate or lacks required authorization, scope, or context.
+- Follow an explicit Director workflow override without requiring contract-amendment language.
+- Stop and ask when a request lacks authorization, scope, or required context.
 
 ### Contract Integrity
 
@@ -171,7 +172,7 @@ Note: this rule does not prohibit batching independent commands.
 
 ### AC-First Workflow
 
-- Treat every non-trivial change as AC-first work.
+- Treat every non-trivial change as AC-first work unless the Director explicitly overrides it.
 - Draft `govna/ac<N>-<slug>.md` before implementation using `govna/ac-template.md`.
 - Define scope, out-of-scope, and acceptance tests in the AC.
 - Wait for explicit user confirmation that the AC is implementation-ready before starting implementation.

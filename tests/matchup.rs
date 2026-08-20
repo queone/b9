@@ -399,7 +399,7 @@ fn matchup_snapshot_honors_sixty_seconds_and_falls_back_stale() {
 fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
     assert!(
         MatchupOptions {
-            day: Some("2026-04-01".into()),
+            day: Some("Jul-01".into()),
             ..MatchupOptions::default()
         }
         .validate()
@@ -408,7 +408,7 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
     assert!(
         MatchupOptions {
             week: Some(2),
-            day: Some("2026-04-01".into()),
+            day: Some("jul-01".into()),
             ..MatchupOptions::default()
         }
         .validate()
@@ -417,6 +417,14 @@ fn matchup_period_options_reject_ambiguous_or_invalid_selectors() {
     assert!(
         MatchupOptions {
             day: Some("2026-13-40".into()),
+            ..MatchupOptions::default()
+        }
+        .validate()
+        .is_err()
+    );
+    assert!(
+        MatchupOptions {
+            day: Some("2026-07-01".into()),
             ..MatchupOptions::default()
         }
         .validate()

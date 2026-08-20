@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::io::Cursor;
 
 use b9::domain::{
-    FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, Position, RosterWeekStats,
-    ScoringType,
+    FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, MatchupTeam, PlayerWeekStats,
+    Position, RosterWeekStats, ScoringType,
 };
 use b9::providers::yahoo_fantasy::{
     LeagueRosters, LeagueSettings, RosterPosition, StatCategory, YahooFantasyError,
@@ -65,12 +66,44 @@ impl YahooFantasySource for Source {
         Ok(Vec::new())
     }
 
-    fn scoreboard(&self, _: &str, _: Option<i32>) -> Result<Vec<Matchup>, YahooFantasyError> {
-        unreachable!()
+    fn scoreboard(&self, _: &str, week: Option<i32>) -> Result<Vec<Matchup>, YahooFantasyError> {
+        Ok(vec![matchup(week.unwrap_or(7))])
     }
 
-    fn roster_week_stats(&self, _: &str, _: i32) -> Result<RosterWeekStats, YahooFantasyError> {
-        unreachable!()
+    fn roster_week_stats(
+        &self,
+        team_key: &str,
+        week: i32,
+    ) -> Result<RosterWeekStats, YahooFantasyError> {
+        Ok(RosterWeekStats {
+            team_key: team_key.into(),
+            team_name: team_key.into(),
+            week,
+            players: Vec::<PlayerWeekStats>::new(),
+        })
+    }
+}
+
+fn matchup(week: i32) -> Matchup {
+    let matchup_team = |id| MatchupTeam {
+        team_key: format!("mlb.l.1.t.{id}"),
+        team_id: id,
+        name: format!("Team {id}"),
+        is_current_login: id == 1,
+        stats: HashMap::new(),
+        wins: 0,
+        losses: 0,
+        ties: 0,
+        completed_games: 0,
+        live_games: 0,
+        remaining_games: 0,
+    };
+    Matchup {
+        week,
+        week_start: "2026-04-01".into(),
+        week_end: "2026-04-07".into(),
+        status: "postevent".into(),
+        teams: [matchup_team(1), matchup_team(2)],
     }
 }
 
@@ -198,6 +231,18 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
         (2, 2, 2)
     );
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+    assert!(
+        store
+            .command_snapshot("match_scoreboard", "yahoo", "mlb.l.1:1")
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .command_snapshot("match_roster", "yahoo", "mlb.l.1.t.2:7")
+            .unwrap()
+            .is_some()
+    );
     let status = inspect_status_at(store.path(), "mlb.l.1").unwrap();
     assert_eq!(status.latest_sync_status.as_deref(), Some("complete"));
     assert!(status.league_synced_at.is_some());

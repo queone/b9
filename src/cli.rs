@@ -218,11 +218,7 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
     ),
     ("m", "-w, --week <WEEK>", "Show a specific matchup week"),
     ("m", "-W, --weekly", "Show weekly running totals"),
-    (
-        "m",
-        "-D, --day <YYYY-MM-DD>",
-        "Show stats for a specific day",
-    ),
+    ("m", "-D, --day <MMM-DD>", "Show stats for a specific day"),
     ("t", "-f, --force", "Refresh provider data"),
     ("tt", "-f, --force", "Refresh provider data"),
     ("sp", "-f, --force", "Refresh provider data"),
@@ -432,7 +428,7 @@ fn root_command(version: &'static str) -> Command {
                     Arg::new("day")
                         .short('D')
                         .long("day")
-                        .value_name("YYYY-MM-DD")
+                        .value_name("MMM-DD")
                         .conflicts_with_all(["week", "weekly"]),
                 );
         }

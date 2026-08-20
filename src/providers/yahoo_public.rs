@@ -164,6 +164,28 @@ pub struct YahooPublicClient {
 }
 
 impl YahooPublicClient {
+    /// Fetch one team's roster and player values for an exact league-season date.
+    pub fn roster_day_stats(
+        &self,
+        team_key: &str,
+        week: i32,
+        day: &str,
+    ) -> Result<RosterWeekStats, YahooFantasyError> {
+        validate_key(team_key)?;
+        if week <= 0 || !crate::domain::is_valid_iso_date(day) {
+            return Err(YahooFantasyError::InvalidInput(
+                "week and day must identify a valid roster date",
+            ));
+        }
+        parse_roster_week_stats(
+            team_key,
+            week,
+            &self.get_json(format!(
+                "{PUBLIC_FANTASY_URL}/team/{team_key}/roster;date={day}/players/stats;type=date;date={day}?format=json"
+            ))?,
+        )
+    }
+
     /// Construct a client around an injected HTTP transport.
     pub fn new(http: HttpClient) -> Self {
         Self {

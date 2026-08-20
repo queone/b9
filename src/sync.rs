@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config;
-use crate::domain::FantasyTeam;
+use crate::domain::{FantasyTeam, Matchup, RosterWeekStats};
 use crate::providers::yahoo_fantasy::YahooFantasySource;
 use crate::providers::yahoo_public::YahooPublicClient;
 use crate::store::{
@@ -523,8 +523,10 @@ pub fn synchronize_with_origin(
             return Err(WorkflowError(
                 "sync: selected primary team is outside the complete standings; choose it again and retry"
                     .into(),
-            ));
+                ));
         }
+        let matchup_history =
+            acquire_matchup_history(source, league_key, selected_team_key, settings.current_week)?;
         let snapshot = FantasySnapshotWrite {
             league: settings.league,
             current_week: settings.current_week,
@@ -555,6 +557,7 @@ pub fn synchronize_with_origin(
         store
             .replace_fantasy_snapshot(&snapshot)
             .map_err(|error| WorkflowError::context("persist fantasy snapshot", error))?;
+        persist_matchup_history(store, league_key, &matchup_history)?;
         let reconciled = store
             .reconcile_mlb_identities(&identities_for_season(snapshot.league.season))
             .map_err(|error| WorkflowError::context("reconcile MLB identities", error))?;
@@ -583,6 +586,79 @@ pub fn synchronize_with_origin(
         let _ = store.record_provider_failure(&error.to_string());
     }
     result
+}
+
+type MatchupHistory = Vec<(i32, Vec<Matchup>, Vec<RosterWeekStats>)>;
+
+fn acquire_matchup_history(
+    source: &dyn YahooFantasySource,
+    league_key: &str,
+    selected_team_key: &str,
+    current_week: Option<i32>,
+) -> Result<MatchupHistory, WorkflowError> {
+    let Some(current_week) = current_week else {
+        return Ok(Vec::new());
+    };
+    let mut history = Vec::new();
+    for week in 1..=current_week {
+        let matchups = source
+            .scoreboard(league_key, Some(week))
+            .map_err(|error| WorkflowError::context("sync matchup history", error))?;
+        let mut rosters = Vec::new();
+        if let Some(matchup) = matchups.iter().find(|matchup| {
+            matchup
+                .teams
+                .iter()
+                .any(|team| team.team_key == selected_team_key)
+        }) {
+            for team in &matchup.teams {
+                rosters.push(
+                    source
+                        .roster_week_stats(&team.team_key, week)
+                        .map_err(|error| {
+                            WorkflowError::context("sync matchup roster history", error)
+                        })?,
+                );
+            }
+        }
+        history.push((week, matchups, rosters));
+    }
+    Ok(history)
+}
+
+fn persist_matchup_history(
+    store: &mut Store,
+    league_key: &str,
+    history: &MatchupHistory,
+) -> Result<(), WorkflowError> {
+    for (week, matchups, rosters) in history {
+        let payload = serde_json::to_string(matchups)
+            .map_err(|error| WorkflowError::context("serialize matchup history", error))?;
+        store
+            .save_command_snapshot(
+                "match_scoreboard",
+                "yahoo",
+                &format!("{league_key}:{week}"),
+                "v1",
+                &payload,
+            )
+            .map_err(|error| WorkflowError::context("persist matchup history", error))?;
+        for roster in rosters {
+            let payload = serde_json::to_string(roster).map_err(|error| {
+                WorkflowError::context("serialize matchup roster history", error)
+            })?;
+            store
+                .save_command_snapshot(
+                    "match_roster",
+                    "yahoo",
+                    &format!("{}:{week}", roster.team_key),
+                    "v1",
+                    &payload,
+                )
+                .map_err(|error| WorkflowError::context("persist matchup roster history", error))?;
+        }
+    }
+    Ok(())
 }
 
 /// Synchronize the selected league's stable normalized Yahoo data in the foreground.
@@ -712,6 +788,7 @@ fn synchronize_for_origin_reporting(
             let team_key =
                 select_primary_team(&teams, requested_team, interactive, &mut input, &mut prompt)
                     .map_err(|error| error.to_string())?;
+            let current_week = settings.current_week;
             let snapshot = FantasySnapshotWrite {
                 league: settings.league,
                 current_week: settings.current_week,
@@ -747,6 +824,11 @@ fn synchronize_for_origin_reporting(
                         "persist public Yahoo fantasy snapshot: {error}; prior complete data was retained"
                     )
                 })?;
+            let matchup_history =
+                acquire_matchup_history(&source, &league_key, &team_key, current_week)
+                    .map_err(|error| error.to_string())?;
+            persist_matchup_history(store, &league_key, &matchup_history)
+                .map_err(|error| error.to_string())?;
             config.current_league = league_key.clone();
             config.current_team_key = team_key;
             config.pull_public_league_id.clear();

@@ -47,6 +47,26 @@ fn empty_and_incomplete_complete_snapshots_are_explicit() {
 }
 
 #[test]
+fn historical_roster_infers_missing_player_roles_from_display_position() {
+    let value = serde_json::json!({"data": [{
+        "team_key": "mlb.l.1.t.1",
+        "players": [
+            {"player_id": 1, "full": "Ada Hitter", "display_position": "OF", "position": "OF",
+             "player_stats": {"stats": [{"stat_id": 6, "value": "4"}, {"stat_id": 8, "value": "2"}, {"stat_id": 12, "value": "1"}, {"stat_id": 3, "value": ".500"}]}},
+            {"player_id": 2, "full": "Grace Pitcher", "display_position": "SP,RP", "position": "BN"},
+            {"player_id": 3, "full": "Unknown Role", "position": "BN"}
+        ]
+    }]});
+    let roster = parse_roster_week_stats("mlb.l.1.t.1", 7, &value).unwrap();
+    assert_eq!(roster.players[0].position_type, "B");
+    assert_eq!(roster.players[0].hab, "2-4");
+    assert_eq!(roster.players[0].home_runs, 1);
+    assert_eq!(roster.players[0].batting_average, ".500");
+    assert_eq!(roster.players[1].position_type, "P");
+    assert!(roster.players[2].position_type.is_empty());
+}
+
+#[test]
 fn pagination_offsets_are_bounded() {
     assert_eq!(bounded_page_starts(51, 25).unwrap(), vec![0, 25, 50]);
     assert!(bounded_page_starts(1, 0).is_err());

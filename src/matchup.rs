@@ -48,17 +48,53 @@ impl MatchupOptions {
                     .into(),
             ));
         }
-        if self
-            .day
-            .as_deref()
-            .is_some_and(|day| !is_valid_iso_date(day))
-        {
+        if self.day.as_deref().is_some_and(parse_short_day_invalid) {
             return Err(MatchupError(
-                "match: day must use YYYY-MM-DD; correct the date and retry".into(),
+                "match: day must use MMM-DD; correct the date and retry".into(),
             ));
         }
         Ok(())
     }
+}
+
+fn parse_short_day_invalid(day: &str) -> bool {
+    short_day_parts(day).is_none()
+}
+
+fn short_day_parts(day: &str) -> Option<(u32, u32)> {
+    let (month, day) = day.split_once('-')?;
+    if month.len() != 3 || day.len() != 2 || !day.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let month = match month.to_ascii_lowercase().as_str() {
+        "jan" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "apr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "aug" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dec" => 12,
+        _ => return None,
+    };
+    Some((month, day.parse().ok()?))
+}
+
+fn season_day(day: &str, season: i64) -> Result<String, MatchupError> {
+    let (month, day) = short_day_parts(day).ok_or_else(|| {
+        MatchupError("match: day must use MMM-DD; correct the date and retry".into())
+    })?;
+    let resolved = format!("{season:04}-{month:02}-{day:02}");
+    if !is_valid_iso_date(&resolved) {
+        return Err(MatchupError(
+            "match: day is not valid in the active season; correct the date and retry".into(),
+        ));
+    }
+    Ok(resolved)
 }
 
 /// One complete baseline matchup view.
@@ -192,15 +228,38 @@ pub fn show_with_team_options(
     let current_week = store
         .fantasy_current_week(&league_key)
         .map_err(|error| contextual("read current matchup week", error))?;
+    if options
+        .week
+        .zip(current_week)
+        .is_some_and(|(requested, current)| requested > current)
+    {
+        return Err(MatchupError(
+            "match: selected week has not started; choose the current week or an earlier week"
+                .into(),
+        ));
+    }
+    let resolved_day = if let Some(day) = &options.day {
+        let season = store
+            .fantasy_season(&league_key)
+            .map_err(|error| contextual("read active league season", error))?
+            .ok_or_else(|| {
+                MatchupError(
+                    "match: active league season is unavailable; run b9 sync and retry".into(),
+                )
+            })?;
+        Some(season_day(day, season)?)
+    } else {
+        None
+    };
     let week = match (&options.day, options.week, options.weekly) {
         (_, Some(week), _) => Some(week),
         (_, None, true) | (None, None, false) => current_week,
-        (Some(day), None, false) => Some(resolve_day_week(
+        (Some(_), None, false) => Some(resolve_day_week(
             &mut store,
             &source,
             &league_key,
             current_week,
-            day,
+            resolved_day.as_deref().expect("selected day resolved"),
         )?),
     };
     let scoreboard_scope = format!(
@@ -208,19 +267,25 @@ pub fn show_with_team_options(
         league_key,
         week.map_or_else(|| "current".into(), |week| week.to_string())
     );
+    let historical = week
+        .zip(current_week)
+        .is_some_and(|(selected, current)| selected < current);
     let team_key = effective_team_key.expect("primary team checked above");
-    let (matchups, scoreboard_stale) =
-        match cached_or_fetch(&mut store, "match_scoreboard", &scoreboard_scope, || {
-            source.scoreboard(&league_key, week)
-        }) {
-            Ok(result) => result,
-            Err(scoreboard_error) => {
-                return match local_matchup_view(&store, &league_key, &team_key) {
-                    Ok(view) => Ok(render_local_matchup(&view, detected_help_color_mode())),
-                    Err(_) => Err(scoreboard_error),
-                };
-            }
-        };
+    let (matchups, scoreboard_stale) = match persisted_or_fetch(
+        &mut store,
+        "match_scoreboard",
+        &scoreboard_scope,
+        historical,
+        || source.scoreboard(&league_key, week),
+    ) {
+        Ok(result) => result,
+        Err(scoreboard_error) => {
+            return match local_matchup_view(&store, &league_key, &team_key) {
+                Ok(view) => Ok(render_local_matchup(&view, detected_help_color_mode())),
+                Err(_) => Err(scoreboard_error),
+            };
+        }
+    };
     let matchup = matchups.into_iter().find(|matchup| matchup.teams.iter().any(|team| team.team_key == team_key))
         .ok_or_else(|| MatchupError("match: no matchup is scheduled for the selected week; choose another week and retry".into()))?;
     let week = matchup.week;
@@ -230,29 +295,46 @@ pub fn show_with_team_options(
         .position(|team| team.team_key == team_key)
         .expect("selected matchup contains team");
     let opponent_index = 1 - my_index;
-    let mine_scope = format!("{}:{week}", matchup.teams[my_index].team_key);
-    let opponent_scope = format!("{}:{week}", matchup.teams[opponent_index].team_key);
-    let (mut mine, mine_stale) = cached_or_fetch(&mut store, "match_roster", &mine_scope, || {
-        source.roster_week_stats(&matchup.teams[my_index].team_key, week)
-    })?;
-    let (mut opponent, opponent_stale) =
-        cached_or_fetch(&mut store, "match_roster", &opponent_scope, || {
-            source.roster_week_stats(&matchup.teams[opponent_index].team_key, week)
+    let roster_dataset = if resolved_day.is_some() {
+        "match_roster_day"
+    } else {
+        "match_roster"
+    };
+    let roster_period = resolved_day
+        .as_deref()
+        .map_or_else(|| week.to_string(), str::to_owned);
+    let mine_scope = format!("{}:{roster_period}", matchup.teams[my_index].team_key);
+    let opponent_scope = format!("{}:{roster_period}", matchup.teams[opponent_index].team_key);
+    let (mut mine, mine_stale) =
+        persisted_roster_or_fetch(&mut store, roster_dataset, &mine_scope, historical, || {
+            if let Some(day) = resolved_day.as_deref() {
+                source.roster_day_stats(&matchup.teams[my_index].team_key, week, day)
+            } else {
+                source.roster_week_stats(&matchup.teams[my_index].team_key, week)
+            }
         })?;
+    let (mut opponent, opponent_stale) = persisted_roster_or_fetch(
+        &mut store,
+        roster_dataset,
+        &opponent_scope,
+        historical,
+        || {
+            if let Some(day) = resolved_day.as_deref() {
+                source.roster_day_stats(&matchup.teams[opponent_index].team_key, week, day)
+            } else {
+                source.roster_week_stats(&matchup.teams[opponent_index].team_key, week)
+            }
+        },
+    )?;
+    enrich_historical_roster(&store, &mut mine)?;
+    enrich_historical_roster(&store, &mut opponent)?;
     let daily_date = if options.week.is_none() && !options.weekly {
-        Some(options.day.clone().unwrap_or(utc_date(SystemTime::now())?))
+        Some(resolved_day.unwrap_or(utc_date(SystemTime::now())?))
     } else {
         None
     };
     if let Some(day) = &daily_date {
-        apply_daily_stats(
-            &store,
-            &league_key,
-            &mut mine,
-            &mut opponent,
-            day,
-            http.clone(),
-        )?;
+        apply_daily_stats(&store, &mut mine, &mut opponent, day, http.clone())?;
     }
     apply_roster_statuses(&store, &league_key, &mut mine, &mut opponent)?;
     let odds = acquire_odds_context(&mut store, http.clone(), &mine, &opponent).unwrap_or_default();
@@ -277,7 +359,6 @@ pub fn show_with_team_options(
 
 fn apply_daily_stats(
     store: &Store,
-    league_key: &str,
     mine: &mut RosterWeekStats,
     opponent: &mut RosterWeekStats,
     day: &str,
@@ -286,10 +367,16 @@ fn apply_daily_stats(
     let season = day[..4].parse::<i64>().map_err(|_| {
         MatchupError("match: day must include a valid year; correct the date and retry".into())
     })?;
-    let stored_players = store
-        .fantasy_players(league_key)
+    let yahoo_player_ids = mine
+        .players
+        .iter()
+        .chain(&opponent.players)
+        .map(|player| player.yahoo_player_id)
+        .collect::<Vec<_>>();
+    let identities = store
+        .mlb_identities_for_yahoo_players(&yahoo_player_ids)
         .map_err(|error| contextual("read daily player identities", error))?;
-    let identities = required_mlb_identities(&stored_players, mine, opponent)?;
+    let identities = required_mlb_identities(identities, mine, opponent)?;
     let hitting_http = http.clone();
     let day_for_hitting = day.to_owned();
     let day_for_pitching = day.to_owned();
@@ -320,6 +407,38 @@ fn apply_daily_stats(
     Ok(())
 }
 
+fn enrich_historical_roster(
+    store: &Store,
+    roster: &mut RosterWeekStats,
+) -> Result<(), MatchupError> {
+    let ids = roster
+        .players
+        .iter()
+        .map(|player| player.yahoo_player_id)
+        .collect::<Vec<_>>();
+    let metadata = store
+        .yahoo_player_metadata(&ids)
+        .map_err(|error| contextual("read historical player metadata", error))?;
+    for player in &mut roster.players {
+        let Some((_, name, team, role)) = metadata
+            .iter()
+            .find(|(id, _, _, _)| *id == player.yahoo_player_id)
+        else {
+            continue;
+        };
+        if player.name.is_empty() {
+            player.name.clone_from(name);
+        }
+        if player.team.is_empty() {
+            player.team.clone_from(team);
+        }
+        if player.position_type.is_empty() {
+            player.position_type.clone_from(role);
+        }
+    }
+    Ok(())
+}
+
 fn parallel_pair<A, B, Left, Right>(
     left: Left,
     right: Right,
@@ -338,14 +457,11 @@ where
 }
 
 fn required_mlb_identities(
-    stored_players: &[StoredFantasyPlayer],
+    identities: Vec<(i64, i64)>,
     mine: &RosterWeekStats,
     opponent: &RosterWeekStats,
 ) -> Result<HashMap<i64, i64>, MatchupError> {
-    let identities = stored_players
-        .iter()
-        .filter_map(|player| player.yahoo_player_id.zip(player.mlbam_id))
-        .collect::<HashMap<_, _>>();
+    let identities = identities.into_iter().collect::<HashMap<_, _>>();
     let missing = mine
         .players
         .iter()
@@ -369,6 +485,18 @@ fn apply_daily_roster(
     pitching: &[BulkPitchingSplit],
 ) {
     for player in players {
+        player.hab = "0-0".into();
+        player.runs = 0;
+        player.home_runs = 0;
+        player.runs_batted_in = 0;
+        player.stolen_bases = 0;
+        player.batting_average = "0.000".into();
+        player.innings_pitched = "0.0".into();
+        player.wins = 0;
+        player.saves = 0;
+        player.strikeouts = 0;
+        player.earned_run_average = "0.00".into();
+        player.whip = "0.00".into();
         let Some(mlbam_id) = identities.get(&player.yahoo_player_id) else {
             continue;
         };
@@ -376,7 +504,7 @@ fn apply_daily_roster(
             .iter()
             .find(|split| split.player.person_id == *mlbam_id)
         {
-            player.hab = split.stat.at_bats.to_string();
+            player.hab = format!("{}-{}", split.stat.hits, split.stat.at_bats);
             player.runs = split.stat.runs as i32;
             player.home_runs = split.stat.home_runs as i32;
             player.runs_batted_in = split.stat.rbi as i32;
@@ -632,14 +760,7 @@ fn show_weekly_matchup(
         None
     };
     if let Some(day) = &daily_date {
-        apply_daily_stats(
-            store,
-            league_key,
-            &mut mine,
-            &mut opponent,
-            day,
-            http.clone(),
-        )?;
+        apply_daily_stats(store, &mut mine, &mut opponent, day, http.clone())?;
     }
     apply_roster_statuses(store, league_key, &mut mine, &mut opponent)?;
     let odds = acquire_odds_context(store, http, &mine, &opponent).unwrap_or_default();
@@ -700,6 +821,82 @@ where
     F: FnOnce() -> Result<T, E>,
 {
     cached_or_fetch_at(store, dataset, scope, SystemTime::now(), fetch)
+}
+
+fn persisted_or_fetch<T, E, F>(
+    store: &mut Store,
+    dataset: &str,
+    scope: &str,
+    prefer_persisted: bool,
+    fetch: F,
+) -> Result<(T, bool), MatchupError>
+where
+    T: Serialize + DeserializeOwned,
+    E: fmt::Display,
+    F: FnOnce() -> Result<T, E>,
+{
+    if prefer_persisted
+        && let Some(snapshot) = store
+            .command_snapshot(dataset, "yahoo", scope)
+            .map_err(|error| contextual("read persisted matchup history", error))?
+    {
+        let value = serde_json::from_str(&snapshot.payload)
+            .map_err(|error| contextual("decode persisted matchup history", error))?;
+        return Ok((value, snapshot.stale));
+    }
+    cached_or_fetch(store, dataset, scope, fetch)
+}
+
+fn persisted_roster_or_fetch<E, F>(
+    store: &mut Store,
+    dataset: &str,
+    scope: &str,
+    prefer_persisted: bool,
+    fetch: F,
+) -> Result<(RosterWeekStats, bool), MatchupError>
+where
+    E: fmt::Display,
+    F: FnOnce() -> Result<RosterWeekStats, E>,
+{
+    if prefer_persisted
+        && let Some(snapshot) = store
+            .command_snapshot(dataset, "yahoo", scope)
+            .map_err(|error| contextual("read persisted roster history", error))?
+    {
+        let roster = serde_json::from_str::<RosterWeekStats>(&snapshot.payload)
+            .map_err(|error| contextual("decode persisted roster history", error))?;
+        if snapshot.snapshot_version == "v2"
+            && !roster.players.is_empty()
+            && roster
+                .players
+                .iter()
+                .all(|player| !player.name.is_empty() && !player.position_type.is_empty())
+        {
+            return Ok((roster, snapshot.stale));
+        }
+    }
+    let mut roster = fetch().map_err(|error| contextual("refresh historical roster", error))?;
+    if roster.players.is_empty() {
+        return Err(MatchupError(
+            "match: historical roster contains no players; retry or choose another period".into(),
+        ));
+    }
+    enrich_historical_roster(store, &mut roster)?;
+    if roster
+        .players
+        .iter()
+        .any(|player| player.name.is_empty() || player.position_type.is_empty())
+    {
+        return Err(MatchupError(
+            "match: historical roster is missing player metadata; run b9 sync and retry".into(),
+        ));
+    }
+    let payload = serde_json::to_string(&roster)
+        .map_err(|error| contextual("serialize historical roster", error))?;
+    store
+        .save_command_snapshot(dataset, "yahoo", scope, "v2", &payload)
+        .map_err(|error| contextual("persist historical roster", error))?;
+    Ok((roster, false))
 }
 
 /// Reuse, refresh, or fall back to a command snapshot at an injected time.
@@ -1519,6 +1716,13 @@ fn matchup_player_name(player: &PlayerWeekStats) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn short_day_uses_active_season_and_rejects_long_form() {
+        assert_eq!(season_day("jUl-01", 2026).unwrap(), "2026-07-01");
+        assert!(season_day("feb-29", 2026).is_err());
+        assert!(short_day_parts("2026-07-01").is_none());
+    }
     use crate::providers::mlb::{BulkHittingSplit, BulkPitchingSplit, HittingStats, PitchingStats};
     use crate::transport::{ExecutorError, HttpExecutor, HttpResponse, ValidatedRequest};
 
@@ -1994,28 +2198,51 @@ mod tests {
     }
 
     #[test]
-    fn daily_projection_replaces_only_matched_player_stats() {
-        let mut players = vec![PlayerWeekStats {
-            yahoo_player_id: 7,
-            name: "Ada".into(),
-            team: "B9".into(),
-            position_type: "B".into(),
-            slot_position: Position::Outfield,
-            eligible_positions: vec![],
-            injury_status: String::new(),
-            hab: String::new(),
-            runs: 0,
-            home_runs: 0,
-            runs_batted_in: 0,
-            stolen_bases: 0,
-            batting_average: String::new(),
-            innings_pitched: String::new(),
-            wins: 0,
-            saves: 0,
-            strikeouts: 0,
-            earned_run_average: String::new(),
-            whip: String::new(),
-        }];
+    fn daily_projection_replaces_matched_stats_and_zeros_absent_splits() {
+        let mut players = vec![
+            PlayerWeekStats {
+                yahoo_player_id: 7,
+                name: "Ada".into(),
+                team: "B9".into(),
+                position_type: "B".into(),
+                slot_position: Position::Outfield,
+                eligible_positions: vec![],
+                injury_status: String::new(),
+                hab: String::new(),
+                runs: 0,
+                home_runs: 0,
+                runs_batted_in: 0,
+                stolen_bases: 0,
+                batting_average: String::new(),
+                innings_pitched: String::new(),
+                wins: 0,
+                saves: 0,
+                strikeouts: 0,
+                earned_run_average: String::new(),
+                whip: String::new(),
+            },
+            PlayerWeekStats {
+                yahoo_player_id: 8,
+                name: "Grace".into(),
+                team: "B9".into(),
+                position_type: "P".into(),
+                slot_position: Position::StartingPitcher,
+                eligible_positions: vec![],
+                injury_status: String::new(),
+                hab: "3-11".into(),
+                runs: 2,
+                home_runs: 1,
+                runs_batted_in: 4,
+                stolen_bases: 1,
+                batting_average: "0.273".into(),
+                innings_pitched: "6.0".into(),
+                wins: 1,
+                saves: 1,
+                strikeouts: 8,
+                earned_run_average: "1.50".into(),
+                whip: "0.83".into(),
+            },
+        ];
         let hitting = vec![BulkHittingSplit {
             player: crate::providers::mlb::BulkPlayer {
                 person_id: 42,
@@ -2025,6 +2252,7 @@ mod tests {
             position: Default::default(),
             stat: HittingStats {
                 at_bats: 4,
+                hits: 2,
                 runs: 2,
                 home_runs: 1,
                 rbi: 3,
@@ -2054,9 +2282,12 @@ mod tests {
             (
                 players[0].hab.as_str(),
                 players[0].home_runs,
-                players[0].strikeouts
+                players[0].strikeouts,
+                players[1].hab.as_str(),
+                players[1].innings_pitched.as_str(),
+                players[1].earned_run_average.as_str(),
             ),
-            ("4", 1, 8)
+            ("2-4", 1, 8, "0-0", "0.0", "0.00")
         );
     }
 
@@ -2094,7 +2325,7 @@ mod tests {
             week: 1,
             players: Vec::new(),
         };
-        let error = required_mlb_identities(&[], &mine, &opponent)
+        let error = required_mlb_identities(Vec::new(), &mine, &opponent)
             .unwrap_err()
             .to_string();
         assert!(error.contains("run b9 sync and retry"));

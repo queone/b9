@@ -656,26 +656,51 @@ pub fn parse_roster_week_stats(
         .into_iter()
         .filter_map(|map| {
             let id = integer(&map, "player_id");
+            let stats = team_statistics(&map);
+            let stat = |id: &str, label: &str| {
+                stats
+                    .get(id)
+                    .cloned()
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| text(&map, label))
+            };
+            let display_position = text(&map, "display_position");
+            let selected_position = text(&map, "position");
+            let position_type = match text(&map, "position_type") {
+                value if !value.is_empty() => value,
+                _ if display_position
+                    .split(',')
+                    .any(|position| matches!(position.trim(), "P" | "SP" | "RP")) =>
+                {
+                    "P".into()
+                }
+                _ if !display_position.is_empty() => "B".into(),
+                _ => String::new(),
+            };
             (id > 0).then(|| PlayerWeekStats {
                 yahoo_player_id: id,
                 name: text(&map, "full"),
                 team: text(&map, "editorial_team_abbr"),
-                position_type: text(&map, "position_type"),
-                slot_position: Position::from(text(&map, "position")),
+                position_type,
+                slot_position: Position::from(selected_position),
                 eligible_positions: Vec::new(),
                 injury_status: text(&map, "status"),
-                hab: text(&map, "H/AB"),
-                runs: integer(&map, "R") as i32,
-                home_runs: integer(&map, "HR") as i32,
-                runs_batted_in: integer(&map, "RBI") as i32,
-                stolen_bases: integer(&map, "SB") as i32,
-                batting_average: text(&map, "AVG"),
-                innings_pitched: text(&map, "IP"),
-                wins: integer(&map, "W") as i32,
-                saves: integer(&map, "SV") as i32,
-                strikeouts: integer(&map, "K") as i32,
-                earned_run_average: text(&map, "ERA"),
-                whip: text(&map, "WHIP"),
+                hab: if stats.contains_key("6") || stats.contains_key("8") {
+                    format!("{}-{}", stat("8", "H"), stat("6", "AB"))
+                } else {
+                    text(&map, "H/AB")
+                },
+                runs: stat("7", "R").parse().unwrap_or(0),
+                home_runs: stat("12", "HR").parse().unwrap_or(0),
+                runs_batted_in: stat("13", "RBI").parse().unwrap_or(0),
+                stolen_bases: stat("16", "SB").parse().unwrap_or(0),
+                batting_average: stat("3", "AVG"),
+                innings_pitched: stat("50", "IP"),
+                wins: stat("28", "W").parse().unwrap_or(0),
+                saves: stat("32", "SV").parse().unwrap_or(0),
+                strikeouts: stat("42", "K").parse().unwrap_or(0),
+                earned_run_average: stat("26", "ERA"),
+                whip: stat("27", "WHIP"),
             })
         })
         .collect::<Vec<_>>();

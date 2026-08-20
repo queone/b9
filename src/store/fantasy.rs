@@ -75,6 +75,66 @@ pub struct IdentityCandidate {
 }
 
 impl Store {
+    /// Read durable display metadata for requested Yahoo players.
+    pub fn yahoo_player_metadata(
+        &self,
+        yahoo_player_ids: &[i64],
+    ) -> Result<Vec<(i64, String, String, String)>, StoreError> {
+        let mut statement = self
+            .connection()
+            .prepare("SELECT name,COALESCE(mlb_team,''),COALESCE(position_type,'') FROM players WHERE yahoo_player_id=?1")
+            .map_err(|error| {
+                StoreError::operation("prepare Yahoo player metadata lookup", &self.path, error)
+            })?;
+        let mut metadata = Vec::new();
+        for yahoo_player_id in yahoo_player_ids {
+            let row = statement
+                .query_row([yahoo_player_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .optional()
+                .map_err(|error| {
+                    StoreError::operation("query Yahoo player metadata lookup", &self.path, error)
+                })?;
+            if let Some((name, team, role)) = row {
+                metadata.push((*yahoo_player_id, name, team, role));
+            }
+        }
+        Ok(metadata)
+    }
+
+    /// Read reconciled MLB identities for the requested Yahoo players.
+    pub fn mlb_identities_for_yahoo_players(
+        &self,
+        yahoo_player_ids: &[i64],
+    ) -> Result<Vec<(i64, i64)>, StoreError> {
+        let mut statement = self
+            .connection()
+            .prepare(
+                "SELECT mlbam_id FROM players WHERE yahoo_player_id=?1 AND mlbam_id IS NOT NULL",
+            )
+            .map_err(|error| {
+                StoreError::operation("prepare Yahoo MLB identity lookup", &self.path, error)
+            })?;
+        let mut identities = Vec::new();
+        for yahoo_player_id in yahoo_player_ids {
+            let mlbam_id = statement
+                .query_row([yahoo_player_id], |row| row.get::<_, i64>(0))
+                .optional()
+                .map_err(|error| {
+                    StoreError::operation("query Yahoo MLB identity lookup", &self.path, error)
+                })?;
+            if let Some(mlbam_id) = mlbam_id {
+                identities.push((*yahoo_player_id, mlbam_id));
+            }
+        }
+        Ok(identities)
+    }
+
     /// Atomically replace FantasyPros ECR values for the current player population.
     pub fn replace_ecr(
         &mut self,

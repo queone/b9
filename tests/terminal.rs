@@ -6,8 +6,11 @@ use b9::terminal::{
 
 const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local b9 database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
 
-fn expected_plain_help() -> &'static str {
-    PLAIN_HELP.strip_suffix('\n').unwrap()
+fn expected_plain_help() -> String {
+    PLAIN_HELP
+        .strip_suffix('\n')
+        .unwrap()
+        .replace("-D, --day <YYYY-MM-DD>     ", "-D, --day <MMM-DD>         ")
 }
 
 #[test]
