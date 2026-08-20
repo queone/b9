@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use b9::transport::{
+use skout::transport::{
     ExecutorError, HttpClient, HttpExecutor, HttpHeader, HttpMethod, HttpRequest, HttpResponse,
     ValidatedRequest,
 };
@@ -197,7 +197,12 @@ fn request_path(bytes: &[u8]) -> String {
 
 #[test]
 fn get_follows_ten_redirects_and_rejects_an_eleventh() {
-    fn run(final_hop: usize) -> (Result<HttpResponse, b9::transport::HttpClientError>, usize) {
+    fn run(
+        final_hop: usize,
+    ) -> (
+        Result<HttpResponse, skout::transport::HttpClientError>,
+        usize,
+    ) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let accepted = Arc::new(AtomicUsize::new(0));

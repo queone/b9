@@ -1,10 +1,10 @@
 [package]
-name = "b9"
+name = "skout"
 version = "0.33.2"
 edition = "2024"
 
 [[bin]]
-name = "b9"
+name = "skout"
 path = "src/main.rs"
 
 [dependencies]

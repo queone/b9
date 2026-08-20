@@ -1,4 +1,4 @@
-//! MLB StatsAPI acquisition through b9's transport and cache boundaries.
+//! MLB StatsAPI acquisition through skout's transport and cache boundaries.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Private, atomic b9 user configuration.
+//! Private, atomic skout user configuration.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Persisted b9 preferences.
+/// Persisted skout preferences.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -59,11 +59,11 @@ pub fn config_path() -> Result<PathBuf, ConfigError> {
 fn config_path_from_home(home: Option<OsString>) -> Result<PathBuf, ConfigError> {
     let path = home
         .map(PathBuf::from)
-        .map(|home| home.join(".config").join("b9").join("config.json"))
+        .map(|home| home.join(".config").join("skout").join("config.json"))
         .ok_or_else(|| {
             ConfigError::new(
                 "resolve configuration path",
-                Path::new("b9"),
+                Path::new("skout"),
                 "HOME is unavailable",
             )
         })?;

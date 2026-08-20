@@ -1,5 +1,5 @@
-use b9::analysis::{blend, pqs, statcast_blend, window_proj, wire_threshold};
-use b9::domain::{GameIndicator, StoredFantasyPlayer};
+use skout::analysis::{blend, pqs, statcast_blend, window_proj, wire_threshold};
+use skout::domain::{GameIndicator, StoredFantasyPlayer};
 
 fn player(name: &str, started: f64) -> StoredFantasyPlayer {
     StoredFantasyPlayer {

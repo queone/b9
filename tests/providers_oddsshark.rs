@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use b9::providers::oddsshark::{OddsSharkClient, OddsSharkEndpoints};
-use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
+use skout::providers::oddsshark::{OddsSharkClient, OddsSharkEndpoints};
+use skout::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
 
 struct Executor {
     request: Mutex<Option<ValidatedRequest>>,

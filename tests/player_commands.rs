@@ -1,6 +1,6 @@
-use b9::domain::{GameIndicator, StoredFantasyPlayer};
-use b9::player_commands::{waiver_eligible, with_yahoo_result_notice};
-use b9::store::WaiverCandidate;
+use skout::domain::{GameIndicator, StoredFantasyPlayer};
+use skout::player_commands::{waiver_eligible, with_yahoo_result_notice};
+use skout::store::WaiverCandidate;
 
 fn player(id: i64, role: &str, positions: &str) -> StoredFantasyPlayer {
     StoredFantasyPlayer {
@@ -104,6 +104,6 @@ fn evaluation_uses_name_as_a_stable_tie_breaker() {
     let mut players = vec![player(1, "B", "OF"), player(2, "B", "OF")];
     players[0].name = "Zed".into();
     players[1].name = "Ada".into();
-    b9::analysis::pqs::sort_by_pqs(&mut players);
+    skout::analysis::pqs::sort_by_pqs(&mut players);
     assert_eq!(players[0].name, "Ada");
 }

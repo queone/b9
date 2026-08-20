@@ -1,5 +1,5 @@
-use b9::store::{FangraphsBattedBallWrite, ProjectionWrite, Store};
 use rusqlite::Connection;
+use skout::store::{FangraphsBattedBallWrite, ProjectionWrite, Store};
 use tempfile::tempdir;
 
 fn projection(mlbam_id: i64, source: &str) -> ProjectionWrite {

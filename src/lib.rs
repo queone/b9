@@ -1,4 +1,4 @@
-//! Reusable b9 application library.
+//! Reusable skout application library.
 
 pub mod analysis;
 pub mod cache;

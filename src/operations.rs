@@ -36,7 +36,7 @@ pub fn reset_at(path: &Path, confirmed: bool) -> Result<String, OperationsError>
         return Ok("Reset cancelled.\n".into());
     }
     fs::remove_file(path).map_err(|error| OperationsError::new("reset: delete database", error))?;
-    Ok("Database deleted. Run b9 sync to rebuild.\n".into())
+    Ok("Database deleted. Run skout sync to rebuild.\n".into())
 }
 
 /// Run the production confirmed reset prompt.
@@ -80,6 +80,6 @@ pub fn reset_with(
     reset_at(path, true)?;
     Ok(format!(
         "Database deleted. Run {} to rebuild.\n",
-        crate::terminal::lineup_indicator("b9 sync", true, false, mode)
+        crate::terminal::lineup_indicator("skout sync", true, false, mode)
     ))
 }

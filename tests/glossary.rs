@@ -1,8 +1,8 @@
-use b9::glossary::{
+use skout::glossary::{
     GlossaryEntry, LookupResult, embedded_entries, lookup, parse_glossary, render_entry,
     render_entry_with_mode, render_full, render_full_with_mode, select_match, suggest_keys,
 };
-use b9::terminal::HelpColorMode;
+use skout::terminal::HelpColorMode;
 
 const EXPECTED_KEYS: &str = "ab abandon active age atc available avg avg162g babip barrel_pct batters_faced bb bb_pct bench blend_window category_strategy cfip ch_pct close closer confirmed confirmed_sp cs dtd ecr empirical_bayes era exit_velo expected faab fastball_velo fb_pct fip flippable fwar g game-log gb_pct gs h2h hard_hit_pct hbp holds hr hr_fb il injured ip k k9 k_bb_pct k_pct launch_angle lineup_candidates lineup_status lost na no_game not_scheduled obp opportunity_damping ops out own_pct p_slot pa pitcher_day_state pool pos pp ppd pqs probable probable_sp protect punt push qs r rbi replacement_level roster_moves roster_moves_note roster_slot rp_available rp_slot savant sb slg sp_slot spin_rate sprint_speed stabilization_ramp steamer streaming sv sweet_spot_pct tied w waiver_wire whiff_pct whip wrc_plus xba xera xfip xobp xslg xwoba yp yr z_score zips";
 
@@ -29,12 +29,7 @@ fn embedded_glossary_has_the_exact_baseline_entries() {
     assert_eq!(pa.aliases, ["PA"]);
     assert!(pa.definition.contains("turn at bat — includes"));
     assert!(entries.iter().any(|entry| entry.key == "game-log"));
-    assert!(entries.iter().any(|entry| entry.class == "b9"));
-    assert!(
-        entries
-            .iter()
-            .all(|entry| entry.class != ["sk", "out"].concat())
-    );
+    assert!(entries.iter().any(|entry| entry.class == "skout"));
 }
 
 #[test]

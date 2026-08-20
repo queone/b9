@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use b9::fetch_command::run_with_client;
-use b9::providers::{fangraphs::FangraphsClient, fangraphs_closer_chart, fantasypros};
-use b9::transport::{
+use skout::fetch_command::run_with_client;
+use skout::providers::{fangraphs::FangraphsClient, fangraphs_closer_chart, fantasypros};
+use skout::transport::{
     ExecutorError, HttpClient, HttpExecutor, HttpHeader, HttpResponse, ValidatedRequest,
 };
 
@@ -37,7 +37,7 @@ fn client(body: &str) -> (Arc<HttpClient>, Arc<RecordingExecutor>) {
 fn fangraphs_typed_json_accepts_projection_string_ids_and_batted_ball_fields() {
     let (http, _) = client(r#"{"data":[{"playerid":7,"xMLBAMID":42,"FB%":0.4,"HR/FB":0.2}]}"#);
     let leaders = FangraphsClient::new(http)
-        .fetch_json::<b9::providers::fangraphs::LeaderRow>("https://www.fangraphs.com/test")
+        .fetch_json::<skout::providers::fangraphs::LeaderRow>("https://www.fangraphs.com/test")
         .unwrap();
     assert_eq!(
         (leaders[0].mlbam_id, leaders[0].fb_pct, leaders[0].hr_fb_pct),
@@ -45,7 +45,7 @@ fn fangraphs_typed_json_accepts_projection_string_ids_and_batted_ball_fields() {
     );
     let (http, _) = client(r#"[{"playerid":"7","PA":600,"HR":30}]"#);
     let rows = FangraphsClient::new(http)
-        .fetch_json::<b9::providers::fangraphs::ProjectionRow>("https://www.fangraphs.com/test")
+        .fetch_json::<skout::providers::fangraphs::ProjectionRow>("https://www.fangraphs.com/test")
         .unwrap();
     assert_eq!(
         (rows[0].fangraphs_id, rows[0].pa, rows[0].hr),

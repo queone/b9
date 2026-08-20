@@ -1,10 +1,10 @@
-use b9::cli::render_root_help;
-use b9::terminal::{
+use skout::cli::render_root_help;
+use skout::terminal::{
     ColorContext, HelpColorMode, help_color_mode, injury_status, lineup_indicator, roster_status,
     section, subtitle, title, visible_width,
 };
 
-const PLAIN_HELP: &str = "b9 v0.22.1\nFantasy Baseball advisor — github.com/queone/b9\n\nUSAGE\n  b9 <command> [flags]\n\nCOMMANDS\n  st                           Show status\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local b9 database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the b9 glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
+const PLAIN_HELP: &str = "skout v0.22.1\nFantasy Baseball advisor — github.com/queone/skout\n\nUSAGE\n  skout <command> [flags]\n\nCOMMANDS\n  st                           Show status\n  sync                         Synchronize the selected league\n    -T, --team <TEAM>          Select the primary fantasy team\n  reset                        Delete the local skout database\n  m [team]                     Show a daily or weekly matchup\n    -w, --week <WEEK>          Show a specific matchup week\n    -W, --weekly               Show weekly running totals\n    -D, --day <YYYY-MM-DD>     Show stats for a specific day\n  t [team]                     Show MLB 40-man rosters\n    -f, --force                Refresh provider data\n  tt                           Show MLB standings and team totals\n    -f, --force                Refresh provider data\n  sp                           Show the three-day probable-pitcher slate\n    -f, --force                Refresh provider data\n  r [name]                     Show a fantasy roster\n  rt                           Show fantasy roster totals\n    -w, --weekly [<WEEK|DATE>] Show current or selected weekly totals\n  h [N|name]                   Browse hitters or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  p [N|name]                   Browse pitchers or show a player\n    -s, --sort <FIELD>         Sort by a displayed field\n    -p, --position <POS>       Filter by eligible position\n    -w, --waiver               Show waiver candidates only\n  i [term]                     Look up a term in the skout glossary\n\nFLAGS\n  -l, --league <key>           Yahoo league key\n  -d, --debug                  Print operation diagnostics\n  -v, --version                Print version\n  -h, -?, --help               Print this help\n\n";
 
 fn expected_plain_help() -> String {
     PLAIN_HELP
@@ -14,7 +14,7 @@ fn expected_plain_help() -> String {
 }
 
 #[test]
-fn plain_help_matches_the_b9_style_golden() {
+fn plain_help_matches_the_skout_style_golden() {
     let output = render_root_help("0.22.1", HelpColorMode::Plain);
     assert_eq!(output, expected_plain_help());
     assert!(!output.contains('\u{1b}'));
@@ -25,10 +25,10 @@ fn plain_help_matches_the_b9_style_golden() {
 fn colored_help_uses_only_the_contracted_spans() {
     let output = render_root_help("0.22.1", HelpColorMode::Color);
     let expected = expected_plain_help()
-        .replacen("b9", "\u{1b}[1;38;5;231mb9\u{1b}[0m", 1)
+        .replacen("skout", "\u{1b}[1;38;5;231mskout\u{1b}[0m", 1)
         .replacen(
-            "Fantasy Baseball advisor — github.com/queone/b9",
-            "\u{1b}[38;5;245mFantasy Baseball advisor — github.com/queone/b9\u{1b}[0m",
+            "Fantasy Baseball advisor — github.com/queone/skout",
+            "\u{1b}[38;5;245mFantasy Baseball advisor — github.com/queone/skout\u{1b}[0m",
             1,
         )
         .replace("USAGE", "\u{1b}[38;5;255mUSAGE\u{1b}[0m")
@@ -36,8 +36,8 @@ fn colored_help_uses_only_the_contracted_spans() {
         .replace("\nFLAGS\n", "\n\u{1b}[38;5;255mFLAGS\u{1b}[0m\n");
     assert_eq!(output, expected);
     assert_eq!(
-        title("b9", HelpColorMode::Color),
-        "\u{1b}[1;38;5;231mb9\u{1b}[0m"
+        title("skout", HelpColorMode::Color),
+        "\u{1b}[1;38;5;231mskout\u{1b}[0m"
     );
     assert_eq!(
         subtitle("x", HelpColorMode::Color),
@@ -117,9 +117,9 @@ fn mlb_status_roles_preserve_visible_width() {
 
 #[test]
 fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_columns() {
-    use b9::config::Config;
-    use b9::store::StoreStatus;
-    use b9::sync::render_dashboard;
+    use skout::config::Config;
+    use skout::store::StoreStatus;
+    use skout::sync::render_dashboard;
     use std::path::Path;
 
     let status = StoreStatus {
@@ -138,11 +138,11 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
         ..Config::default()
     };
 
-    const PLAIN: &str = "Yahoo: public endpoints\nLast run: success at unix 100\nDatabase: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nFanGraphs: none\nFantasyPros: none\nProvider failures: ready (0)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/b9/.config/b9/config.json\n";
+    const PLAIN: &str = "Yahoo: public endpoints\nLast run: success at unix 100\nDatabase: /srv/skout/.config/skout/skout.db (1024 bytes, schema v3)\nIdentities: 512 MLB, 480 Yahoo\nProvider freshness: unix 100\nFanGraphs: none\nFantasyPros: none\nProvider failures: ready (0)\nLast provider error: none\nUnmatched players: 6\nLeague: 431.l.12345\nConfig: /srv/skout/.config/skout/config.json\n";
 
     let plain = render_dashboard(
-        Path::new("/srv/b9/.config/b9/b9.db"),
-        Path::new("/srv/b9/.config/b9/config.json"),
+        Path::new("/srv/skout/.config/skout/skout.db"),
+        Path::new("/srv/skout/.config/skout/config.json"),
         &config,
         &status,
         160,
@@ -155,8 +155,8 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
     }
 
     let colored = render_dashboard(
-        Path::new("/srv/b9/.config/b9/b9.db"),
-        Path::new("/srv/b9/.config/b9/config.json"),
+        Path::new("/srv/skout/.config/skout/skout.db"),
+        Path::new("/srv/skout/.config/skout/config.json"),
         &config,
         &status,
         160,
@@ -192,9 +192,9 @@ fn dashboard_renders_settled_field_order_and_semantic_colors_within_eighty_colum
 
 #[test]
 fn dashboard_dims_failed_run_and_open_circuit_values() {
-    use b9::config::Config;
-    use b9::store::StoreStatus;
-    use b9::sync::render_dashboard;
+    use skout::config::Config;
+    use skout::store::StoreStatus;
+    use skout::sync::render_dashboard;
     use std::path::Path;
 
     let status = StoreStatus {
@@ -234,9 +234,9 @@ fn dashboard_dims_failed_run_and_open_circuit_values() {
 
 #[test]
 fn dashboard_suppresses_retired_authenticated_yahoo_recovery() {
-    use b9::config::Config;
-    use b9::store::StoreStatus;
-    use b9::sync::render_dashboard;
+    use skout::config::Config;
+    use skout::store::StoreStatus;
+    use skout::sync::render_dashboard;
     use std::path::Path;
 
     let status = StoreStatus {
@@ -244,7 +244,7 @@ fn dashboard_suppresses_retired_authenticated_yahoo_recovery() {
         circuit_open: true,
         provider_failure_count: 5,
         provider_last_error: Some(
-            "fetch authenticated Yahoo settings: acquire Yahoo fantasy data: Yahoo API returned HTTP 403; Yahoo denied authorization for this app — run b9 login to reauthorize"
+            "fetch authenticated Yahoo settings: acquire Yahoo fantasy data: Yahoo API returned HTTP 403; Yahoo denied authorization for this app — run skout login to reauthorize"
                 .into(),
         ),
         last_run_status: Some("failed".into()),
@@ -263,5 +263,5 @@ fn dashboard_suppresses_retired_authenticated_yahoo_recovery() {
     assert!(plain.contains("Last run: none"));
     assert!(plain.contains("Provider failures: ready (0)"));
     assert!(plain.contains("Last provider error: none"));
-    assert!(!plain.contains("b9 login"));
+    assert!(!plain.contains("skout login"));
 }

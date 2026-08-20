@@ -1,4 +1,4 @@
-//! Provider adapters built on b9's validating transport boundary.
+//! Provider adapters built on skout's validating transport boundary.
 
 use std::error::Error;
 use std::fmt;

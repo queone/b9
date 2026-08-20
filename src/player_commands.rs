@@ -30,13 +30,13 @@ impl fmt::Display for PlayerCommandError {
 }
 impl std::error::Error for PlayerCommandError {}
 fn error(command: &str, detail: impl fmt::Display) -> PlayerCommandError {
-    PlayerCommandError(format!("{command}: {detail}; run b9 sync and retry"))
+    PlayerCommandError(format!("{command}: {detail}; run skout sync and retry"))
 }
 
 fn context() -> Result<(Store, String, String), PlayerCommandError> {
     let config = config::read().map_err(|failure| error("player", failure))?;
     if config.current_league.is_empty() {
-        return Err(error("player", "no league selected; run b9 st -l <key>"));
+        return Err(error("player", "no league selected; run skout st -l <key>"));
     }
     let store = Store::open().map_err(|failure| error("player", failure))?;
     Ok((store, config.current_league, config.current_team_key))
@@ -598,7 +598,7 @@ pub fn show_pool(
         if candidates.is_empty() {
             return Err(error(
                 role,
-                "active MLB roster data is unavailable; run b9 sync and retry",
+                "active MLB roster data is unavailable; run skout sync and retry",
             ));
         }
         Some(candidates)
@@ -1335,7 +1335,7 @@ mod tests {
     #[test]
     fn weekly_resolution_fetches_numbered_and_iso_date_periods() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let source = WeeklySource {
             requested_weeks: RefCell::new(Vec::new()),
         };
@@ -1479,7 +1479,7 @@ mod tests {
     #[test]
     fn legacy_only_output_is_not_attributed_as_live_yahoo_data() {
         let directory = tempdir().unwrap();
-        let store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let store = Store::open_at(directory.path().join("skout.db")).unwrap();
         assert_eq!(
             yahoo_result_notice(&store, "POOL\n".into()).unwrap(),
             "POOL\n"

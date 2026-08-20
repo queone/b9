@@ -3,9 +3,9 @@
 ## MLB utility consumers
 
 - Request `/teams?sportId=1&season=<year>` for the current 30-club directory and retain stable team ID, full name, location, club name, abbreviation, and AL or NL league ID.
-- Request `/teams/<id>/roster?rosterType=40Man` for `b9 t` and validate positive unique person-and-role rows before team-scoped replacement.
-- Request `/standings?leagueId=103,104&season=<year>` plus bulk regular-season hitting and pitching statistics for `b9 tt`.
-- Request three host-local schedule dates with probable-pitcher hydration for `b9 sp`.
+- Request `/teams/<id>/roster?rosterType=40Man` for `skout t` and validate positive unique person-and-role rows before team-scoped replacement.
+- Request `/standings?leagueId=103,104&season=<year>` plus bulk regular-season hitting and pitching statistics for `skout tt`.
+- Request three host-local schedule dates with probable-pitcher hydration for `skout sp`.
 - Preserve the last complete snapshot after acquisition, validation, or storage failure and surface one dataset warning.
 - Keep schedules fresh for 60 seconds, standings and totals for 15 minutes, and team directory and rosters for 24 hours unless forced.
 
@@ -15,7 +15,7 @@ Treat `https://statsapi.mlb.com/api/v1` as a public, unauthenticated JSON servic
 
 ## Implemented Endpoints
 
-| Status | Path | b9 operation |
+| Status | Path | skout operation |
 |---|---|---|
 | Implemented | `/seasons/{season}?sportId=1` | Acquire season boundaries |
 | Implemented | `/schedule?sportId=1&date={date}&hydrate=linescore,probablePitcher,lineups` | Acquire one hydrated schedule day |
@@ -28,7 +28,7 @@ Treat `https://statsapi.mlb.com/api/v1` as a public, unauthenticated JSON servic
 | Implemented | `/stats?stats=byDateRange&group={hitting\|pitching}&gameType=R&season={season}&playerPool=All&limit=2000&startDate={date}&endDate={date}` | Acquire bulk regular-season date-range statistics |
 | Implemented | `/people/{id}/stats?stats=gameLog&season={season}&group={hitting\|pitching}` | Acquire one player's game log and derive quality starts |
 
-Use GET with a 10-second total timeout and an 8 MiB response limit. Construct every request inside the MLB adapter and dispatch it through b9's validating `HttpClient`. Keep response bodies out of status errors and user-facing diagnostics.
+Use GET with a 10-second total timeout and an 8 MiB response limit. Construct every request inside the MLB adapter and dispatch it through skout's validating `HttpClient`. Keep response bodies out of status errors and user-facing diagnostics.
 
 ## Deferred Endpoints
 
@@ -82,7 +82,7 @@ Use namespace `mlb`, logical keys `hitting-range-<season>-<start>-<end>` and `pi
 
 ## Fixture Provenance
 
-The fixtures were derived from b9's typed provider contracts, adapter tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
+The fixtures were derived from skout's typed provider contracts, adapter tests, and documented StatsAPI shapes on 2026-08-15. They are minimized compatibility captures rather than claims about current live responses. No credentials or operator data were present; only unrelated response fields were removed.
 
 | Fixture | Exact endpoint or query | Origin |
 |---|---|---|

@@ -41,7 +41,7 @@ Ignore spread, total, and pitcher-prop fields. ESPN supplies only the moneyline 
 
 ## Transport
 
-Route every request through b9's injected `HttpClient`. Use GET, a ten-second total timeout, a four-MiB response limit, no retries, and no disk cache. Accept HTTPS endpoint configuration in production and loopback HTTP only in tests.
+Route every request through skout's injected `HttpClient`. Use GET, a ten-second total timeout, a four-MiB response limit, no retries, and no disk cache. Accept HTTPS endpoint configuration in production and loopback HTTP only in tests.
 
 Abort the acquisition when either scoreboard request fails transport, HTTP status, size, or JSON decoding. Retain all valid scoreboard games when an individual odds request fails and return each degraded event as a bounded structured issue. Keep response bodies and query values out of user-facing diagnostics.
 

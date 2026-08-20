@@ -1,6 +1,6 @@
 use std::fs;
 
-use b9::config::{Config, read_at, write_at};
+use skout::config::{Config, read_at, write_at};
 use tempfile::tempdir;
 
 #[test]

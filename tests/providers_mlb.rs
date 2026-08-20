@@ -5,12 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::cache::DiskCache;
-use b9::providers::mlb::{
+use skout::cache::DiskCache;
+use skout::providers::mlb::{
     HittingStats, MlbCacheStatus, MlbClient, MlbEndpoints, PitchingStats, PrimaryType,
 };
-use b9::store::Clock;
-use b9::transport::{
+use skout::store::Clock;
+use skout::transport::{
     ExecutorError, HttpClient, HttpExecutor, HttpMethod, HttpResponse, ValidatedRequest,
 };
 use tempfile::tempdir;
@@ -210,14 +210,14 @@ fn selected_fixtures_decode_every_typed_contract() {
     assert_eq!(games[0].linescore.as_ref().unwrap().home_runs, 1);
     assert_eq!(
         games[0].away_lineup.as_ref().unwrap(),
-        &[b9::providers::mlb::LineupPlayer {
+        &[skout::providers::mlb::LineupPlayer {
             person_id: 700001,
             full_name: "Away Hitter".into(),
         }]
     );
     assert_eq!(
         games[0].home_lineup.as_ref().unwrap(),
-        &[b9::providers::mlb::LineupPlayer {
+        &[skout::providers::mlb::LineupPlayer {
             person_id: 700002,
             full_name: "Home Hitter".into(),
         }]

@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::providers::espn::{EspnClient, EspnEndpoints};
-use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
+use skout::providers::espn::{EspnClient, EspnEndpoints};
+use skout::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
 
 const SCOREBOARD_STANDARD: &[u8] = include_bytes!("fixtures/espn/scoreboard-standard.json");
 const SCOREBOARD_EMPTY: &[u8] = include_bytes!("fixtures/espn/scoreboard-empty.json");
@@ -52,7 +52,7 @@ impl HttpExecutor for HeaderRequiredExecutor {
             header.name.eq_ignore_ascii_case("user-agent")
                 && header.value
                     == format!(
-                        "b9/{} (+https://github.com/queone/b9)",
+                        "skout/{} (+https://github.com/queone/skout)",
                         env!("CARGO_PKG_VERSION")
                     )
         });
@@ -131,7 +131,7 @@ fn requests_two_utc_days_deduplicates_and_uses_first_odds_item() {
             header.name.eq_ignore_ascii_case("user-agent")
                 && header.value
                     == format!(
-                        "b9/{} (+https://github.com/queone/b9)",
+                        "skout/{} (+https://github.com/queone/skout)",
                         env!("CARGO_PKG_VERSION")
                     )
         }));
@@ -240,11 +240,11 @@ fn zero_moneyline_is_successfully_unquoted() {
 
 #[test]
 fn team_mapping_ignores_spacing_and_punctuation_only() {
-    assert!(b9::providers::espn::matches_team(
+    assert!(skout::providers::espn::matches_team(
         "N.Y. Yankees",
         "NY Yankees"
     ));
-    assert!(!b9::providers::espn::matches_team(
+    assert!(!skout::providers::espn::matches_team(
         "New York Mets",
         "New York Yankees"
     ));

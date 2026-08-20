@@ -1,4 +1,4 @@
-use b9::providers::savant::parse_csv;
+use skout::providers::savant::parse_csv;
 
 #[test]
 fn savant_fixtures_parse_contracted_metrics() {

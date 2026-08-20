@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
-use b9::domain::{
+use skout::domain::{
     GameIndicator, Matchup, MatchupTeam, PlayerWeekStats, Position, RosterWeekStats,
     StoredFantasyPlayer,
 };
 use std::time::{Duration, SystemTime};
 
-use b9::matchup::{
+use skout::matchup::{
     LocalMatchupView, MatchupOptions, MatchupView, cached_or_fetch_at, render_local_matchup,
     render_matchup,
 };
-use b9::store::Store;
-use b9::terminal::HelpColorMode;
+use skout::store::Store;
+use skout::terminal::HelpColorMode;
 use tempfile::tempdir;
 
 fn team(key: &str, name: &str, mine: bool, wins: i32, losses: i32) -> MatchupTeam {
@@ -298,7 +298,7 @@ fn matchup_renders_named_category_totals_inline_with_winner_colors() {
         opponent: roster("two", "Opponents"),
         teams: vec![],
         stale: false,
-        odds: vec![b9::matchup::MatchupOdds {
+        odds: vec![skout::matchup::MatchupOdds {
             mine: true,
             line: "Cole             v Bello             NYY@BOS  ██████░░░░ 55%".into(),
         }],
@@ -365,7 +365,7 @@ fn matchup_surfaces_strip_team_name_emoji_from_cached_views() {
 #[test]
 fn matchup_snapshot_honors_sixty_seconds_and_falls_back_stale() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let now = SystemTime::now();
     let (first, stale) = cached_or_fetch_at(&mut store, "match_test", "week", now, || {
         Ok::<_, &str>(vec![1, 2])

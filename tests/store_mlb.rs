@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::store::{Clock, RosterWrite, SeasonStatWrite, Store};
 use rusqlite::Connection;
+use skout::store::{Clock, RosterWrite, SeasonStatWrite, Store};
 use tempfile::tempdir;
 
 struct FixedClock;
@@ -16,7 +16,7 @@ impl Clock for FixedClock {
 fn roster_replacement_preserves_two_way_roles_and_rejects_empty_overwrite() {
     let dir = tempdir().unwrap();
     let mut store =
-        Store::open_at_with_clock(dir.path().join("b9.db"), Arc::new(FixedClock)).unwrap();
+        Store::open_at_with_clock(dir.path().join("skout.db"), Arc::new(FixedClock)).unwrap();
     let rows = vec![
         RosterWrite {
             mlbam_id: 17,
@@ -37,20 +37,20 @@ fn roster_replacement_preserves_two_way_roles_and_rejects_empty_overwrite() {
     ];
     store.replace_mlb_roster("LAA", &rows).unwrap();
     assert_eq!(store.mlb_roster("LAA").unwrap().len(), 2);
-    let connection = Connection::open(dir.path().join("b9.db")).unwrap();
+    let connection = Connection::open(dir.path().join("skout.db")).unwrap();
     connection.execute("INSERT INTO players (mlbam_id,name,mlb_team,position_type,synced_at) VALUES (17,'Duplicate','LAA','H',10)", []).unwrap();
     assert_eq!(store.mlb_roster("LAA").unwrap().len(), 2);
     assert!(store.replace_mlb_roster("LAA", &[]).is_err());
     assert_eq!(
         store.schema_version().unwrap(),
-        b9::store::CURRENT_SCHEMA_VERSION
+        skout::store::CURRENT_SCHEMA_VERSION
     );
 }
 
 #[test]
 fn bulk_stats_preserve_separately_acquired_quality_starts() {
     let dir = tempdir().unwrap();
-    let path = dir.path().join("b9.db");
+    let path = dir.path().join("skout.db");
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock)).unwrap();
     let mut pitching = SeasonStatWrite {
         mlbam_id: 700003,
@@ -96,7 +96,7 @@ fn bulk_stats_preserve_separately_acquired_quality_starts() {
 fn completed_hitter_average_excludes_current_and_uses_cumulative_formulas() {
     let dir = tempdir().unwrap();
     let mut store =
-        Store::open_at_with_clock(dir.path().join("b9.db"), Arc::new(FixedClock)).unwrap();
+        Store::open_at_with_clock(dir.path().join("skout.db"), Arc::new(FixedClock)).unwrap();
     for (season, games) in [(2024, 150), (2025, 150), (2026, 50)] {
         store
             .replace_mlb_season_stats(

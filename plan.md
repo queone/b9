@@ -1,8 +1,8 @@
-# b9 Plan
+# skout Plan
 
 ## Product Direction
 
-Maintain b9 as an independent Rust fantasy-baseball utility.
+Maintain skout as an independent Rust fantasy-baseball utility.
 
 ## Ideas To Explore
 

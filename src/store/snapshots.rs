@@ -96,7 +96,7 @@ impl Store {
     /// lets a caller prefer whichever source is freshest and not stale
     /// without hard-coding which source that is (used where multiple
     /// sources can legitimately produce the same dataset/scope, e.g. OAuth
-    /// vs. the public feed for `b9 m`'s default weekly view).
+    /// vs. the public feed for `skout m`'s default weekly view).
     pub fn command_snapshots_by_scope(
         &self,
         dataset: &str,

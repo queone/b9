@@ -12,7 +12,7 @@ fn repository_file(path: &str) -> String {
 
 #[test]
 fn retained_command_inventory_is_visible_and_help_is_reachable() {
-    let root = Command::new(env!("CARGO_BIN_EXE_b9"))
+    let root = Command::new(env!("CARGO_BIN_EXE_skout"))
         .arg("--help")
         .output()
         .unwrap();
@@ -24,7 +24,7 @@ fn retained_command_inventory_is_visible_and_help_is_reachable() {
                 .any(|line| line.trim_start().starts_with(command)),
             "missing public command {command}"
         );
-        let help = Command::new(env!("CARGO_BIN_EXE_b9"))
+        let help = Command::new(env!("CARGO_BIN_EXE_skout"))
             .args([command, "--help"])
             .output()
             .unwrap();
@@ -32,7 +32,7 @@ fn retained_command_inventory_is_visible_and_help_is_reachable() {
         assert!(help.stderr.is_empty(), "help wrote stderr for {command}");
     }
     assert!(!root.contains("_daemon"));
-    let alias = Command::new(env!("CARGO_BIN_EXE_b9"))
+    let alias = Command::new(env!("CARGO_BIN_EXE_skout"))
         .args(["whatis", "--help"])
         .output()
         .unwrap();
@@ -40,7 +40,7 @@ fn retained_command_inventory_is_visible_and_help_is_reachable() {
     assert!(
         String::from_utf8(alias.stdout)
             .unwrap()
-            .contains("Usage: b9 i")
+            .contains("Usage: skout i")
     );
 }
 

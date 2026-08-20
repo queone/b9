@@ -1,8 +1,8 @@
-# b9 Glossary
+# skout Glossary
 
-Canonical definitions for baseball, fantasy, and b9-specific terms. This file is embedded in the Rust binary and powers `b9 i`. API and architecture documents may add implementation detail but must not contradict these definitions.
+Canonical definitions for baseball, fantasy, and skout-specific terms. This file is embedded in the Rust binary and powers `skout i`. API and architecture documents may add implementation detail but must not contradict these definitions.
 
-Definitions include both implemented b9 concepts and general fantasy-baseball vocabulary useful when interpreting its data. A definition alone does not claim that b9 currently computes or displays the term. A **Where** field, when present, names the current Rust implementation or durable schema location.
+Definitions include both implemented skout concepts and general fantasy-baseball vocabulary useful when interpreting its data. A definition alone does not claim that skout currently computes or displays the term. A **Where** field, when present, names the current Rust implementation or durable schema location.
 
 When a change introduces or redefines a domain term, update this file in the same pass.
 
@@ -10,7 +10,7 @@ When a change introduces or redefines a domain term, update this file in the sam
 
 ## Coverage Checklist
 
-Every key below must have a corresponding entry in this glossary. When a new stat or signal is added to b9, add it here.
+Every key below must have a corresponding entry in this glossary. When a new stat or signal is added to skout, add it here.
 
 `ab`, `abandon`, `active`, `age`, `atc`, `avg`, `available`, `babip`, `barrel_pct`, `batters_faced`, `bb`, `bb_pct`, `bench`, `blend_window`, `category_strategy`, `cfip`, `ch_pct`, `close`, `closer`, `confirmed`, `confirmed_sp`, `cs`, `dtd`, `ecr`, `empirical_bayes`, `era`, `exit_velo`, `expected`, `faab`, `fastball_velo`, `fb_pct`, `fip`, `flippable`, `fwar`, `g`, `gb_pct`, `gs`, `h2h`, `hard_hit_pct`, `hbp`, `holds`, `hr`, `hr_fb`, `il`, `injured`, `ip`, `k`, `k_bb_pct`, `k_pct`, `k9`, `last03ip`, `last10ip`, `last20pa`, `last5yrs`, `launch_angle`, `lineup_candidates`, `lineup_status`, `lost`, `na`, `next03ip`, `next10ip`, `next20pa`, `no_game`, `not_scheduled`, `obp`, `ops`, `opportunity_damping`, `out`, `own_pct`, `p_slot`, `pa`, `pitcher_day_state`, `pool`, `pos`, `pp`, `ppd`, `probable`, `probable_sp`, `protect`, `punt`, `push`, `qs`, `r`, `rbi`, `replacement_level`, `roster_moves`, `roster_moves_note`, `roster_slot`, `rp_available`, `rp_slot`, `sb`, `savant`, `slg`, `sp_slot`, `spin_rate`, `sprint_speed`, `stabilization_ramp`, `steamer`, `streaming`, `sv`, `sweet_spot_pct`, `tied`, `pqs`, `w`, `waiver_wire`, `whiff_pct`, `whip`, `wrc_plus`, `xba`, `xera`, `xfip`, `xobp`, `xslg`, `xwoba`, `yp`, `yr`, `z_score`, `zips`
 
@@ -120,7 +120,7 @@ Closer enters with a lead of 3 or fewer runs (or tying run on base/at bat/on dec
 
 ### Abandon (`abandon`) [fantasy]
 
-General category-strategy classification: a category is conceded because its gap is impractical to close or the manager has chosen to punt it. b9 does not currently emit automated abandon recommendations.
+General category-strategy classification: a category is conceded because its gap is impractical to close or the manager has chosen to punt it. skout does not currently emit automated abandon recommendations.
 
 ### Available (`available`) [fantasy]
 
@@ -179,11 +179,11 @@ Player status: rostered in an IL (Injured List) slot. Cannot be placed in active
 
 ### Lineup Status (`lineup_status`) [fantasy]
 
-General classification of same-day availability using values such as `confirmed`, `probable`, `expected`, `out`, `not_scheduled`, `no_game`, and `available`. b9 renders the underlying lineup, probable-pitcher, injury, schedule, and game-state facts rather than emitting this classification as a separate advisory payload.
+General classification of same-day availability using values such as `confirmed`, `probable`, `expected`, `out`, `not_scheduled`, `no_game`, and `available`. skout renders the underlying lineup, probable-pitcher, injury, schedule, and game-state facts rather than emitting this classification as a separate advisory payload.
 
 ### Lineup Candidates (`lineup_candidates`) [fantasy]
 
-General decision-support term for position-eligible bench players who could replace active players. b9 currently presents roster and game-state facts but does not emit an automated swap list.
+General decision-support term for position-eligible bench players who could replace active players. skout currently presents roster and game-state facts but does not emit an automated swap list.
 
 ### Lost (`lost`) [fantasy]
 
@@ -235,7 +235,7 @@ Category strategy classification: user is ahead or close in this category (and i
 
 ### Punt (`punt`) [fantasy]
 
-Deliberate decision to concede a scoring category and redirect roster resources to other categories. This is a manager policy choice; b9 does not currently store a strategy configuration.
+Deliberate decision to concede a scoring category and redirect roster resources to other categories. This is a manager policy choice; skout does not currently store a strategy configuration.
 
 - **Aliases:** punting
 
@@ -251,7 +251,7 @@ The talent level of the best freely available player at a position. In a 12-team
 
 ### Roster Moves Note (`roster_moves_note`) [fantasy]
 
-General decision-context note describing constraints such as remaining weekly adds or FAAB budget. b9 does not currently generate an advisory payload or automated pickup/drop recommendation.
+General decision-context note describing constraints such as remaining weekly adds or FAAB budget. skout does not currently generate an advisory payload or automated pickup/drop recommendation.
 
 ### Roster Slot (`roster_slot`) [fantasy]
 
@@ -283,7 +283,7 @@ Pitcher day state: relief pitcher whose team has a game today. Eligible to pitch
 
 ### Roster Moves (`roster_moves`) [fantasy]
 
-General decision-support term for pickup/drop candidates ranked by category fit. b9 currently ranks waiver candidates but does not emit paired roster-move recommendations.
+General decision-support term for pickup/drop candidates ranked by category fit. skout currently ranks waiver candidates but does not emit paired roster-move recommendations.
 
 ### Streaming (`streaming`) [fantasy]
 
@@ -408,7 +408,7 @@ Fielding Independent Pitching: `(13*HR + 3*(BB+HBP) - 2*K) / IP + cFIP`. Isolate
 
 ### FIP Constant (`cfip`) [stat]
 
-League-level constant that aligns FIP to the league ERA scale. b9 retains FIP-related schema fields but does not currently fetch or expose a cFIP value.
+League-level constant that aligns FIP to the league ERA scale. skout retains FIP-related schema fields but does not currently fetch or expose a cFIP value.
 
 ### Fastball Velocity (`fastball_velo`) [stat]
 
@@ -545,7 +545,7 @@ Batter awarded first base after four balls (hitter stat) or pitcher issues a bas
 
 ### WAR (`fwar`) [stat]
 
-Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. The pinned Go baseline displayed FanGraphs fWAR; b9 does not acquire or display it while automated FanGraphs access remains rejected.
+Wins Above Replacement. Composite metric estimating total player value in wins compared to a replacement-level player. The pinned Go baseline displayed FanGraphs fWAR; skout does not acquire or display it while automated FanGraphs access remains rejected.
 
 - **Aliases:** fWAR
 - **Where:** `players.fangraphs_war`
@@ -577,118 +577,118 @@ Weighted Runs Created Plus. FanGraphs metric where 100 = league average. Adjusts
 
 ---
 
-## b9 Signals
+## skout Signals
 
-### Blend Window (`blend_window`) [b9]
+### Blend Window (`blend_window`) [skout]
 
 Season-phase-based weighting of current-season, prior-season, and spring training data for PQS computation. Transitions from prior-heavy early in the season to current-only once league games played reaches 28.
 
 - **Where:** `src/analysis/blend.rs`
 
-### Category Strategy (`category_strategy`) [b9]
+### Category Strategy (`category_strategy`) [skout]
 
-General deterministic classification of a scoring category as push, protect, or abandon. b9 currently shows category totals and W/T/L outcomes but does not emit this higher-level strategy classification.
+General deterministic classification of a scoring category as push, protect, or abandon. skout currently shows category totals and W/T/L outcomes but does not emit this higher-level strategy classification.
 
-### Closer (`closer`) [b9]
+### Closer (`closer`) [skout]
 
-The designated closer for each MLB team. b9 resolves FanGraphs RosterResource tags with an SV-leader fallback, displays `RP1`, and applies the settled PQS save-category multiplier.
+The designated closer for each MLB team. skout resolves FanGraphs RosterResource tags with an SV-leader fallback, displays `RP1`, and applies the settled PQS save-category multiplier.
 
 - **Where:** `src/providers/fangraphs_closer_chart.rs`; `src/store/projections.rs`
 
-### Empirical-Bayes Blending (`empirical_bayes`) [b9]
+### Empirical-Bayes Blending (`empirical_bayes`) [skout]
 
 Stabilization method for Statcast metrics: `blended = w * current + (1 - w) * prior`, where `w = sample / (sample + k)`. Each metric has its own k-value. Higher k = more regression to prior. Applied in `BlendStatcast`.
 
 - **Where:** `src/analysis/statcast_blend.rs`
 
-### Opportunity Damping (`opportunity_damping`) [b9]
+### Opportunity Damping (`opportunity_damping`) [skout]
 
 Current-season weight in PQS blend is scaled by `min(PA/150, 1)` for hitters and `min(IP/40, 1)` for pitchers. Prevents small-sample current stats from dominating the blend early in the season.
 
 - **Where:** `src/analysis/blend.rs`
 
-### Pitcher Day State (`pitcher_day_state`) [b9]
+### Pitcher Day State (`pitcher_day_state`) [skout]
 
-General classification of a pitcher's same-day availability: `confirmed_sp` (RotoWire confirmed), `probable_sp` (MLB probable), `rp_available` (reliever whose team plays), `not_scheduled` (starter-eligible but not scheduled), or `no_game` (team off). b9 renders the underlying status facts without exposing a separate pitcher-day-state field.
+General classification of a pitcher's same-day availability: `confirmed_sp` (RotoWire confirmed), `probable_sp` (MLB probable), `rp_available` (reliever whose team plays), `not_scheduled` (starter-eligible but not scheduled), or `no_game` (team off). skout renders the underlying status facts without exposing a separate pitcher-day-state field.
 
-### Pool (`pool`) [b9]
+### Pool (`pool`) [skout]
 
 The selected player collection used as the normalization baseline for PQS z-scores. `pool_scores` extracts each available signal across that collection and excludes insufficient samples signal by signal.
 
 - **Where:** `src/analysis/pqs.rs` — `pool_scores`
 
 
-### POS Column (`pos`) [b9]
+### POS Column (`pos`) [skout]
 
-Width-five rendering of Yahoo position eligibility. b9 omits generic `Util` and `P` when specific positions exist, preserves a literal list when it fits, and otherwise compresses positions in defensive order (`C`, `1`, `2`, `3`, `S`, `O`, `P`, `R`). Six or more specific positions render as `All`. A closer receives a trailing `1`, such as `RP1`.
+Width-five rendering of Yahoo position eligibility. skout omits generic `Util` and `P` when specific positions exist, preserves a literal list when it fits, and otherwise compresses positions in defensive order (`C`, `1`, `2`, `3`, `S`, `O`, `P`, `R`). Six or more specific positions render as `All`. A closer receives a trailing `1`, such as `RP1`.
 
 - **Aliases:** position, positions, POS
 - **Where:** `src/player_display.rs` — `display_positions`
 
-### Projected Production (`pp`) [b9]
+### Projected Production (`pp`) [skout]
 
-Reference score for projected fantasy-category production, distinct from observed player quality. b9 stores and blends rest-of-season projections for detail-card windows but does not currently expose a standalone 0-100 PP score.
+Reference score for projected fantasy-category production, distinct from observed player quality. skout stores and blends rest-of-season projections for detail-card windows but does not currently expose a standalone 0-100 PP score.
 
 - **Aliases:** PP
 
-### Stabilization Ramp (`stabilization_ramp`) [b9]
+### Stabilization Ramp (`stabilization_ramp`) [skout]
 
 Signal weight scaled by `min(1.0, sample / threshold)` in PQS computation. Signals with insufficient sample size contribute less to the score. EB-blended signals use threshold=1 (already stabilized); raw signals use real thresholds (e.g., 50 PA for K%).
 
 - **Where:** `src/analysis/pqs.rs`
 
-### Steamer (`steamer`) [b9]
+### Steamer (`steamer`) [skout]
 
-FanGraphs rest-of-season projection system providing projected counting and rate statistics. b9 retains the source projection and a provider-supplied or synchronized blend for detail-card windows.
+FanGraphs rest-of-season projection system providing projected counting and rate statistics. skout retains the source projection and a provider-supplied or synchronized blend for detail-card windows.
 
 
-### Player Quality Score (`pqs`) [b9]
+### Player Quality Score (`pqs`) [skout]
 
 On-demand quality model using stabilized skill signals. Hitter signals: xwOBA (0.30), K% (0.15), BB% (0.10), Sprint Speed (0.20), FB% (0.10), HR/FB (0.15). Pitcher signals: Whiff% (0.30), Chase% (0.20), GB% (0.15), Fastball Velo (0.15), K-BB% (0.20). Each signal is z-scored against the current player pool, clamped to ±2.0, weighted, and adjusted for opportunity, positional scarcity, and closer role. The score is computed at display time and feeds waiver ranking.
 
 - **Aliases:** PQS, TS, TalentScore (legacy)
 - **Where:** `src/analysis/pqs.rs` — `pool_scores`
 
-### Z-Score (`z_score`) [b9]
+### Z-Score (`z_score`) [skout]
 
 `(value - pool_mean) / pool_stddev`. Per-signal z-score clamped to ±2.0 in PQS computation.
 
 
-### ZiPS (`zips`) [b9]
+### ZiPS (`zips`) [skout]
 
-Dan Szymborski's rest-of-season projection system, published by FanGraphs. b9 can retain ZiPS rows as projection inputs.
+Dan Szymborski's rest-of-season projection system, published by FanGraphs. skout can retain ZiPS rows as projection inputs.
 
 
-### ATC (`atc`) [b9]
+### ATC (`atc`) [skout]
 
-Ariel Cohen's projection system that aggregates multiple forecasting models. b9 can retain ATC rows as projection inputs.
+Ariel Cohen's projection system that aggregates multiple forecasting models. skout can retain ATC rows as projection inputs.
 
-### Yahoo Players (`yp`) [b9]
+### Yahoo Players (`yp`) [skout]
 
-Per-MLB-team count of players currently rostered by a fantasy team in the selected Yahoo league. Active, bench, injured, and not-active slots count; two-way players count once per MLB team. Displayed as `YP` in `b9 tt`.
+Per-MLB-team count of players currently rostered by a fantasy team in the selected Yahoo league. Active, bench, injured, and not-active slots count; two-way players count once per MLB team. Displayed as `YP` in `skout tt`.
 
 - **Aliases:** YP
 - **Where:** `src/store/mlb.rs`; `src/mlb_display.rs`
 
-### Age (`age`) [b9]
+### Age (`age`) [skout]
 
-Player age in whole years, derived at render time from the MLBAM `birthDate` stored in `players.birth_date`. Reduced by one if the birthday has not yet occurred in the current calendar year. Renders `-` when `birth_date` is NULL (no MLBAM identity yet, or never fetched). Used in the `b9 h <name>` and `b9 p <name>` detail card identity headers.
+Player age in whole years, derived at render time from the MLBAM `birthDate` stored in `players.birth_date`. Reduced by one if the birthday has not yet occurred in the current calendar year. Renders `-` when `birth_date` is NULL (no MLBAM identity yet, or never fetched). Used in the `skout h <name>` and `skout p <name>` detail card identity headers.
 
 - **Where:** `src/player_display.rs` — `player_age`
 
-### AVG162G (`avg162g`) [b9]
+### AVG162G (`avg162g`) [skout]
 
 The Baseball-Reference-style 162-game pace row at the top of a player detail card's SPLIT table. It aggregates completed seasons, excludes the current season, and scales counting statistics by `162 / sum_games`. Rate statistics are recomputed from cumulative counts and are not scaled. With no completed-season games, cells render as unavailable.
 
 - **Where:** `src/player_display.rs`
 
-### GAME LOG (`game-log`) [b9]
+### GAME LOG (`game-log`) [skout]
 
 The recent-results section below the SPLIT table on a player detail card. Hitter rows walk the last ten calendar days and use schedule plus boxscore data to distinguish starts, non-appearances, and off days. Pitcher rows show the last ten appearances with positive innings pitched.
 
 - **Where:** `src/player_commands.rs`; `src/player_display.rs`; `src/providers/mlb.rs`
 
-### Savant (`savant`) [b9]
+### Savant (`savant`) [skout]
 
 The literal source label on hitter and pitcher detail-card Statcast rows. Some adjacent advanced metrics may be FanGraphs-derived, so treat the label as a display convention rather than strict cell-by-cell provenance.
 

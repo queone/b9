@@ -4,7 +4,7 @@
 //! league data with zero cookies and zero auth headers — confirmed distinct
 //! from account-scoped paths on the same host, which return 401 without
 //! login. This module owns that wire format; it never touches OAuth, the
-//! credential store, or `b9 login` state.
+//! credential store, or `skout login` state.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -98,7 +98,7 @@ impl fmt::Display for YahooPublicError {
 impl std::error::Error for YahooPublicError {}
 
 /// Extract the numeric Yahoo `league_id` from a bare number or a full
-/// `{game_key}.l.{league_id}` key (the shape b9 config stores for `sync`).
+/// `{game_key}.l.{league_id}` key (the shape skout config stores for `sync`).
 pub fn league_id_from_key(value: &str) -> Result<String, YahooPublicError> {
     let trimmed = value.trim();
     let is_digits = |value: &str| !value.is_empty() && value.chars().all(|c| c.is_ascii_digit());
@@ -236,7 +236,7 @@ impl YahooPublicClient {
     /// normal `Accept` header, matching what a plain browser request sends,
     /// never a spoofed identity.
     ///
-    /// `league_id` selects the league on the wire; `league_key` is the b9
+    /// `league_id` selects the league on the wire; `league_key` is the skout
     /// storage key the resulting snapshot is written under — the caller
     /// decides that (reusing a real OAuth-derived key when one already
     /// resolves to the same league, synthesizing one otherwise), since only

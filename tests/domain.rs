@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use b9::domain::{
+use skout::domain::{
     BattingStats, GameLogRow, League, Matchup, MatchupTeam, PitchingStats, Player, PlayerWeekStats,
     Position, Roster, RosterWeekStats, ScoringType, StatcastData, clean_fantasy_team_name,
 };
@@ -16,7 +16,7 @@ fn fantasy_team_names_drop_emoji_without_damaging_text() {
 
 #[test]
 fn mlb_utility_records_round_trip_without_provider_fields() {
-    let team = b9::domain::MlbTeam {
+    let team = skout::domain::MlbTeam {
         id: 147,
         name: "New York Yankees".into(),
         location: "New York".into(),
@@ -26,10 +26,10 @@ fn mlb_utility_records_round_trip_without_provider_fields() {
     };
     let encoded = serde_json::to_string(&team).unwrap();
     assert_eq!(
-        serde_json::from_str::<b9::domain::MlbTeam>(&encoded).unwrap(),
+        serde_json::from_str::<skout::domain::MlbTeam>(&encoded).unwrap(),
         team
     );
-    let row = b9::domain::MlbSlateRow {
+    let row = skout::domain::MlbSlateRow {
         date: "2026-08-15".into(),
         game_id: 1,
         game_time: "2026-08-15 19:05".into(),
@@ -44,7 +44,7 @@ fn mlb_utility_records_round_trip_without_provider_fields() {
         home_mine: false,
     };
     assert_eq!(
-        serde_json::from_str::<b9::domain::MlbSlateRow>(&serde_json::to_string(&row).unwrap())
+        serde_json::from_str::<skout::domain::MlbSlateRow>(&serde_json::to_string(&row).unwrap())
             .unwrap(),
         row
     );

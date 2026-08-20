@@ -1,25 +1,25 @@
 use std::process::{Command, Output};
 
-use b9::cli::render_root_help;
-use b9::terminal::HelpColorMode;
+use skout::cli::render_root_help;
+use skout::terminal::HelpColorMode;
 
-fn b9(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_b9"))
+fn skout(arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_skout"))
         .args(arguments)
         .output()
-        .expect("run b9")
+        .expect("run skout")
 }
 
 #[test]
 fn root_help_forms_share_the_golden_surface() {
-    let default = b9(&[]);
+    let default = skout(&[]);
     assert!(default.status.success());
     assert!(default.stderr.is_empty());
     let help = String::from_utf8(default.stdout).expect("UTF-8 root help");
     assert_eq!(help, render_root_help("0.22.1", HelpColorMode::Plain));
 
     for form in [["-h"].as_slice(), ["--help"].as_slice(), ["-?"].as_slice()] {
-        let output = b9(form);
+        let output = skout(form);
         assert!(output.status.success(), "help form {form:?}");
         assert_eq!(output.stdout, help.as_bytes(), "help form {form:?}");
         assert!(output.stderr.is_empty(), "help form {form:?}");
@@ -28,7 +28,7 @@ fn root_help_forms_share_the_golden_surface() {
 
 #[test]
 fn root_help_lists_every_command_specific_flag() {
-    let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
+    let root = String::from_utf8(skout(&["--help"]).stdout).unwrap();
     for (command, flags) in [
         ("sync", &["-T, --team"][..]),
         ("m", &["-w, --week", "-W, --weekly", "-D, --day"]),
@@ -65,13 +65,13 @@ fn root_help_lists_every_command_specific_flag() {
 #[test]
 fn glossary_aliases_share_command_help() {
     for command in ["whatis", "i"] {
-        let output = b9(&[command, "--help"]);
+        let output = skout(&[command, "--help"]);
         assert!(output.status.success());
         assert!(output.stderr.is_empty());
         assert!(
             String::from_utf8(output.stdout)
                 .unwrap()
-                .contains("Usage: b9 i")
+                .contains("Usage: skout i")
         );
     }
 }
@@ -79,9 +79,9 @@ fn glossary_aliases_share_command_help() {
 #[test]
 fn version_forms_print_the_exact_utility_contract() {
     for form in ["-v", "--version"] {
-        let output = b9(&[form]);
+        let output = skout(&[form]);
         assert!(output.status.success());
-        assert_eq!(output.stdout, b"b9 0.22.1\n");
+        assert_eq!(output.stdout, b"skout 0.22.1\n");
         assert!(output.stderr.is_empty());
     }
 }
@@ -89,11 +89,11 @@ fn version_forms_print_the_exact_utility_contract() {
 #[test]
 fn glossary_commands_work_without_the_repository_as_working_directory() {
     for command in ["whatis", "i"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+        let output = Command::new(env!("CARGO_BIN_EXE_skout"))
             .args([command, "pa"])
             .current_dir(std::env::temp_dir())
             .output()
-            .expect("run installed-shape b9 glossary");
+            .expect("run installed-shape skout glossary");
         assert!(output.status.success());
         assert!(output.stderr.is_empty());
         let stdout = String::from_utf8(output.stdout).expect("UTF-8 glossary entry");
@@ -104,16 +104,15 @@ fn glossary_commands_work_without_the_repository_as_working_directory() {
 
 #[test]
 fn full_glossary_is_plain_and_grouped() {
-    let output = b9(&["i"]);
+    let output = skout(&["i"]);
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 glossary");
     let baseball = stdout.find("BASEBALL\n").expect("baseball banner");
     let fantasy = stdout.find("FANTASY\n").expect("fantasy banner");
-    let b9_group = stdout.find("B9\n").expect("b9 banner");
+    let skout_group = stdout.find("SKOUT\n").expect("skout banner");
     let stat = stdout.find("STAT\n").expect("stat banner");
-    assert!(baseball < fantasy && fantasy < b9_group && b9_group < stat);
-    assert!(!stdout.contains(&["SK", "OUT"].concat()));
+    assert!(baseball < fantasy && fantasy < skout_group && skout_group < stat);
     assert!(!stdout.contains("\u{1b}["));
 }
 
@@ -127,11 +126,15 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
             "i: no glossary entry",
         ),
         (&["i", "run"][..], 1, "i: term"),
-        (&["i", "pa", "extra"][..], 2, "Usage: b9 i [OPTIONS] [TERM]"),
+        (
+            &["i", "pa", "extra"][..],
+            2,
+            "Usage: skout i [OPTIONS] [TERM]",
+        ),
         (&["unknown"][..], 2, "unrecognized subcommand"),
     ];
     for (arguments, code, message) in cases {
-        let output = b9(arguments);
+        let output = skout(arguments);
         assert_eq!(output.status.code(), Some(code), "arguments {arguments:?}");
         assert!(output.stdout.is_empty(), "arguments {arguments:?}");
         let stderr = String::from_utf8(output.stderr).expect("UTF-8 error");
@@ -142,7 +145,7 @@ fn lookup_and_parser_errors_use_stderr_and_classified_exits() {
 #[test]
 fn fantasy_commands_have_help_without_side_effects() {
     for command in ["st", "sync", "reset", "m", "i", "whatis"] {
-        let output = b9(&[command, "--help"]);
+        let output = skout(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
         assert!(String::from_utf8(output.stdout).unwrap().contains("Usage:"));
@@ -151,7 +154,7 @@ fn fantasy_commands_have_help_without_side_effects() {
 
 #[test]
 fn sync_help_exposes_only_the_team_selection_flag() {
-    let sync = String::from_utf8(b9(&["sync", "--help"]).stdout).unwrap();
+    let sync = String::from_utf8(skout(&["sync", "--help"]).stdout).unwrap();
     assert!(!sync.contains("--force"));
     assert!(sync.contains("-T, --team"));
     assert!(sync.contains("Select the primary fantasy team"));
@@ -160,7 +163,7 @@ fn sync_help_exposes_only_the_team_selection_flag() {
 #[test]
 fn mlb_commands_have_force_help() {
     for command in ["t", "tt", "sp"] {
-        let output = b9(&[command, "--help"]);
+        let output = skout(&[command, "--help"]);
         assert!(output.status.success(), "command {command}");
         assert!(output.stderr.is_empty());
         let stdout = String::from_utf8(output.stdout).unwrap();
@@ -171,7 +174,7 @@ fn mlb_commands_have_force_help() {
 #[test]
 fn status_is_local_first() {
     let home = tempfile::tempdir().expect("temporary HOME");
-    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+    let output = Command::new(env!("CARGO_BIN_EXE_skout"))
         .args(["st"])
         .env("HOME", home.path())
         .output()
@@ -179,12 +182,12 @@ fn status_is_local_first() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 status");
     assert!(stdout.contains("Yahoo: public endpoints"));
-    assert!(stdout.contains("No local snapshot; run b9 sync."));
+    assert!(stdout.contains("No local snapshot; run skout sync."));
 }
 
 #[test]
 fn retired_cli_surfaces_are_absent() {
-    let root = String::from_utf8(b9(&["--help"]).stdout).unwrap();
+    let root = String::from_utf8(skout(&["--help"]).stdout).unwrap();
     for retired in [
         "login",
         "logout",
@@ -222,15 +225,15 @@ fn retired_cli_surfaces_are_absent() {
         "help",
         "lm",
     ] {
-        assert_eq!(b9(&[command]).status.code(), Some(2), "{command}");
+        assert_eq!(skout(&[command]).status.code(), Some(2), "{command}");
     }
-    assert_eq!(b9(&["m", "--advise"]).status.code(), Some(2));
+    assert_eq!(skout(&["m", "--advise"]).status.code(), Some(2));
 }
 
 #[test]
 fn m_team_argument_fails_noninteractively_with_actionable_guidance_when_no_league_is_selected() {
     let home = tempfile::tempdir().expect("temporary HOME");
-    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+    let output = Command::new(env!("CARGO_BIN_EXE_skout"))
         .args(["m", "Yankees"])
         .env("HOME", home.path())
         .output()
@@ -238,7 +241,7 @@ fn m_team_argument_fails_noninteractively_with_actionable_guidance_when_no_leagu
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 m diagnostics");
-    assert!(stderr.contains("b9 st -l"));
+    assert!(stderr.contains("skout st -l"));
 }
 
 #[test]
@@ -250,19 +253,19 @@ fn existing_commands_do_not_create_the_production_database() {
         &["i", "pa"][..],
         &["whatis", "pa"][..],
     ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+        let output = Command::new(env!("CARGO_BIN_EXE_skout"))
             .args(arguments)
             .env("HOME", home.path())
             .output()
-            .expect("run b9 without storage");
+            .expect("run skout without storage");
         assert!(output.status.success(), "arguments {arguments:?}");
-        assert!(!home.path().join(".config/b9/b9.db").exists());
+        assert!(!home.path().join(".config/skout/skout.db").exists());
     }
 }
 
 #[test]
 fn pool_help_preserves_the_existing_waiver_surface() {
-    let output = Command::new(env!("CARGO_BIN_EXE_b9"))
+    let output = Command::new(env!("CARGO_BIN_EXE_skout"))
         .args(["h", "--help"])
         .output()
         .expect("run hitter help");

@@ -1,8 +1,8 @@
-use b9::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Position, ScoringType};
-use b9::store::{
+use rusqlite::Connection;
+use skout::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Position, ScoringType};
+use skout::store::{
     CURRENT_SCHEMA_VERSION, CategoryWrite, FantasySnapshotWrite, PositionWrite, Store,
 };
-use rusqlite::Connection;
 use tempfile::tempdir;
 
 fn snapshot() -> FantasySnapshotWrite {
@@ -106,7 +106,7 @@ fn snapshot() -> FantasySnapshotWrite {
 #[test]
 fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     store.replace_fantasy_snapshot(&snapshot()).unwrap();
     assert_eq!(store.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
     assert_eq!(store.fantasy_current_week("mlb.l.1").unwrap(), Some(7));
@@ -149,7 +149,7 @@ fn complete_snapshot_replaces_scoped_rows_on_schema_one() {
 #[test]
 fn yahoo_mlb_identity_lookup_includes_players_outside_league_views() {
     let directory = tempdir().unwrap();
-    let store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let store = Store::open_at(directory.path().join("skout.db")).unwrap();
     Connection::open(store.path())
         .unwrap()
         .execute(
@@ -174,7 +174,7 @@ fn yahoo_mlb_identity_lookup_includes_players_outside_league_views() {
 #[test]
 fn complete_free_agent_replacement_is_scoped_to_its_league() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let mut first = snapshot();
     first.players.push(FantasyPlayer {
         yahoo_player_id: 103,
@@ -212,7 +212,7 @@ fn complete_free_agent_replacement_is_scoped_to_its_league() {
 #[test]
 fn fantasy_players_ignore_legacy_unassigned_roster_slots() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let mut store = Store::open_at(&path).unwrap();
     store.replace_fantasy_snapshot(&snapshot()).unwrap();
     let connection = Connection::open(&path).unwrap();
@@ -235,7 +235,7 @@ fn fantasy_players_ignore_legacy_unassigned_roster_slots() {
 #[test]
 fn fantasy_players_join_stats_through_mlbam_identity_not_duplicate_row_choice() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let mut store = Store::open_at(&path).unwrap();
     store.replace_fantasy_snapshot(&snapshot()).unwrap();
     let connection = Connection::open(&path).unwrap();

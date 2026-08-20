@@ -1,4 +1,4 @@
-use b9::providers::yahoo_fantasy::{
+use skout::providers::yahoo_fantasy::{
     bounded_page_starts, parse_free_agents, parse_league_rosters, parse_league_settings,
     parse_roster_week_stats, parse_scoreboard, parse_standings, parse_user_leagues,
 };

@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
-use b9::domain::{GameIndicator, HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer};
-use b9::player_display::{
+use skout::domain::{
+    GameIndicator, HitterAverage, MatchupTeam, PlayerGameLog, StoredFantasyPlayer,
+};
+use skout::player_display::{
     render_detail, render_league_totals, render_players, render_weekly_totals,
 };
-use b9::store::{StoredFantasyCategory, StoredFantasyTeam};
-use b9::terminal::{HelpColorMode, visible_width};
+use skout::store::{StoredFantasyCategory, StoredFantasyTeam};
+use skout::terminal::{HelpColorMode, visible_width};
 
 fn hitter() -> StoredFantasyPlayer {
     StoredFantasyPlayer {

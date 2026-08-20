@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::store::{Clock, SystemClock};
 
-const MAGIC: &[u8] = b"b9-cache-v1\n";
+const MAGIC: &[u8] = b"skout-cache-v1\n";
 const MAX_PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
 const MAX_ENTRY_BYTES: u64 = MAX_PAYLOAD_BYTES as u64 + 128;
 const PRUNE_AGE: Duration = Duration::from_secs(24 * 60 * 60);
@@ -134,7 +134,7 @@ pub struct DiskCache {
 }
 
 impl DiskCache {
-    /// Construct a cache at the production b9 cache root.
+    /// Construct a cache at the production skout cache root.
     pub fn production() -> Result<Self, CacheError> {
         Ok(Self::at(production_cache_root()?))
     }
@@ -327,7 +327,7 @@ impl DiskCache {
         reject_symlink_target(&target)?;
         let data = encode_entry(timestamp, payload);
         let temporary = directory.join(format!(
-            ".b9-cache-{}-{}.tmp",
+            ".skout-cache-{}-{}.tmp",
             std::process::id(),
             TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
@@ -503,7 +503,7 @@ fn filename(namespace: &str, key: &str) -> String {
         use fmt::Write as _;
         write!(&mut hex, "{byte:02x}").expect("write to string");
     }
-    format!("b9c-{hex}.cache")
+    format!("skoutc-{hex}.cache")
 }
 
 fn encode_entry(timestamp: i64, payload: &[u8]) -> Vec<u8> {
@@ -580,10 +580,10 @@ fn captured_time(
 }
 
 fn is_owned_filename(name: &str) -> bool {
-    name.len() == 74
-        && name.starts_with("b9c-")
+    name.len() == 77
+        && name.starts_with("skoutc-")
         && name.ends_with(".cache")
-        && name[4..68]
+        && name[7..71]
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
@@ -606,7 +606,7 @@ fn resolve_cache_root(
 ) -> Result<PathBuf, CacheError> {
     platform
         .or_else(|| home.map(|path| path.join(".cache")))
-        .map(|path| path.join("b9").join("api-cache"))
+        .map(|path| path.join("skout").join("api-cache"))
         .ok_or_else(|| {
             CacheError::invalid(
                 "resolve cache root",
@@ -632,11 +632,11 @@ mod tests {
     fn root_resolution_and_private_failures_are_deterministic() {
         assert_eq!(
             resolve_cache_root(Some(PathBuf::from("cache")), Some(PathBuf::from("home"))).unwrap(),
-            PathBuf::from("cache/b9/api-cache")
+            PathBuf::from("cache/skout/api-cache")
         );
         assert_eq!(
             resolve_cache_root(None, Some(PathBuf::from("home"))).unwrap(),
-            PathBuf::from("home/.cache/b9/api-cache")
+            PathBuf::from("home/.cache/skout/api-cache")
         );
         assert!(resolve_cache_root(None, None).is_err());
         let directory = tempdir().unwrap();

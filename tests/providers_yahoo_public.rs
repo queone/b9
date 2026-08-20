@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use b9::domain::{Position, ScoringType};
-use b9::providers::yahoo_fantasy::YahooFantasySource;
-use b9::providers::yahoo_public::{
+use skout::domain::{Position, ScoringType};
+use skout::providers::yahoo_fantasy::YahooFantasySource;
+use skout::providers::yahoo_public::{
     YahooPublicClient, YahooPublicError, canonical_public_league_key, league_id_from_key,
 };
-use b9::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
+use skout::transport::{ExecutorError, HttpClient, HttpExecutor, HttpResponse, ValidatedRequest};
 
 const REDZONE_VALID: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_valid.json");
 const REDZONE_MALFORMED: &[u8] = include_bytes!("fixtures/yahoo-public/redzone_malformed.json");
@@ -30,7 +30,7 @@ const NO_FREE_AGENTS: &[u8] = br#"{"fantasy_content":{"league":[{}, {"players":{
 
 struct FakeExecutor {
     responses: Mutex<VecDeque<Result<HttpResponse, ExecutorError>>>,
-    requests: Mutex<Vec<(String, Vec<b9::transport::HttpHeader>)>>,
+    requests: Mutex<Vec<(String, Vec<skout::transport::HttpHeader>)>>,
 }
 
 impl FakeExecutor {
@@ -41,7 +41,7 @@ impl FakeExecutor {
         }
     }
 
-    fn requests(&self) -> Vec<(String, Vec<b9::transport::HttpHeader>)> {
+    fn requests(&self) -> Vec<(String, Vec<skout::transport::HttpHeader>)> {
         self.requests.lock().unwrap().clone()
     }
 }

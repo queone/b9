@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use b9::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path, inspect_status_at};
 use rusqlite::Connection;
+use skout::store::{CURRENT_SCHEMA_VERSION, Store, StoreError, database_path, inspect_status_at};
 use tempfile::tempdir;
 
 const TABLES: [&str; 23] = [
@@ -53,7 +53,7 @@ fn create_fixture(path: &Path, statements: &str) {
 #[test]
 fn fresh_store_has_the_exact_schema_and_connection_policy() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("nested/b9.db");
+    let path = directory.path().join("nested/skout.db");
     let store = Store::open_at(&path).unwrap();
     assert_eq!(store.path(), path);
     assert_eq!(store.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
@@ -100,7 +100,7 @@ fn fresh_store_has_the_exact_schema_and_connection_policy() {
 #[test]
 fn busy_timeout_reopen_and_transactions_preserve_data() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let mut store = Store::open_at(&path).unwrap();
     let timeout: i64 = store
         .transaction(|transaction| {
@@ -289,15 +289,10 @@ fn version_three_migration_adds_computed_statcast_rates_without_losing_rows() {
 }
 
 #[test]
-fn production_path_is_b9_owned() {
+fn production_path_is_skout_owned() {
     let home = std::env::var_os("HOME").expect("HOME for test process");
     let path = database_path().unwrap();
-    assert_eq!(path, Path::new(&home).join(".config/b9/b9.db"));
-    assert!(
-        !path
-            .to_string_lossy()
-            .contains(&["/.config/", "sk", "out/"].concat())
-    );
+    assert_eq!(path, Path::new(&home).join(".config/skout/skout.db"));
 }
 
 #[cfg(unix)]
@@ -306,7 +301,7 @@ fn unix_creation_is_private_and_existing_modes_are_unchanged() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = tempdir().unwrap();
-    let new_path = directory.path().join("new/private/b9.db");
+    let new_path = directory.path().join("new/private/skout.db");
     Store::open_at(&new_path).unwrap().close().unwrap();
     assert_eq!(
         fs::metadata(directory.path().join("new"))
@@ -332,7 +327,7 @@ fn unix_creation_is_private_and_existing_modes_are_unchanged() {
     let existing_parent = directory.path().join("existing");
     fs::create_dir(&existing_parent).unwrap();
     fs::set_permissions(&existing_parent, fs::Permissions::from_mode(0o750)).unwrap();
-    let existing_path = existing_parent.join("b9.db");
+    let existing_path = existing_parent.join("skout.db");
     fs::write(&existing_path, []).unwrap();
     fs::set_permissions(&existing_path, fs::Permissions::from_mode(0o640)).unwrap();
     Store::open_at(&existing_path).unwrap().close().unwrap();

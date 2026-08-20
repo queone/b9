@@ -21,7 +21,7 @@ pub fn run_with_client(client: &HttpClient, host: &str, path: &str) -> Result<St
                 HttpHeader {
                     name: "User-Agent".into(),
                     value: format!(
-                        "b9/{} (+https://github.com/queone/b9)",
+                        "skout/{} (+https://github.com/queone/skout)",
                         env!("CARGO_PKG_VERSION")
                     ),
                 },
@@ -52,7 +52,7 @@ pub fn run_with_client(client: &HttpClient, host: &str, path: &str) -> Result<St
             vec![
                 HttpHeader {
                     name: "User-Agent".into(),
-                    value: "Mozilla/5.0 (compatible; b9) AppleWebKit/537.36".into(),
+                    value: "Mozilla/5.0 (compatible; skout) AppleWebKit/537.36".into(),
                 },
                 HttpHeader {
                     name: "Accept".into(),

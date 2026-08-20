@@ -1,8 +1,8 @@
-use b9::domain::{
+use skout::domain::{
     BattingStats, MlbRosterPlayer, MlbSlateRow, MlbStanding, MlbTeam, MlbTeamTotals, PitchingStats,
 };
-use b9::mlb_display::{render_rosters, render_slate, render_totals};
-use b9::terminal::HelpColorMode;
+use skout::mlb_display::{render_rosters, render_slate, render_totals};
+use skout::terminal::HelpColorMode;
 
 #[test]
 fn roster_display_separates_roles_and_labels_statuses() {

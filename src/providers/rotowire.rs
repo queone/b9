@@ -25,7 +25,7 @@ pub struct DailyLineup {
     pub home_pitcher: String,
 }
 
-/// RotoWire lineup acquisition through b9's validated transport.
+/// RotoWire lineup acquisition through skout's validated transport.
 pub struct RotowireClient {
     http: Arc<HttpClient>,
 }

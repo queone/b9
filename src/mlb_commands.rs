@@ -94,7 +94,7 @@ pub fn show_teams(query: Option<&str>, force: bool) -> Result<String, MlbCommand
             .map(|days| format!("{days}d ago"))
             .unwrap_or_else(|| "never".into());
         warnings.push(format!(
-            "OWNER data last synced {age} — run `b9 sync` to refresh."
+            "OWNER data last synced {age} — run `skout sync` to refresh."
         ));
     }
     let mut refreshed = directory_refreshed || records_refreshed;
@@ -1171,7 +1171,7 @@ mod tests {
     #[test]
     fn snapshots_honor_fresh_force_and_stale_fallback_states() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let mut calls = 0;
         let first: (Vec<i32>, _, _) = cached(
             &mut store,

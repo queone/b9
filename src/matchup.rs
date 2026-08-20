@@ -178,7 +178,7 @@ pub fn show_with_team_options(
         .unwrap_or_else(|| config.current_league.clone());
     if league_key.is_empty() {
         return Err(MatchupError(
-            "match: no league selected; run b9 st -l <key> and retry".into(),
+            "match: no league selected; run skout st -l <key> and retry".into(),
         ));
     }
     let mut store = Store::open().map_err(|error| contextual("open database", error))?;
@@ -222,7 +222,7 @@ pub fn show_with_team_options(
 
     if effective_team_key.is_none() {
         return Err(MatchupError(
-            "match: no primary team selected; run b9 sync -T <key-or-name> and retry".into(),
+            "match: no primary team selected; run skout sync -T <key-or-name> and retry".into(),
         ));
     }
     let current_week = store
@@ -244,7 +244,7 @@ pub fn show_with_team_options(
             .map_err(|error| contextual("read active league season", error))?
             .ok_or_else(|| {
                 MatchupError(
-                    "match: active league season is unavailable; run b9 sync and retry".into(),
+                    "match: active league season is unavailable; run skout sync and retry".into(),
                 )
             })?;
         Some(season_day(day, season)?)
@@ -471,7 +471,7 @@ fn required_mlb_identities(
         .collect::<Vec<_>>();
     if !missing.is_empty() {
         return Err(MatchupError(format!(
-            "match: daily overlay requires reconciled MLB identities; run b9 sync and retry (unresolved: {})",
+            "match: daily overlay requires reconciled MLB identities; run skout sync and retry (unresolved: {})",
             missing.join(", ")
         )));
     }
@@ -582,7 +582,7 @@ fn resolve_day_week(
     day: &str,
 ) -> Result<i32, MatchupError> {
     let current_week = current_week.ok_or_else(|| {
-        MatchupError("match: current matchup week is unavailable; run b9 sync and retry".into())
+        MatchupError("match: current matchup week is unavailable; run skout sync and retry".into())
     })?;
     for week in 1..=current_week {
         let scope = format!("{league_key}:{week}");
@@ -661,7 +661,7 @@ fn show_weekly_matchup(
     let (http, now) = runtime;
     let team_key = effective_team_key.ok_or_else(|| {
         MatchupError(
-            "match: no primary team selected; run b9 sync -T <key-or-name> and retry".into(),
+            "match: no primary team selected; run skout sync -T <key-or-name> and retry".into(),
         )
     })?;
     let mut redzone_feed: Option<Result<RedzoneFeed, String>> = None;
@@ -888,7 +888,7 @@ where
         .any(|player| player.name.is_empty() || player.position_type.is_empty())
     {
         return Err(MatchupError(
-            "match: historical roster is missing player metadata; run b9 sync and retry".into(),
+            "match: historical roster is missing player metadata; run skout sync and retry".into(),
         ));
     }
     let payload = serde_json::to_string(&roster)
@@ -944,7 +944,7 @@ where
             } else {
                 Err(contextual(
                     "refresh data",
-                    format!("{error}; run b9 sync, verify connectivity, and retry"),
+                    format!("{error}; run skout sync, verify connectivity, and retry"),
                 ))
             }
         }
@@ -1003,7 +1003,7 @@ where
             } else {
                 Err(contextual(
                     "refresh data",
-                    format!("{error}; run b9 sync, verify connectivity, and retry"),
+                    format!("{error}; run skout sync, verify connectivity, and retry"),
                 ))
             }
         }
@@ -1240,7 +1240,7 @@ fn local_matchup_view(
         .into_iter()
         .find(|team| team.team_key == team_key)
         .ok_or_else(|| {
-            MatchupError("match: no local roster is available; run b9 sync and retry".into())
+            MatchupError("match: no local roster is available; run skout sync and retry".into())
         })?;
     let players = store
         .fantasy_players(league_key)
@@ -2052,7 +2052,7 @@ mod tests {
     #[test]
     fn weekly_matchup_uses_public_feed_and_reuses_its_cache() {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let public = public_client(vec![ok_response(), scoreboard_response()]);
         let now = SystemTime::now();
 
@@ -2092,7 +2092,7 @@ mod tests {
     #[test]
     fn weekly_matchup_falls_back_to_the_stale_snapshot_when_a_later_fetch_fails() {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let now = SystemTime::now();
 
         show_weekly_matchup(
@@ -2126,7 +2126,7 @@ mod tests {
     #[test]
     fn weekly_matchup_with_no_prior_snapshot_reports_the_fetch_error() {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let error = show_weekly_matchup(
             &mut store,
             "469.l.170874",
@@ -2146,7 +2146,7 @@ mod tests {
     #[test]
     fn weekly_matchup_reads_a_fresh_historical_public_pull_snapshot() {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let league_key = "469.l.170874";
         let team_key = "469.l.170874.t.1";
         let opponent_key = "469.l.170874.t.2";
@@ -2203,7 +2203,7 @@ mod tests {
             PlayerWeekStats {
                 yahoo_player_id: 7,
                 name: "Ada".into(),
-                team: "B9".into(),
+                team: "SKOUT".into(),
                 position_type: "B".into(),
                 slot_position: Position::Outfield,
                 eligible_positions: vec![],
@@ -2224,7 +2224,7 @@ mod tests {
             PlayerWeekStats {
                 yahoo_player_id: 8,
                 name: "Grace".into(),
-                team: "B9".into(),
+                team: "SKOUT".into(),
                 position_type: "P".into(),
                 slot_position: Position::StartingPitcher,
                 eligible_positions: vec![],
@@ -2328,7 +2328,7 @@ mod tests {
         let error = required_mlb_identities(Vec::new(), &mine, &opponent)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("run b9 sync and retry"));
+        assert!(error.contains("run skout sync and retry"));
         assert!(error.contains("Missing Hitter"));
     }
 }

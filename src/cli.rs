@@ -74,7 +74,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "reset",
         display_label: "reset",
-        description: "Delete the local b9 database",
+        description: "Delete the local skout database",
         argument: None,
         aliases: &[],
         routes_to_root_help: false,
@@ -161,7 +161,7 @@ const COMMANDS: &[CommandDescriptor] = &[
     CommandDescriptor {
         name: "i",
         display_label: "i [term]",
-        description: "Look up a term in the b9 glossary",
+        description: "Look up a term in the skout glossary",
         argument: Some(ArgumentDescriptor {
             id: "term",
             value_name: "TERM",
@@ -235,12 +235,12 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
     ("p", "-w, --waiver", "Show waiver candidates only"),
 ];
 
-/// Run the b9 command using process arguments.
+/// Run the skout command using process arguments.
 pub fn run(version: &'static str) -> ExitCode {
     run_from(std::env::args_os(), version)
 }
 
-/// Run the b9 command using an injectable argument sequence.
+/// Run the skout command using an injectable argument sequence.
 pub fn run_from<I, T>(arguments: I, version: &'static str) -> ExitCode
 where
     I: IntoIterator<Item = T>,
@@ -277,13 +277,13 @@ where
         } else {
             "saved"
         };
-        eprintln!("b9 debug: command={command} league_source={league}");
+        eprintln!("skout debug: command={command} league_source={league}");
     }
 
     match matches.subcommand() {
         Some(("fetch", subcommand)) => {
             eprintln!(
-                "b9 fetch: {}",
+                "skout fetch: {}",
                 subcommand
                     .get_one::<String>("host")
                     .map_or("", String::as_str)
@@ -392,8 +392,8 @@ fn is_root_help_invocation(arguments: &[OsString]) -> bool {
 }
 
 fn root_command(version: &'static str) -> Command {
-    let mut command = Command::new("b9")
-        .about("Fantasy Baseball advisor — github.com/queone/b9")
+    let mut command = Command::new("skout")
+        .about("Fantasy Baseball advisor — github.com/queone/skout")
         .version(version)
         .disable_help_flag(true)
         .disable_help_subcommand(true)
@@ -533,17 +533,17 @@ fn run_result<E: std::fmt::Display>(result: Result<String, E>) -> ExitCode {
 /// Render root help from the same descriptors used to build the parser.
 pub fn render_root_help(version: &str, mode: HelpColorMode) -> String {
     let mut output = String::new();
-    output.push_str(&title("b9", mode));
+    output.push_str(&title("skout", mode));
     output.push_str(" v");
     output.push_str(version);
     output.push('\n');
     output.push_str(&subtitle(
-        "Fantasy Baseball advisor — github.com/queone/b9",
+        "Fantasy Baseball advisor — github.com/queone/skout",
         mode,
     ));
     output.push_str("\n\n");
     output.push_str(&section("USAGE", mode));
-    output.push_str("\n  b9 <command> [flags]\n\n");
+    output.push_str("\n  skout <command> [flags]\n\n");
     output.push_str(&section("COMMANDS", mode));
     output.push('\n');
     for descriptor in COMMANDS {
@@ -586,7 +586,7 @@ fn run_glossary(term: Option<&String>) -> ExitCode {
     let entries = match embedded_entries() {
         Ok(entries) => entries,
         Err(error) => {
-            eprintln!("i: load embedded glossary: {error}; reinstall b9");
+            eprintln!("i: load embedded glossary: {error}; reinstall skout");
             return ExitCode::from(1);
         }
     };

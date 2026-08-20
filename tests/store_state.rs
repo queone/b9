@@ -3,11 +3,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::store::{
+use rusqlite::Connection;
+use skout::store::{
     Clock, ItemRefreshPolicy, RowRefreshPolicy, SeasonSyncStatus, Store, StoreError, SyncMode,
     SyncOrigin, SyncRunStatus, SyncStateStatus,
 };
-use rusqlite::Connection;
 use tempfile::tempdir;
 
 #[derive(Clone)]

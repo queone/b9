@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 
-use b9::domain::{
+use skout::domain::{
     FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Matchup, MatchupTeam, PlayerWeekStats,
     Position, RosterWeekStats, ScoringType,
 };
-use b9::providers::yahoo_fantasy::{
+use skout::providers::yahoo_fantasy::{
     LeagueRosters, LeagueSettings, RosterPosition, StatCategory, YahooFantasyError,
     YahooFantasySource,
 };
-use b9::store::{
+use skout::store::{
     FantasySnapshotWrite, PositionWrite, Store, SyncMode, SyncOrigin, inspect_status_at,
 };
-use b9::sync::{select_primary_team, synchronize_with, synchronize_with_origin};
+use skout::sync::{select_primary_team, synchronize_with, synchronize_with_origin};
 use tempfile::tempdir;
 
 struct Source {
@@ -169,7 +169,7 @@ fn primary_team_selection_handles_matching_prompt_and_ambiguity() {
         )
         .unwrap_err()
         .to_string(),
-        "select primary team: no team matches \"MLB.L.1.T.1\"; run b9 sync -T <key-or-name> and retry"
+        "select primary team: no team matches \"MLB.L.1.T.1\"; run skout sync -T <key-or-name> and retry"
     );
     assert_eq!(
         select_primary_team(
@@ -214,7 +214,7 @@ fn primary_team_selection_handles_matching_prompt_and_ambiguity() {
 #[test]
 fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let mut identities = |_| Vec::new();
     let summary = synchronize_with(
         &Source {
@@ -262,7 +262,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
 #[test]
 fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let source = Source {
         fail_rosters: false,
     };
@@ -384,7 +384,7 @@ fn application_boundaries_remain_layered() {
 #[test]
 fn circuit_opens_after_five_failures_and_closes_on_recovery() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let mut identities = |_| Vec::new();
     for _ in 0..5 {
         assert!(
@@ -421,7 +421,7 @@ fn circuit_opens_after_five_failures_and_closes_on_recovery() {
 #[test]
 fn local_status_reports_real_identities_once_a_league_has_synced() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let mut identities = |_| Vec::new();
     let before = inspect_status_at(store.path(), "mlb.l.1").unwrap();
     assert_eq!(before.yahoo_identity_count, 0);
@@ -444,7 +444,7 @@ fn local_status_reports_real_identities_once_a_league_has_synced() {
 #[test]
 fn injected_sync_origins_remain_durably_decodable() {
     let directory = tempdir().unwrap();
-    let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+    let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let mut identities = |_| Vec::new();
     for origin in [
         SyncOrigin::Manual,

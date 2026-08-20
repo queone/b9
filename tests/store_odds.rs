@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::store::{Clock, MoneylineQuote, Store};
 use rusqlite::Connection;
+use skout::store::{Clock, MoneylineQuote, Store};
 use tempfile::tempdir;
 
 struct FixedClock(SystemTime);
@@ -35,7 +35,7 @@ fn quote(game_pk: i64, home: i64, away: i64, sportsbook: &str) -> MoneylineQuote
 #[test]
 fn replacement_is_scoped_deduplicated_and_clocked_once() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
     store
@@ -61,7 +61,7 @@ fn replacement_is_scoped_deduplicated_and_clocked_once() {
 #[test]
 fn replacement_preserves_non_moneyline_markets() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
     store
@@ -93,7 +93,7 @@ fn replacement_preserves_non_moneyline_markets() {
 #[test]
 fn invalid_replacements_leave_prior_rows_unchanged() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
     store
@@ -119,7 +119,7 @@ fn invalid_replacement_never_captures_the_clock() {
     let directory = tempdir().unwrap();
     let clock = Arc::new(CountingClock(AtomicUsize::new(0)));
     let mut store =
-        Store::open_at_with_clock(directory.path().join("b9.db"), clock.clone()).unwrap();
+        Store::open_at_with_clock(directory.path().join("skout.db"), clock.clone()).unwrap();
     assert!(store.replace_moneylines(&[0], &[]).is_err());
     assert_eq!(clock.0.load(Ordering::SeqCst), 0);
 }
@@ -127,7 +127,7 @@ fn invalid_replacement_never_captures_the_clock() {
 #[test]
 fn injected_insert_failure_rolls_back_delete() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
     store
@@ -158,7 +158,7 @@ fn injected_insert_failure_rolls_back_delete() {
 #[test]
 fn injected_delete_failure_preserves_prior_rows() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
     let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
     store
@@ -193,7 +193,7 @@ fn corrupt_stored_moneylines_are_contextual_errors() {
         "PRAGMA ignore_check_constraints = ON; UPDATE mlb_odds SET side = 'bad' WHERE side = 'home'",
     ] {
         let directory = tempdir().unwrap();
-        let path = directory.path().join("b9.db");
+        let path = directory.path().join("skout.db");
         let now = UNIX_EPOCH + Duration::from_secs(1_800_000_000);
         let mut store = Store::open_at_with_clock(&path, Arc::new(FixedClock(now))).unwrap();
         store

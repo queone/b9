@@ -12,7 +12,7 @@ use crate::terminal::{
 const PLAYER_WIDTH: usize = 26;
 const STATUS_WIDTH: usize = 17;
 
-/// Render one roster or player-pool table with b9's established columns.
+/// Render one roster or player-pool table with skout's established columns.
 pub fn render_players(title: &str, players: &[StoredFantasyPlayer], mode: HelpColorMode) -> String {
     let roster = !matches!(title, "HITTERS" | "PITCHERS");
     let mut output = String::new();

@@ -1,5 +1,5 @@
-use b9::store::{StatcastWrite, Store};
 use rusqlite::Connection;
+use skout::store::{StatcastWrite, Store};
 use tempfile::tempdir;
 
 fn row(id: i64) -> StatcastWrite {
@@ -27,7 +27,7 @@ fn row(id: i64) -> StatcastWrite {
 #[test]
 fn statcast_snapshot_is_complete_and_prefers_non_seed_identity() {
     let directory = tempdir().unwrap();
-    let path = directory.path().join("b9.db");
+    let path = directory.path().join("skout.db");
     let mut store = Store::open_at(&path).unwrap();
     let connection = Connection::open(&path).unwrap();
     connection.execute("INSERT INTO players(mlbam_id,name,mlbam_match_source,synced_at) VALUES(700001,'Seed','seed',1)", []).unwrap();

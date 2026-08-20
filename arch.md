@@ -1,10 +1,14 @@
-# b9 Architecture
+# skout Architecture
 
 ## Overview
 
-b9 is a local-first, read-only decision-support CLI for Yahoo Fantasy Baseball. It acquires public Yahoo league and matchup data, enriches player identities and performance with MLB and analytical sources, stores normalized facts and durable command snapshots in an isolated SQLite database, derives fantasy signals, and renders deterministic terminal views. It never authenticates with Yahoo and never changes a Yahoo roster.
+skout is a local-first, read-only decision-support CLI for Yahoo Fantasy Baseball. It acquires public Yahoo league and matchup data, enriches player identities and performance with MLB and analytical sources, stores normalized facts and durable command snapshots in an isolated SQLite database, derives fantasy signals, and renders deterministic terminal views. It never authenticates with Yahoo and never changes a Yahoo roster.
 
-The primary command is `b9 m`. Its default view combines today's MLB player statistics and game state with the running Yahoo matchup score. Weekly and historical selections use Yahoo period statistics and durable snapshots. Roster, player-pool, MLB-team, standings, and probable-pitcher commands reuse the same provider-neutral domain and storage boundaries.
+The primary command is `skout m`. Its default view combines today's MLB player statistics and game state with the running Yahoo matchup score. Weekly and historical selections use Yahoo period statistics and durable snapshots. Roster, player-pool, MLB-team, standings, and probable-pitcher commands reuse the same provider-neutral domain and storage boundaries.
+
+## Project History
+
+The project began as the Go program `skout`. Its behavior and design were forked, reimplemented, and extended in Rust under the name `b9`. After the Rust implementation superseded the original, the Go repository was retired and the Rust project resumed the `skout` name.
 
 ## Architecture Principles
 
@@ -22,7 +26,7 @@ The primary command is `b9 m`. Its default view combines today's MLB player stat
 
 ```mermaid
 flowchart TB
-    CLI["b9 CLI<br/>m · r · rt · h · p · t · tt · sp · sync · st"]
+    CLI["skout CLI<br/>m · r · rt · h · p · t · tt · sp · sync · st"]
 
     subgraph Application["Application layer"]
         SYNC["Foreground synchronization"]
@@ -106,7 +110,7 @@ flowchart TB
 
 `src/providers/yahoo_public.rs` owns the two unauthenticated public Yahoo fantasy hosts, exact allowlisted paths, bounded pagination, league-key normalization, and public response acquisition. `src/providers/yahoo_fantasy.rs` owns shared typed parsing for league settings, standings, teams, rosters, free agents, scoreboards, ranks, and weekly or daily player statistics.
 
-b9 sends no Yahoo authorization header, cookie, or browser state. Account-wide league discovery is unavailable, so the operator supplies a league and primary team. Synchronization validates all required Yahoo resources and the selected team before replacing the prior complete fantasy snapshot. Public denial or incompatible payloads are provider failures; b9 does not evade them.
+skout sends no Yahoo authorization header, cookie, or browser state. Account-wide league discovery is unavailable, so the operator supplies a league and primary team. Synchronization validates all required Yahoo resources and the selected team before replacing the prior complete fantasy snapshot. Public denial or incompatible payloads are provider failures; skout does not evade them.
 
 ### MLB and Analytical Sources
 
@@ -122,13 +126,13 @@ ESPN supplies current-day game and moneyline context. OddsShark supplies optiona
 
 ### Foreground Synchronization
 
-`b9 sync` acquires the configured public Yahoo league, settings, standings, complete rosters, and bounded free-agent set. It also refreshes MLB identities, rosters, statistics, schedules, Savant metrics, FanGraphs data, FantasyPros ECR, and available game context. Independent provider steps continue after unrelated failures and report their result immediately.
+`skout sync` acquires the configured public Yahoo league, settings, standings, complete rosters, and bounded free-agent set. It also refreshes MLB identities, rosters, statistics, schedules, Savant metrics, FanGraphs data, FantasyPros ECR, and available game context. Independent provider steps continue after unrelated failures and report their result immediately.
 
 Yahoo facts are staged and validated before one atomic fantasy-snapshot replacement. Other complete datasets use scoped atomic replacement or versioned command snapshots. A persistent cross-process lock prevents overlapping foreground sync runs. `sync_runs`, item freshness, row freshness, season manifests, and dashboard status record the lifecycle without introducing a background daemon.
 
 ### Matchup
 
-`b9 m` resolves the saved league and primary team, acquires or reuses a Yahoo scoreboard, then acquires both teams' roster statistics for the selected day or week. The default current-day view zeroes the roster stat cells and overlays exact-date MLB results through reconciled Yahoo-to-MLB identities; Yahoo's matchup totals still determine the category score and W/T/L summary. `-W` and `-w` retain weekly player totals.
+`skout m` resolves the saved league and primary team, acquires or reuses a Yahoo scoreboard, then acquires both teams' roster statistics for the selected day or week. The default current-day view zeroes the roster stat cells and overlays exact-date MLB results through reconciled Yahoo-to-MLB identities; Yahoo's matchup totals still determine the category score and W/T/L summary. `-W` and `-w` retain weekly player totals.
 
 Historical scoreboards and player rows are stored as versioned command snapshots. Sparse Yahoo historical metadata is enriched from normalized player identities before persistence. Empty or incompatible historical snapshots are rejected rather than rendered as successful data. Future matchup weeks fail explicitly.
 
@@ -140,11 +144,11 @@ Player detail cards may refresh an MLB game log on demand and retain a compatibl
 
 ### MLB Utilities
 
-`b9 t`, `b9 tt`, and `b9 sp` route through `mlb_commands`. Team rosters and season totals use normalized MLB data. The three-day probable-pitcher slate composes MLB schedules with current-day ESPN and future OddsShark context. `-f` bypasses command freshness gates, while failed refreshes retain complete stale snapshots with a warning.
+`skout t`, `skout tt`, and `skout sp` route through `mlb_commands`. Team rosters and season totals use normalized MLB data. The three-day probable-pitcher slate composes MLB schedules with current-day ESPN and future OddsShark context. `-f` bypasses command freshness gates, while failed refreshes retain complete stale snapshots with a warning.
 
 ## Persistence
 
-The store owns one SQLite connection at `~/.config/b9/b9.db`. Schema version 5 is applied through ordered, atomic migrations. The connection remains behind typed store APIs and immediate transactions; command and provider modules never issue ad hoc SQL.
+The store owns one SQLite connection at `~/.config/skout/skout.db`. Schema version 5 is applied through ordered, atomic migrations. The connection remains behind typed store APIs and immediate transactions; command and provider modules never issue ad hoc SQL.
 
 ### Table Groups
 
@@ -248,7 +252,7 @@ Freshness policy belongs to application code, not provider adapters or SQLite qu
 
 All production HTTP passes through `src/transport.rs`, which validates methods, origins, headers, redirect targets, response sizes, and timeouts before returning bytes to an adapter. The executor is injectable for deterministic tests; production uses blocking Rustls transport.
 
-Cache keys and diagnostics exclude credentials and secrets. Yahoo requests carry no credentials at all. The raw `b9 fetch` command reaches only registered provider adapters and never writes normalized application data.
+Cache keys and diagnostics exclude credentials and secrets. Yahoo requests carry no credentials at all. The raw `skout fetch` command reaches only registered provider adapters and never writes normalized application data.
 
 ## Presentation
 
@@ -259,7 +263,7 @@ Supported 256-color terminals receive semantic color. Redirected output, `NO_COL
 ## File Layout
 
 ```text
-b9/
+skout/
 ├── src/
 │   ├── analysis/              # PQS, blends, roles, waiver gates, projections
 │   ├── providers/             # Yahoo, MLB, Savant, FanGraphs, FantasyPros, game context

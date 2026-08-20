@@ -158,7 +158,7 @@ fn flush_entry(
     Ok(())
 }
 
-/// Look up a non-empty query using b9's tier precedence.
+/// Look up a non-empty query using skout's tier precedence.
 pub fn lookup<'a>(entries: &'a [GlossaryEntry], query: &str) -> LookupResult<'a> {
     let query = query.trim().to_lowercase();
     for entry in entries {
@@ -241,7 +241,7 @@ pub fn render_entry(entry: &GlossaryEntry) -> String {
     render_entry_with_mode(entry, HelpColorMode::Plain)
 }
 
-/// Render one entry using b9's glossary color roles.
+/// Render one entry using skout's glossary color roles.
 pub fn render_entry_with_mode(entry: &GlossaryEntry, mode: HelpColorMode) -> String {
     let header = format!("{} ({}) [{}]", entry.term, entry.key, entry.class);
     let mut lines = vec![table_heading(&header, mode)];
@@ -257,9 +257,9 @@ pub fn render_full(entries: &[GlossaryEntry]) -> String {
     render_full_with_mode(entries, HelpColorMode::Plain)
 }
 
-/// Render the complete glossary using b9's glossary color roles.
+/// Render the complete glossary using skout's glossary color roles.
 pub fn render_full_with_mode(entries: &[GlossaryEntry], mode: HelpColorMode) -> String {
-    let class_rank: HashMap<_, _> = ["baseball", "fantasy", "b9", "stat"]
+    let class_rank: HashMap<_, _> = ["baseball", "fantasy", "skout", "stat"]
         .into_iter()
         .enumerate()
         .map(|(rank, class)| (class, rank))

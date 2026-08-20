@@ -2,7 +2,7 @@
 
 ## Status
 
-b9 acquires read-only Yahoo fantasy data without OAuth, cookies, browser state, or account credentials. Yahoo does not document these public endpoints as a supported API, so every request is bounded and every failed or incompatible refresh retains the last complete snapshot.
+skout acquires read-only Yahoo fantasy data without OAuth, cookies, browser state, or account credentials. Yahoo does not document these public endpoints as a supported API, so every request is bounded and every failed or incompatible refresh retains the last complete snapshot.
 
 ## Hosts and ownership
 
@@ -38,7 +38,7 @@ A full Yahoo league key such as `469.l.170874` is preserved. A bare ID is normal
 
 ## Setup and synchronization
 
-Run `b9 sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic non-interactive setup. Interactive sync prompts for a missing league id and displays the fetched team list when the primary team is unresolved.
+Run `skout sync -l <league-id-or-key> -T <team-key-or-name>` for deterministic non-interactive setup. Interactive sync prompts for a missing league id and displays the fetched team list when the primary team is unresolved.
 
 Primary-team matching uses this precedence:
 
@@ -65,7 +65,7 @@ The redzone feed supplies current-week category building blocks. Counting catego
 
 ## Availability risk
 
-These endpoints are publicly reachable but unofficial and potentially unstable. A future denial, path change, payload change, rate limit, or Yahoo policy change can prevent refresh. b9 mitigates that risk with exact allowlisted paths, bounded requests, fixture-backed parsers, atomic replacement, durable weekly snapshots, and stale fallback. It does not treat authentication as a recovery path.
+These endpoints are publicly reachable but unofficial and potentially unstable. A future denial, path change, payload change, rate limit, or Yahoo policy change can prevent refresh. skout mitigates that risk with exact allowlisted paths, bounded requests, fixture-backed parsers, atomic replacement, durable weekly snapshots, and stale fallback. It does not treat authentication as a recovery path.
 
 ## Fixture provenance
 

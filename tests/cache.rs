@@ -3,8 +3,8 @@ use std::fs::OpenOptions;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use b9::cache::{CacheLookup, DiskCache};
-use b9::store::Clock;
+use skout::cache::{CacheLookup, DiskCache};
+use skout::store::Clock;
 use tempfile::tempdir;
 
 #[derive(Clone)]
@@ -60,12 +60,12 @@ fn lookup_uses_exact_bytes_ttl_boundaries_and_corruption_states() {
     let path = cache.entry_path("mlb", "schedule").unwrap();
     for corrupt in [
         b"bad".as_slice(),
-        b"b9-cache-v2\n100\n0\n",
-        b"b9-cache-v1\n0\n0\n",
-        b"b9-cache-v1\n0100\n0\n",
-        b"b9-cache-v1\n100\n01\nx",
-        b"b9-cache-v1\n100\n2\nx",
-        b"b9-cache-v1\n100\n0\nx",
+        b"skout-cache-v2\n100\n0\n",
+        b"skout-cache-v1\n0\n0\n",
+        b"skout-cache-v1\n0100\n0\n",
+        b"skout-cache-v1\n100\n01\nx",
+        b"skout-cache-v1\n100\n2\nx",
+        b"skout-cache-v1\n100\n0\nx",
     ] {
         fs::write(&path, corrupt).unwrap();
         assert!(matches!(
@@ -122,9 +122,9 @@ fn paths_are_hashed_private_and_stable() {
     let name = first.file_name().unwrap().to_str().unwrap();
     assert_eq!(
         name,
-        "b9c-20a3639c5dac3801224ed7fdd6751905556e898ab6492398e347b7fd3de12b22.cache"
+        "skoutc-20a3639c5dac3801224ed7fdd6751905556e898ab6492398e347b7fd3de12b22.cache"
     );
-    assert!(name.starts_with("b9c-") && name.ends_with(".cache"));
+    assert!(name.starts_with("skoutc-") && name.ends_with(".cache"));
     assert!(!name.contains("league"));
     #[cfg(unix)]
     {
@@ -166,7 +166,7 @@ fn prune_is_explicit_bounded_and_deterministic() {
     let malformed = cache.entry_path("mlb", "malformed").unwrap();
     fs::write(&malformed, b"bad").unwrap();
     fs::write(directory.path().join("mlb/unrelated.txt"), b"keep").unwrap();
-    fs::write(directory.path().join("mlb/.b9-cache-1-1.tmp"), b"keep").unwrap();
+    fs::write(directory.path().join("mlb/.skout-cache-1-1.tmp"), b"keep").unwrap();
     fs::create_dir(directory.path().join("mlb/directory.cache")).unwrap();
     let report = cache.prune("mlb").unwrap();
     assert_eq!(report.removed, 1);

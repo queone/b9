@@ -1,4 +1,4 @@
-//! Fantasy-baseball domain records shared by b9 application layers.
+//! Fantasy-baseball domain records shared by skout application layers.
 
 use std::collections::HashMap;
 use std::fmt;

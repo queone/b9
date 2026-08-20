@@ -1,4 +1,4 @@
-//! Isolated b9 SQLite storage ownership, schema migration, and transactions.
+//! Isolated skout SQLite storage ownership, schema migration, and transactions.
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -41,10 +41,10 @@ pub use snapshots::CommandSnapshot;
 pub use statcast::StatcastWrite;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
-/// The current schema version for b9-owned databases.
+/// The current schema version for skout-owned databases.
 pub const CURRENT_SCHEMA_VERSION: i64 = 5;
 
-/// Read-only production status fields used by `b9 st`.
+/// Read-only production status fields used by `skout st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct StoreStatus {
     pub latest_sync_status: Option<String>,
@@ -210,7 +210,7 @@ impl Clock for SystemClock {
     }
 }
 
-/// A contextual failure at the b9 storage boundary.
+/// A contextual failure at the skout storage boundary.
 #[derive(Debug)]
 pub enum StoreError {
     /// The production database path cannot be resolved.
@@ -330,7 +330,7 @@ impl Error for StoreError {
     }
 }
 
-/// Owns one connection to an isolated b9 SQLite database.
+/// Owns one connection to an isolated skout SQLite database.
 pub struct Store {
     connection: Option<Connection>,
     path: PathBuf,
@@ -338,7 +338,7 @@ pub struct Store {
 }
 
 impl Store {
-    /// Open the production b9 database and migrate it to the current schema.
+    /// Open the production skout database and migrate it to the current schema.
     pub fn open() -> Result<Self, StoreError> {
         let path = database_path()?;
         Self::open_at(path)
@@ -569,7 +569,10 @@ pub fn database_path() -> Result<PathBuf, StoreError> {
 
 fn database_path_from_home(home: Option<OsString>) -> Result<PathBuf, StoreError> {
     let home = home.ok_or(StoreError::HomeUnavailable)?;
-    Ok(PathBuf::from(home).join(".config").join("b9").join("b9.db"))
+    Ok(PathBuf::from(home)
+        .join(".config")
+        .join("skout")
+        .join("skout.db"))
 }
 
 fn prepare_path(path: &Path) -> Result<(), StoreError> {
@@ -702,7 +705,7 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
     }
     Err(StoreError::unsupported(
         path,
-        format!("database schema version {version} is not a supported b9 migration source"),
+        format!("database schema version {version} is not a supported skout migration source"),
     ))
 }
 
@@ -931,14 +934,18 @@ mod tests {
     fn production_path_preserves_non_unicode_home() {
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-        let home = OsString::from_vec(b"/tmp/b9-\xff-home".to_vec());
+        let home = OsString::from_vec(b"/tmp/skout-\xff-home".to_vec());
         let path = database_path_from_home(Some(home.clone())).unwrap();
         assert!(
             path.as_os_str()
                 .as_bytes()
                 .starts_with(home.as_os_str().as_bytes())
         );
-        assert!(path.as_os_str().as_bytes().ends_with(b"/.config/b9/b9.db"));
+        assert!(
+            path.as_os_str()
+                .as_bytes()
+                .ends_with(b"/.config/skout/skout.db")
+        );
     }
 
     #[test]

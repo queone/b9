@@ -69,7 +69,7 @@ pub fn status(requested_league: Option<&str>) -> Result<String, WorkflowError> {
     ))
 }
 
-/// Render the settled, fixed-order `b9 st` dashboard.
+/// Render the settled, fixed-order `skout st` dashboard.
 ///
 /// Field order is contracted: last run and completion state, database
 /// path/size/schema, MLB/Yahoo identity counts, provider freshness, circuit
@@ -197,7 +197,7 @@ pub fn render_dashboard(
         output.push_str(&format!("{label}: {value}\n"));
     }
     if !has_snapshot {
-        output.push_str("No local snapshot; run b9 sync.\n");
+        output.push_str("No local snapshot; run skout sync.\n");
     }
     output
 }
@@ -205,7 +205,7 @@ pub fn render_dashboard(
 fn is_legacy_authenticated_yahoo_error(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("fetch authenticated yahoo")
-        || error.contains("run b9 login")
+        || error.contains("run skout login")
         || error.contains("reauthorize")
 }
 
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn local_status_empty_snapshot_is_explicit_and_nonzero_free() {
         let output = render_dashboard(
-            Path::new("/absent/b9.db"),
+            Path::new("/absent/skout.db"),
             Path::new("/absent/config.json"),
             &Config::default(),
             &StoreStatus::default(),
@@ -231,19 +231,19 @@ mod tests {
         assert!(output.contains("Last run: none"));
         assert!(!output.contains("Service:"));
         assert!(!output.contains("Next run:"));
-        assert!(output.contains("Database: /absent/b9.db (absent, schema unknown)"));
+        assert!(output.contains("Database: /absent/skout.db (absent, schema unknown)"));
         assert!(output.contains("Identities: unavailable"));
         assert!(output.contains("Provider freshness: unavailable"));
         assert!(output.contains("Provider failures: ready (0)"));
         assert!(output.contains("Unmatched players: unavailable"));
         assert!(output.contains("League: none"));
         assert!(output.contains("Config: /absent/config.json"));
-        assert!(output.contains("No local snapshot; run b9 sync."));
+        assert!(output.contains("No local snapshot; run skout sync."));
         assert!(!output.contains("0 MLB"));
         assert!(!output.contains("Unmatched players: 0"));
 
         let colored = render_dashboard(
-            Path::new("/absent/b9.db"),
+            Path::new("/absent/skout.db"),
             Path::new("/absent/config.json"),
             &Config::default(),
             &StoreStatus::default(),
@@ -273,8 +273,8 @@ mod tests {
             ..Config::default()
         };
         let output = render_dashboard(
-            Path::new("/srv/b9/.config/b9/b9.db"),
-            Path::new("/srv/b9/.config/b9/config.json"),
+            Path::new("/srv/skout/.config/skout/skout.db"),
+            Path::new("/srv/skout/.config/skout/config.json"),
             &config,
             &status,
             160,
@@ -283,7 +283,9 @@ mod tests {
         assert!(output.contains("Last run: success at unix 100"));
         assert!(!output.contains("Service:"));
         assert!(!output.contains("Next run:"));
-        assert!(output.contains("Database: /srv/b9/.config/b9/b9.db (1024 bytes, schema v3)"));
+        assert!(
+            output.contains("Database: /srv/skout/.config/skout/skout.db (1024 bytes, schema v3)")
+        );
         assert!(output.contains("Identities: 512 MLB, 480 Yahoo"));
         assert!(output.contains("Provider freshness: unix 100"));
         assert!(output.contains("FanGraphs: failed: truncated"));
@@ -301,7 +303,7 @@ mod tests {
             circuit_open: true,
             provider_failure_count: 5,
             provider_last_error: Some(
-                "fetch authenticated Yahoo settings: Yahoo API returned HTTP 403; run b9 login to reauthorize"
+                "fetch authenticated Yahoo settings: Yahoo API returned HTTP 403; run skout login to reauthorize"
                     .into(),
             ),
             last_run_status: Some("failed".into()),
@@ -356,7 +358,7 @@ pub fn select_primary_team(
         if !interactive {
             return if partial.is_empty() {
                 Err(WorkflowError(format!(
-                    "select primary team: no team matches {query:?}; run b9 sync -T <key-or-name> and retry"
+                    "select primary team: no team matches {query:?}; run skout sync -T <key-or-name> and retry"
                 )))
             } else {
                 Err(WorkflowError(format!(
@@ -372,7 +374,7 @@ pub fn select_primary_team(
         )),
         [team] => Ok(team.team_key.clone()),
         _ if !interactive => Err(WorkflowError(
-            "select primary team: run b9 sync -T <key-or-name> and retry".into(),
+            "select primary team: run skout sync -T <key-or-name> and retry".into(),
         )),
         _ => {
             writeln!(output, "Select your primary team:")
@@ -717,7 +719,7 @@ fn synchronize_for_origin_reporting(
     if requested_league.is_empty() {
         if !std::io::stdin().is_terminal() {
             return Err(WorkflowError(
-                "sync: no Yahoo league configured; run b9 sync -l <league-id-or-key> -T <team> and retry"
+                "sync: no Yahoo league configured; run skout sync -l <league-id-or-key> -T <team> and retry"
                     .into(),
             ));
         }
@@ -1807,7 +1809,7 @@ mod provider_cycle_tests {
     #[test]
     fn injected_steps_continue_after_failure_and_retain_independent_state() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let attempts = Cell::new(0);
         let mut outcomes = Vec::new();
         for (source, fails) in [
@@ -1861,7 +1863,7 @@ mod provider_cycle_tests {
     #[test]
     fn injected_all_failed_cycle_attempts_every_step() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let attempts = Cell::new(0);
         let outcomes = ["yahoo", "mlb", "savant", "espn"].map(|source| {
             run_sync_item(
@@ -1884,7 +1886,7 @@ mod provider_cycle_tests {
     #[test]
     fn automatic_freshness_skips_while_manual_refreshes() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let first = run_sync_item(
             &mut store,
             "mlb",
@@ -1921,7 +1923,7 @@ mod provider_cycle_tests {
     #[test]
     fn degraded_success_is_successful_but_visible() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let outcome = run_sync_item(
             &mut store,
             "espn",
@@ -1949,7 +1951,7 @@ mod provider_cycle_tests {
     #[test]
     fn roster_sync_records_all_teams_and_retains_one_failed_team() {
         let directory = tempdir().unwrap();
-        let mut store = Store::open_at(directory.path().join("b9.db")).unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
         let prior = crate::store::RosterWrite {
             mlbam_id: 9000,
             name: "Prior Player".into(),

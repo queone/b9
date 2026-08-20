@@ -70,7 +70,7 @@ pub fn fetch(http: Arc<HttpClient>) -> Result<Vec<CloserChartEntry>, ProviderErr
             headers: vec![
                 HttpHeader {
                     name: "User-Agent".into(),
-                    value: "Mozilla/5.0 (compatible; b9) AppleWebKit/537.36".into(),
+                    value: "Mozilla/5.0 (compatible; skout) AppleWebKit/537.36".into(),
                 },
                 HttpHeader {
                     name: "Accept".into(),
