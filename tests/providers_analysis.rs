@@ -40,16 +40,21 @@ fn fangraphs_typed_json_accepts_projection_string_ids_and_batted_ball_fields() {
         .fetch_json::<skout::providers::fangraphs::LeaderRow>("https://www.fangraphs.com/test")
         .unwrap();
     assert_eq!(
-        (leaders[0].mlbam_id, leaders[0].fb_pct, leaders[0].hr_fb_pct),
-        (Some(42), 0.4, 0.2)
+        (
+            leaders[0].fangraphs_id.as_str(),
+            leaders[0].mlbam_id,
+            leaders[0].fb_pct,
+            leaders[0].hr_fb_pct
+        ),
+        ("7", Some(42), 0.4, 0.2)
     );
-    let (http, _) = client(r#"[{"playerid":"7","PA":600,"HR":30}]"#);
+    let (http, _) = client(r#"[{"playerid":"sa3020134","PA":600,"HR":30}]"#);
     let rows = FangraphsClient::new(http)
         .fetch_json::<skout::providers::fangraphs::ProjectionRow>("https://www.fangraphs.com/test")
         .unwrap();
     assert_eq!(
-        (rows[0].fangraphs_id, rows[0].pa, rows[0].hr),
-        (7, 600.0, 30.0)
+        (rows[0].fangraphs_id.as_str(), rows[0].pa, rows[0].hr),
+        ("sa3020134", 600.0, 30.0)
     );
 }
 

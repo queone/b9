@@ -18,8 +18,8 @@ use crate::domain::{
 };
 use crate::providers::yahoo_fantasy::{
     LeagueRosters, LeagueSettings, RosterPosition, YahooFantasyError, YahooFantasySource,
-    parse_free_agents, parse_league_rosters, parse_league_settings, parse_roster_week_stats,
-    parse_scoreboard, parse_standings, validate_key,
+    parse_free_agents, parse_league_settings, parse_roster_week_stats, parse_scoreboard,
+    parse_standings, parse_team_rosters, validate_key,
 };
 use crate::transport::{HttpClient, HttpHeader, HttpMethod, HttpRequest};
 
@@ -55,7 +55,6 @@ const RANK_BATCH_SIZE: usize = 50;
 const FREE_AGENT_PAGE_SIZE: usize = 25;
 const MAX_FREE_AGENT_PAGES: usize = 20;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-const LEAGUE_ROSTER_TIMEOUT: Duration = Duration::from_secs(30);
 const BODY_LIMIT: usize = 8 * 1024 * 1024;
 const HIDDEN_PLACEHOLDER: &str = "--hidden--";
 
@@ -447,17 +446,20 @@ impl YahooFantasySource for YahooPublicClient {
         )
     }
 
-    fn league_rosters(&self, league_key: &str) -> Result<LeagueRosters, YahooFantasyError> {
-        validate_key(league_key)?;
-        parse_league_rosters(
-            league_key,
-            &self.get_json_with_timeout(
-                format!(
-                    "{PUBLIC_FANTASY_URL}/league/{league_key}/teams/roster/players;out=ranks,percent_owned,percent_started?format=json"
-                ),
-                LEAGUE_ROSTER_TIMEOUT,
-            )?,
-        )
+    fn league_rosters(
+        &self,
+        _league_key: &str,
+        team_keys: &[String],
+    ) -> Result<LeagueRosters, YahooFantasyError> {
+        let mut teams = Vec::with_capacity(team_keys.len());
+        for team_key in team_keys {
+            validate_key(team_key)?;
+            let value = self.get_json(format!(
+                "{PUBLIC_FANTASY_URL}/team/{team_key}/roster/players;out=ranks,percent_owned,percent_started?format=json"
+            ))?;
+            teams.push((team_key.clone(), value));
+        }
+        parse_team_rosters(&teams)
     }
 
     fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {

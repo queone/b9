@@ -527,6 +527,13 @@ pub fn show_pool(
     let mut players = store
         .fantasy_players(&league)
         .map_err(|failure| error(role, failure))?;
+    if waiver && !players.iter().any(yahoo_pickup_available) {
+        let status = store
+            .latest_sync_run(SyncMode::Live)
+            .map_err(|failure| error(role, failure))?
+            .map(|run| run.status);
+        return Err(error(role, missing_yahoo_availability(status)));
+    }
     let identities = players.clone();
     populate_game_statuses(&mut players, &identities);
     if let Some(query) = argument.filter(|value| value.parse::<usize>().is_err()) {
@@ -633,6 +640,17 @@ pub fn show_pool(
 #[must_use]
 pub fn yahoo_pickup_available(player: &StoredFantasyPlayer) -> bool {
     player.owner.is_none()
+}
+
+fn missing_yahoo_availability(status: Option<SyncRunStatus>) -> &'static str {
+    match status {
+        Some(SyncRunStatus::Failed) => {
+            "Yahoo available-player data is missing because the latest sync failed; run skout st for provider details"
+        }
+        Some(SyncRunStatus::Running) => "Yahoo available-player data is missing",
+        Some(SyncRunStatus::Complete) => "the latest Yahoo sync returned no available players",
+        None => "Yahoo available-player data is missing",
+    }
 }
 
 /// Return the displayed player-pool limit for an optional numeric argument.
@@ -1264,9 +1282,9 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        apply_game_statuses, innings_value, next_projection_line, overlay_rotowire_side,
-        resolve_date_matchup, select_roster_team, sort_pool_players, weekly_matchup,
-        yahoo_result_notice,
+        apply_game_statuses, innings_value, missing_yahoo_availability, next_projection_line,
+        overlay_rotowire_side, resolve_date_matchup, select_roster_team, sort_pool_players,
+        weekly_matchup, yahoo_result_notice,
     };
     use crate::domain::{
         FantasyPlayer, FantasyTeam, GameIndicator, Matchup, MatchupTeam, PlayerGameLog,
@@ -1276,7 +1294,26 @@ mod tests {
     use crate::providers::yahoo_fantasy::{
         LeagueRosters, LeagueSettings, YahooFantasyError, YahooFantasySource,
     };
-    use crate::store::{Store, StoredFantasyTeam};
+    use crate::store::{Store, StoredFantasyTeam, SyncRunStatus};
+
+    #[test]
+    fn missing_yahoo_availability_reports_sync_state() {
+        assert!(
+            missing_yahoo_availability(Some(SyncRunStatus::Failed)).contains("latest sync failed")
+        );
+        assert_eq!(
+            missing_yahoo_availability(Some(SyncRunStatus::Running)),
+            "Yahoo available-player data is missing"
+        );
+        assert!(
+            missing_yahoo_availability(Some(SyncRunStatus::Complete))
+                .contains("returned no available players")
+        );
+        assert_eq!(
+            missing_yahoo_availability(None),
+            "Yahoo available-player data is missing"
+        );
+    }
 
     fn stored_player(status: &str) -> StoredFantasyPlayer {
         StoredFantasyPlayer {
@@ -1347,7 +1384,11 @@ mod tests {
         fn standings(&self, _: &str) -> Result<Vec<FantasyTeam>, YahooFantasyError> {
             Err(YahooFantasyError::Incomplete("not used"))
         }
-        fn league_rosters(&self, _: &str) -> Result<LeagueRosters, YahooFantasyError> {
+        fn league_rosters(
+            &self,
+            _: &str,
+            _: &[String],
+        ) -> Result<LeagueRosters, YahooFantasyError> {
             Err(YahooFantasyError::Incomplete("not used"))
         }
         fn free_agents(&self, _: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {

@@ -229,7 +229,7 @@ pub fn parse_csv(
                 format!("row {} lacks a positive player id", offset + 2),
             ));
         }
-        let row = StatcastWrite {
+        let mut row = StatcastWrite {
             mlbam_id,
             season,
             stat_group: group.into(),
@@ -258,14 +258,20 @@ pub fn parse_csv(
         } else {
             row.gb_pct.is_some()
         };
-        if (needs_pa && row.plate_appearances <= 0) || (needs_bbe && row.batted_ball_events <= 0) {
+        if needs_pa && row.plate_appearances <= 0 {
             return Err(ProviderError::invalid(
                 "parse Baseball Savant leaderboard",
-                format!(
-                    "row {} lacks a required PA/BF or BBE denominator",
-                    offset + 2
-                ),
+                format!("row {} lacks a required PA/BF denominator", offset + 2),
             ));
+        }
+        if needs_bbe && row.batted_ball_events <= 0 {
+            if group == "batting" {
+                row.exit_velo_avg = None;
+                row.barrel_pct = None;
+                row.hard_hit_pct = None;
+            } else {
+                row.gb_pct = None;
+            }
         }
         rows.push(row);
     }

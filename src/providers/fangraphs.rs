@@ -1,6 +1,7 @@
 use super::ProviderError;
 use crate::transport::{HttpClient, HttpMethod, HttpRequest};
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,7 +9,7 @@ use std::time::Duration;
 pub struct LeaderRow {
     #[serde(rename = "playerid")]
     #[serde(deserialize_with = "deserialize_id")]
-    pub fangraphs_id: i64,
+    pub fangraphs_id: String,
     #[serde(rename = "xMLBAMID")]
     pub mlbam_id: Option<i64>,
     #[serde(rename = "FB%", default)]
@@ -20,7 +21,9 @@ pub struct LeaderRow {
 pub struct ProjectionRow {
     #[serde(rename = "playerid")]
     #[serde(deserialize_with = "deserialize_id")]
-    pub fangraphs_id: i64,
+    pub fangraphs_id: String,
+    #[serde(rename = "xMLBAMID")]
+    pub mlbam_id: Option<i64>,
     #[serde(rename = "PA", default)]
     pub pa: f64,
     #[serde(rename = "IP", default)]
@@ -53,7 +56,11 @@ pub struct ProjectionRow {
     pub bb: f64,
 }
 
-fn deserialize_id<'de, D>(deserializer: D) -> Result<i64, D::Error>
+/// Normalize a `playerid` into a string regardless of wire shape: the
+/// leaderboard endpoint emits a bare JSON integer, the projections endpoint
+/// mostly emits an alphanumeric string (e.g. `"sa3020134"`) that a plain
+/// integer parse would reject.
+fn deserialize_id<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -63,11 +70,22 @@ where
         Number(i64),
         Text(String),
     }
-    match Id::deserialize(deserializer)? {
-        Id::Number(value) => Ok(value),
-        Id::Text(value) => value.parse().map_err(serde::de::Error::custom),
-    }
+    Ok(match Id::deserialize(deserializer)? {
+        Id::Number(value) => value.to_string(),
+        Id::Text(value) => value,
+    })
 }
+
+/// Resolve one projection row's MLBAM id: prefer the row's own `xMLBAMID`,
+/// falling back to a leaderboard-built crosswalk keyed by `fangraphs_id`.
+pub fn resolve_mlbam_id(
+    own_id: Option<i64>,
+    fangraphs_id: &str,
+    crosswalk: &BTreeMap<String, i64>,
+) -> Option<i64> {
+    own_id.or_else(|| crosswalk.get(fangraphs_id).copied())
+}
+
 pub struct FangraphsClient {
     http: Arc<HttpClient>,
 }

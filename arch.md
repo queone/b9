@@ -126,7 +126,7 @@ ESPN supplies current-day game and moneyline context. OddsShark supplies optiona
 
 ### Foreground Synchronization
 
-`skout sync` acquires the configured public Yahoo league, settings, standings, complete rosters, and bounded free-agent set. It also refreshes MLB identities, rosters, statistics, schedules, Savant metrics, FanGraphs data, FantasyPros ECR, and available game context. Independent provider steps continue after unrelated failures and report their result immediately.
+`skout sync` acquires the configured public Yahoo league, settings, standings, complete rosters, and bounded free-agent set. It also refreshes MLB identities, rosters, statistics, schedules, Savant metrics, FanGraphs data, FantasyPros ECR, and available game context. Foreground sync flushes an immediate start line, announces each provider step before acquisition, reports each result immediately, and continues after unrelated failures.
 
 Yahoo facts are staged and validated before one atomic fantasy-snapshot replacement. Other complete datasets use scoped atomic replacement or versioned command snapshots. A persistent cross-process lock prevents overlapping foreground sync runs. `sync_runs`, item freshness, row freshness, season manifests, and dashboard status record the lifecycle without introducing a background daemon.
 

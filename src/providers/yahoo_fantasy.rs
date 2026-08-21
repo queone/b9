@@ -90,7 +90,11 @@ impl std::error::Error for YahooFantasyError {}
 pub trait YahooFantasySource {
     fn league_settings(&self, league_key: &str) -> Result<LeagueSettings, YahooFantasyError>;
     fn standings(&self, league_key: &str) -> Result<Vec<FantasyTeam>, YahooFantasyError>;
-    fn league_rosters(&self, league_key: &str) -> Result<LeagueRosters, YahooFantasyError>;
+    fn league_rosters(
+        &self,
+        league_key: &str,
+        team_keys: &[String],
+    ) -> Result<LeagueRosters, YahooFantasyError>;
     fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError>;
     fn scoreboard(
         &self,
@@ -134,6 +138,14 @@ fn flatten_into(value: &Value, output: &mut Map<String, Value>) {
                 if !key.chars().all(|character| character.is_ascii_digit()) {
                     output.entry(key.clone()).or_insert_with(|| value.clone());
                 }
+                // `is_keeper` is Yahoo keeper-league bookkeeping skout never
+                // reads; its own `status`/`cost`/`kept` fields would
+                // otherwise shadow the real player-level `status` (injury
+                // designator) under first-wins hoisting whenever a player
+                // has no injury status of their own.
+                if key == "is_keeper" {
+                    continue;
+                }
                 if matches!(value, Value::Array(_) | Value::Object(_)) {
                     flatten_into(value, output);
                 }
@@ -144,10 +156,40 @@ fn flatten_into(value: &Value, output: &mut Map<String, Value>) {
     }
 }
 
+/// True for a value that can only ever be one compound entity's own field
+/// list: every element is either a single-field-name-to-value object (Yahoo's
+/// array-of-1-key-objects struct encoding) or an empty array placeholder.
+/// Never true for a collection of several sibling entities, which Yahoo
+/// always wraps in a numeric-keyed object instead.
+fn looks_like_entity_fields(values: &[Value]) -> bool {
+    !values.is_empty()
+        && values.iter().all(|field| match field {
+            Value::Object(_) => true,
+            Value::Array(inner) => inner.is_empty(),
+            _ => false,
+        })
+}
+
 fn entity_maps(value: &Value, identity: &str) -> Vec<Map<String, Value>> {
     fn visit(value: &Value, identity: &str, output: &mut Vec<Map<String, Value>>) {
         match value {
             Value::Array(values) => {
+                // Yahoo encodes one entity as `[fields, {named_subresource},
+                // ...]`, where `fields` is itself an array of 1-key objects.
+                // Flattening the whole array in that case merges the
+                // entity's own fields with its named sub-resources (e.g.
+                // `roster`, `selected_position`) in one pass; matching each
+                // 1-key object separately (the naive walk below) would find
+                // `identity` alone and discard every sibling field.
+                if values.first().is_some_and(|fields| {
+                    matches!(fields, Value::Array(inner) if looks_like_entity_fields(inner))
+                }) {
+                    let merged = flattened(value);
+                    if merged.contains_key(identity) {
+                        output.push(merged);
+                        return;
+                    }
+                }
                 for value in values {
                     visit(value, identity, output);
                 }
@@ -440,6 +482,25 @@ pub fn parse_league_rosters(
             })
             .collect(),
     })
+}
+
+/// Parse and merge one single-team roster response per team into one
+/// complete league roster. A single-team response may not echo `team_key`
+/// in its body, so the caller-supplied key (already known from the request)
+/// is always used over anything recovered from the response, mirroring the
+/// fallback `parse_roster_week_stats` already relies on.
+pub fn parse_team_rosters(teams: &[(String, Value)]) -> Result<LeagueRosters, YahooFantasyError> {
+    let mut wrapped = Vec::with_capacity(teams.len());
+    for (team_key, value) in teams {
+        let root = parsed_root(value)?;
+        let mut team = entity_maps(root, "team_key")
+            .into_iter()
+            .find(|map| text(map, "team_key") == *team_key)
+            .unwrap_or_else(|| flattened(root));
+        team.insert("team_key".into(), Value::String(team_key.clone()));
+        wrapped.push(Value::Object(team));
+    }
+    parse_league_rosters("", &Value::Array(wrapped))
 }
 
 /// Parse one free-agent player page.

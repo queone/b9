@@ -17,7 +17,7 @@ skout acquires read-only Yahoo fantasy data without OAuth, cookies, browser stat
 - Fetch `/redzone/mlb?league_id={league_id}&format=json` for current league, team, roster, matchup, and player data.
 - Fetch `/league/{league_key}/settings?format=json` for categories, roster positions, season, and current week.
 - Fetch `/league/{league_key}/standings?format=json` for team records, rank, waiver priority, budget, and move counts.
-- Fetch `/league/{league_key}/teams/roster/players;out=ranks,percent_owned?format=json` for complete league rosters.
+- Fetch `/team/{team_key}/roster/players;out=ranks,percent_owned?format=json` once per league team for complete league rosters; the combined `/league/{league_key}/teams/roster/players...` request was retired after it returned a multi-megabyte response that was observed truncated mid-transfer.
 - Fetch `/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned?format=json` until the first empty page for active free agents.
 - Fetch `/league/{league_key}/scoreboard[;week={week}]?format=json` for current or historical matchup scoreboards.
 - Fetch `/team/{team_key}/roster;week={week}/players/stats;type=week;week={week}?format=json` for weekly roster statistics.
@@ -30,9 +30,7 @@ A full Yahoo league key such as `469.l.170874` is preserved. A bare ID is normal
 
 - Send only HTTPS GET requests through the shared validating transport.
 - Send an `Accept` header and never send `Authorization`, `Cookie`, OAuth parameters, refresh tokens, or browser headers.
-- Apply a 30-second timeout to the combined league-roster request.
-- Apply a ten-second timeout to every other Yahoo request.
-- Apply an eight-MiB response limit to every Yahoo request.
+- Apply a ten-second timeout and an eight-MiB response limit to every Yahoo request, including each per-team roster request.
 - Bound free-agent pagination to 20 pages of 25 players.
 - Reject invalid league and team keys before request construction.
 - Reject non-success responses without retaining response bodies in diagnostics.
@@ -56,12 +54,13 @@ Ambiguous, missing, or stale selections fail without guessing. Synchronization f
 - Use public Yahoo scoreboards and period statistics for `m` and `rt --weekly`, including explicit weeks and active-season `MMM-DD` matchup days.
 - Require MLBAM identity reconciliation before daily matchup overlays; report unresolved players instead of silently applying an empty overlay.
 - Populate waiver candidates from the complete public free-agent snapshot.
+- Report missing or empty Yahoo available-player data instead of rendering silent waiver output.
 - Keep `st` local-only.
 - Keep the command surface free of Yahoo authentication, credential cleanup, and roster-mutation operations.
 
 ## Response contracts
 
-Yahoo collections may use numeric object keys, arrays, or singleton shapes. Parsers normalize those variants into provider-neutral league, team, player, slot, matchup, category, and weekly-stat records. Empty roster placeholders are skipped; malformed identities, incomplete required collections, invalid roster ownership, and an empty completed free-agent acquisition reject the refresh.
+Yahoo collections may use numeric object keys, arrays, or singleton shapes. A `team` or `player` entity is typically encoded as `[fields, {named_subresource}, ...]`, where `fields` is itself an array of 1-key objects (e.g. `[{"team_key": "..."}, {"name": "..."}, ...]`) — parsers merge that whole array into one record rather than matching its first fragment alone, since matching only the first fragment silently discards every other field. Parsers normalize those variants into provider-neutral league, team, player, slot, matchup, category, and weekly-stat records. A single-team roster response may omit `team_key` from its body; the already-known request team key is used instead of relying on it being echoed back, the same fallback weekly roster-statistics parsing already relies on. Empty roster placeholders are skipped; malformed identities, incomplete required collections, invalid roster ownership, and an empty completed free-agent acquisition reject the refresh.
 
 The redzone feed supplies current-week category building blocks. Counting categories sum active roster players; rate categories are recomputed from their underlying totals. Innings use baseball thirds rather than decimal tenths. Bench and injured slots remain visible in roster views but do not contribute to active matchup totals.
 

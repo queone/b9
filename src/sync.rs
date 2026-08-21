@@ -515,8 +515,9 @@ pub fn synchronize_with_origin(
         let teams = source
             .standings(league_key)
             .map_err(|error| WorkflowError::context("sync standings", error))?;
+        let team_keys: Vec<String> = teams.iter().map(|team| team.team_key.clone()).collect();
         let rosters = source
-            .league_rosters(league_key)
+            .league_rosters(league_key, &team_keys)
             .map_err(|error| WorkflowError::context("sync rosters", error))?;
         let free_agents = source
             .free_agents(league_key)
@@ -676,7 +677,7 @@ pub fn synchronize_with_options(
     synchronize_for_origin_reporting(
         league_override,
         SyncOrigin::Manual,
-        &mut |_| Ok(()),
+        &mut |_, _| Ok(()),
         true,
         team_override,
     )
@@ -688,7 +689,9 @@ pub fn synchronize_with_options_streaming(
     team_override: Option<&str>,
     output: &mut dyn Write,
 ) -> Result<String, WorkflowError> {
-    let mut reporter = |line: &str| write_sync_progress(output, line);
+    let mut pending = None;
+    let mut reporter =
+        |line: &str, complete: bool| write_sync_progress(output, line, complete, &mut pending);
     synchronize_for_origin_reporting(
         league_override,
         SyncOrigin::Manual,
@@ -701,10 +704,11 @@ pub fn synchronize_with_options_streaming(
 fn synchronize_for_origin_reporting(
     league_override: Option<&str>,
     origin: SyncOrigin,
-    reporter: &mut dyn FnMut(&str) -> Result<(), WorkflowError>,
+    reporter: &mut dyn FnMut(&str, bool) -> Result<(), WorkflowError>,
     include_step_lines: bool,
     team_override: Option<&str>,
 ) -> Result<String, WorkflowError> {
+    reporter("Sync started.", true)?;
     let _guard = SyncGuard::acquire()?;
     let mut config =
         config::read().map_err(|error| WorkflowError::context("read configuration", error))?;
@@ -757,6 +761,7 @@ fn synchronize_for_origin_reporting(
     } else {
         &league_key
     };
+    report_sync_start(reporter, "yahoo_public", "fantasy")?;
     let public = run_sync_item(
         &mut store,
         "yahoo_public",
@@ -772,8 +777,9 @@ fn synchronize_for_origin_reporting(
             let teams = source
                 .standings(&league_key)
                 .map_err(|error| format!("fetch public Yahoo standings: {error}"))?;
+            let team_keys: Vec<String> = teams.iter().map(|team| team.team_key.clone()).collect();
             let rosters = source
-                .league_rosters(&league_key)
+                .league_rosters(&league_key, &team_keys)
                 .map_err(|error| format!("fetch public Yahoo rosters: {error}"))?;
             let free_agents = source
                 .free_agents(&league_key)
@@ -840,6 +846,7 @@ fn synchronize_for_origin_reporting(
     record_outcome(&mut outcomes, public, reporter)?;
 
     let mlb = crate::providers::mlb::MlbClient::production(http.clone());
+    report_sync_start(reporter, "mlb", "hitting")?;
     let mlb_hitting = run_sync_item(
         &mut store,
         "mlb",
@@ -873,6 +880,7 @@ fn synchronize_for_origin_reporting(
         },
     );
     record_outcome(&mut outcomes, mlb_hitting, reporter)?;
+    report_sync_start(reporter, "mlb", "pitching")?;
     let mlb_pitching = run_sync_item(
         &mut store,
         "mlb",
@@ -945,10 +953,12 @@ fn synchronize_for_origin_reporting(
                 continue;
             }
             let minimum = if group == "hitting" { 200 } else { 150 };
+            let item = format!("{historical_season}_{group}");
+            report_sync_start(reporter, "mlb_history", &item)?;
             let outcome = run_sync_item(
                 &mut store,
                 "mlb_history",
-                &format!("{historical_season}_{group}"),
+                &item,
                 &historical_season.to_string(),
                 origin,
                 true,
@@ -999,6 +1009,7 @@ fn synchronize_for_origin_reporting(
         }
     }
 
+    report_sync_start(reporter, "mlb", "40man_rosters")?;
     let roster_outcome = run_sync_item(
         &mut store,
         "mlb",
@@ -1040,6 +1051,7 @@ fn synchronize_for_origin_reporting(
 
     let savant = crate::providers::savant::SavantClient::production(http.clone());
     for group in ["batting", "pitching"] {
+        report_sync_start(reporter, "savant", group)?;
         record_outcome(
             &mut outcomes,
             run_sync_item(
@@ -1073,6 +1085,7 @@ fn synchronize_for_origin_reporting(
         )?;
     }
 
+    report_sync_start(reporter, "fangraphs", "snapshot")?;
     record_outcome(
         &mut outcomes,
         run_sync_item(
@@ -1084,7 +1097,7 @@ fn synchronize_for_origin_reporting(
             force,
             |store| {
                 use crate::providers::fangraphs::{
-                    FangraphsClient, LeaderRow, ProjectionRow as FgProjection,
+                    FangraphsClient, LeaderRow, ProjectionRow as FgProjection, resolve_mlbam_id,
                 };
                 let client = FangraphsClient::new(http.clone());
                 let leaders:Vec<LeaderRow>=client.fetch_json(&format!("https://www.fangraphs.com/api/leaders/major-league/data?pos=all&stats=bat&lg=all&qual=0&season={season}&season1={season}&type=8&month=0&pageItems=2000&ind=0")).map_err(|e|format!("fetch FanGraphs leaderboard: {e}; prior data was retained"))?;
@@ -1093,7 +1106,7 @@ fn synchronize_for_origin_reporting(
                 }
                 let crosswalk = leaders
                     .iter()
-                    .filter_map(|r| r.mlbam_id.map(|id| (r.fangraphs_id, id)))
+                    .filter_map(|r| r.mlbam_id.map(|id| (r.fangraphs_id.clone(), id)))
                     .collect::<BTreeMap<_, _>>();
                 let batted = leaders
                     .iter()
@@ -1112,9 +1125,11 @@ fn synchronize_for_origin_reporting(
                     for group in ["bat", "pit"] {
                         let rows:Vec<FgProjection>=client.fetch_json(&format!("https://www.fangraphs.com/api/projections?type={system}&stats={group}&pos=all&season={season}&sortstat=ADP&sortorder=desc&page=1_5000")).map_err(|e|format!("fetch FanGraphs {system} projections: {e}; prior data was retained"))?;
                         for r in rows {
-                            if let Some(id) = crosswalk.get(&r.fangraphs_id) {
+                            let resolved =
+                                resolve_mlbam_id(r.mlbam_id, &r.fangraphs_id, &crosswalk);
+                            if let Some(id) = resolved {
                                 raw.push(crate::store::ProjectionWrite {
-                                    mlbam_id: *id,
+                                    mlbam_id: id,
                                     season,
                                     source: system.into(),
                                     stat_group: if group == "bat" {
@@ -1224,6 +1239,7 @@ fn synchronize_for_origin_reporting(
         reporter,
     )?;
 
+    report_sync_start(reporter, "fantasypros", "ecr")?;
     record_outcome(
         &mut outcomes,
         run_sync_item(
@@ -1255,6 +1271,7 @@ fn synchronize_for_origin_reporting(
         reporter,
     )?;
 
+    report_sync_start(reporter, "espn", "mlb_current_odds")?;
     let espn_outcome = run_sync_item(
         &mut store,
         "espn",
@@ -1341,7 +1358,7 @@ fn synchronize_for_origin_reporting(
         "degraded success"
     };
     let aggregate =
-        format!("Sync {disposition}: {successes} steps succeeded, {failures} failed.\n");
+        format!("==> Sync {disposition}: {successes} steps succeeded, {failures} failed.\n");
     let output = if include_step_lines {
         format!("{step_output}\n{aggregate}")
     } else {
@@ -1353,15 +1370,48 @@ fn synchronize_for_origin_reporting(
 fn record_outcome(
     outcomes: &mut Vec<SyncItemOutcome>,
     outcome: SyncItemOutcome,
-    reporter: &mut dyn FnMut(&str) -> Result<(), WorkflowError>,
+    reporter: &mut dyn FnMut(&str, bool) -> Result<(), WorkflowError>,
 ) -> Result<(), WorkflowError> {
-    reporter(&outcome.line())?;
+    reporter(&outcome.line(), true)?;
     outcomes.push(outcome);
     Ok(())
 }
 
-fn write_sync_progress(output: &mut dyn Write, line: &str) -> Result<(), WorkflowError> {
-    writeln!(output, "{line}")
+fn report_sync_start(
+    reporter: &mut dyn FnMut(&str, bool) -> Result<(), WorkflowError>,
+    source: &str,
+    item: &str,
+) -> Result<(), WorkflowError> {
+    reporter(&format!("{source} {item}: fetching"), false)
+}
+
+fn write_sync_progress(
+    output: &mut dyn Write,
+    line: &str,
+    complete: bool,
+    pending: &mut Option<String>,
+) -> Result<(), WorkflowError> {
+    let write = if complete {
+        if let Some(label) = pending.take() {
+            let prefix = format!("{label}: ");
+            if let Some(result) = line.strip_prefix(&prefix) {
+                writeln!(output, " -> {result}")
+            } else {
+                writeln!(output).and_then(|()| writeln!(output, "==> {line}"))
+            }
+        } else {
+            writeln!(output, "==> {line}")
+        }
+    } else {
+        if pending.take().is_some() {
+            writeln!(output)
+                .map_err(|error| WorkflowError::context("write sync progress", error))?;
+        }
+        let label = line.strip_suffix(": fetching").unwrap_or(line);
+        *pending = Some(label.to_owned());
+        write!(output, "==> {line}")
+    };
+    write
         .and_then(|()| output.flush())
         .map_err(|error| WorkflowError::context("write sync progress", error))
 }
@@ -1778,9 +1828,14 @@ mod provider_cycle_tests {
     fn foreground_progress_is_ordered_flushed_and_not_duplicated() {
         let mut writer = FlushWriter::default();
         let mut outcomes = Vec::new();
+        let mut pending = None;
+        write_sync_progress(&mut writer, "Sync started.", true, &mut pending).unwrap();
         {
-            let mut reporter = |line: &str| write_sync_progress(&mut writer, line);
+            let mut reporter = |line: &str, complete: bool| {
+                write_sync_progress(&mut writer, line, complete, &mut pending)
+            };
             for item in ["first", "second"] {
+                report_sync_start(&mut reporter, "provider", item).unwrap();
                 record_outcome(
                     &mut outcomes,
                     SyncItemOutcome {
@@ -1798,10 +1853,10 @@ mod provider_cycle_tests {
             }
         }
 
-        assert_eq!(writer.flushes, 2);
+        assert_eq!(writer.flushes, 5);
         assert_eq!(
             String::from_utf8(writer.bytes).unwrap(),
-            "provider first: success (1)\nprovider second: success (1)\n"
+            "==> Sync started.\n==> provider first: fetching -> success (1)\n==> provider second: fetching -> success (1)\n"
         );
         assert_eq!(outcomes.len(), 2);
     }

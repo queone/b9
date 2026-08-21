@@ -52,7 +52,7 @@ impl YahooFantasySource for Source {
         Ok(vec![team(1), team(2)])
     }
 
-    fn league_rosters(&self, _: &str) -> Result<LeagueRosters, YahooFantasyError> {
+    fn league_rosters(&self, _: &str, _: &[String]) -> Result<LeagueRosters, YahooFantasyError> {
         if self.fail_rosters {
             return Err(YahooFantasyError::Incomplete("rosters are incomplete"));
         }
@@ -292,7 +292,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
     public_teams[0].waiver_priority = 4;
     public_teams[0].faab_balance = 65;
     public_teams[0].moves = 30;
-    let mut public_players = source.league_rosters("mlb.l.1").unwrap().players;
+    let mut public_players = source.league_rosters("mlb.l.1", &[]).unwrap().players;
     let target_id = public_players[0].yahoo_player_id;
     let mut precise = public_players[0].clone();
     precise.injury_status = "IL60".into();
@@ -313,7 +313,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
             }],
             teams: public_teams,
             players: public_players.clone(),
-            slots: source.league_rosters("mlb.l.1").unwrap().slots,
+            slots: source.league_rosters("mlb.l.1", &[]).unwrap().slots,
         })
         .unwrap();
 
@@ -366,7 +366,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
             }],
             teams: source.standings("mlb.l.1").unwrap(),
             players: public_players,
-            slots: source.league_rosters("mlb.l.1").unwrap().slots,
+            slots: source.league_rosters("mlb.l.1", &[]).unwrap().slots,
         })
         .unwrap();
     assert_eq!(

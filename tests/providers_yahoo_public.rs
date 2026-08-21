@@ -17,7 +17,8 @@ const PUBLIC_SCOREBOARD: &[u8] = br#"{"fantasy_content":{"league":[{"league_key"
 
 const LEAGUE_SETTINGS: &[u8] = include_bytes!("fixtures/yahoo/league-settings.json");
 const LEAGUE_STANDINGS: &[u8] = include_bytes!("fixtures/yahoo/standings.json");
-const LEAGUE_ROSTERS: &[u8] = include_bytes!("fixtures/yahoo/rosters.json");
+const ROSTER_TEAM_1: &[u8] = include_bytes!("fixtures/yahoo/roster-team-1.json");
+const ROSTER_TEAM_2: &[u8] = include_bytes!("fixtures/yahoo/roster-team-2.json");
 const FREE_AGENTS: &[u8] = include_bytes!("fixtures/yahoo/free-agents.json");
 const MATCHUP: &[u8] = include_bytes!("fixtures/yahoo/matchup.json");
 const WEEKLY_STATS: &[u8] = include_bytes!("fixtures/yahoo/weekly-stats.json");
@@ -418,7 +419,8 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
     let executor = Arc::new(FakeExecutor::new(vec![
         response(200, LEAGUE_SETTINGS),
         response(200, LEAGUE_STANDINGS),
-        response(200, LEAGUE_ROSTERS),
+        response(200, ROSTER_TEAM_1),
+        response(200, ROSTER_TEAM_2),
         response(200, FREE_AGENTS),
         response(200, NO_FREE_AGENTS),
         response(200, MATCHUP),
@@ -431,8 +433,17 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
         client.league_settings("mlb.l.1").unwrap().league.league_key,
         "mlb.l.1"
     );
-    assert_eq!(client.standings("mlb.l.1").unwrap().len(), 2);
-    assert_eq!(client.league_rosters("mlb.l.1").unwrap().slots.len(), 2);
+    let standings = client.standings("mlb.l.1").unwrap();
+    assert_eq!(standings.len(), 2);
+    let team_keys: Vec<String> = standings.iter().map(|team| team.team_key.clone()).collect();
+    assert_eq!(
+        client
+            .league_rosters("mlb.l.1", &team_keys)
+            .unwrap()
+            .slots
+            .len(),
+        2
+    );
     assert!(!client.free_agents("mlb.l.1").unwrap().is_empty());
     assert_eq!(client.scoreboard("mlb.l.1", Some(7)).unwrap().len(), 1);
     assert_eq!(
@@ -468,7 +479,8 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
         vec![
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/settings?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/standings?format=json",
-            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/teams/roster/players;out=ranks,percent_owned,percent_started?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.1/roster/players;out=ranks,percent_owned,percent_started?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.2/roster/players;out=ranks,percent_owned,percent_started?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=0;count=25;out=ranks,percent_owned,percent_started?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=25;count=25;out=ranks,percent_owned,percent_started?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json",
@@ -477,12 +489,10 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
         ]
     );
     let requests = executor.requests();
-    assert_eq!(requests[2].2, std::time::Duration::from_secs(30));
-    assert_eq!(requests[2].3, 8 * 1024 * 1024);
     assert!(
-        requests.iter().enumerate().all(|(index, request)| {
-            index == 2 || request.2 == std::time::Duration::from_secs(10)
-        })
+        requests
+            .iter()
+            .all(|request| request.2 == std::time::Duration::from_secs(10))
     );
     assert!(requests.iter().all(|request| request.3 == 8 * 1024 * 1024));
 }

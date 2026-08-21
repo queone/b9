@@ -1,6 +1,8 @@
+use skout::domain::Position;
 use skout::providers::yahoo_fantasy::{
     bounded_page_starts, parse_free_agents, parse_league_rosters, parse_league_settings,
-    parse_roster_week_stats, parse_scoreboard, parse_standings, parse_user_leagues,
+    parse_roster_week_stats, parse_scoreboard, parse_standings, parse_team_rosters,
+    parse_user_leagues,
 };
 
 fn fixture(name: &str) -> serde_json::Value {
@@ -35,6 +37,102 @@ fn selected_fixtures_decode_complete_workflow_records() {
     assert_eq!(matchup[0].teams[0].stats["7"], "12");
     let weekly = parse_roster_week_stats("mlb.l.1.t.1", 7, &fixture("weekly")).unwrap();
     assert_eq!(weekly.players[0].home_runs, 1);
+}
+
+#[test]
+fn parse_team_rosters_merges_per_team_responses_and_injects_missing_team_key() {
+    // Team 1's response echoes team_key; team 2's does not, matching a real
+    // single-team Yahoo response that may omit it — the caller-supplied key
+    // must win either way.
+    let team_1 = serde_json::json!({"data": {
+        "team_key": "mlb.l.1.t.1",
+        "players": [
+            {"player_id": 101, "full": "Ada Hitter", "display_position": "OF", "position": "OF"}
+        ]
+    }});
+    let team_2 = serde_json::json!({"data": {
+        "players": [
+            {"player_id": 202, "full": "Grace Pitcher", "display_position": "SP", "position": "SP"}
+        ]
+    }});
+    let rosters = parse_team_rosters(&[
+        ("mlb.l.1.t.1".to_string(), team_1),
+        ("mlb.l.1.t.2".to_string(), team_2),
+    ])
+    .unwrap();
+    assert_eq!(rosters.players.len(), 2);
+    assert_eq!(rosters.slots.len(), 2);
+    assert!(
+        rosters
+            .slots
+            .iter()
+            .any(|slot| slot.team_key == "mlb.l.1.t.2" && slot.yahoo_player_id == 202)
+    );
+}
+
+#[test]
+fn parse_team_rosters_handles_yahoo_real_array_of_single_key_field_shape() {
+    // Yahoo's real (non-simplified) wire shape encodes one entity as
+    // `[fields, {named_subresource}, ...]`, where `fields` is itself an
+    // array of 1-key objects — confirmed against live production Yahoo
+    // responses, never reflected in this repo's other (hand-simplified)
+    // fixtures. `selected_position` nests the roster slot two levels below
+    // `player`, and `is_keeper.status` deliberately collides with the
+    // player-level `status` (injury designator) field name to prove that
+    // collision doesn't shadow a real injury status when one exists.
+    let player_fields = serde_json::json!([
+        {"player_id": 501},
+        {"name": {"full": "Ada Hitter"}},
+        {"status": "DTD"},
+        {"editorial_team_abbr": "NYY"},
+        {"is_keeper": {"status": false, "cost": false, "kept": false}},
+        {"display_position": "OF"}
+    ]);
+    let player = serde_json::json!([
+        player_fields,
+        {"selected_position": [{"coverage_type": "date"}, {"position": "OF"}]}
+    ]);
+    let roster = serde_json::json!({
+        "roster": {"0": {"players": {"0": {"player": player}}}}
+    });
+    let team_fields = serde_json::json!([
+        {"team_key": "mlb.l.1.t.1"},
+        {"name": "Testers"}
+    ]);
+    let team = serde_json::json!({"data": {"team": [team_fields, roster]}});
+    let rosters = parse_team_rosters(&[("mlb.l.1.t.1".to_string(), team)]).unwrap();
+    assert_eq!(rosters.players.len(), 1);
+    let player = &rosters.players[0];
+    assert_eq!(player.yahoo_player_id, 501);
+    assert_eq!(player.name, "Ada Hitter");
+    assert_eq!(player.injury_status, "DTD");
+    assert_eq!(rosters.slots[0].slot_position, Position::from("OF"));
+}
+
+#[test]
+fn parse_team_rosters_leaves_injury_status_blank_when_is_keeper_is_the_only_status_field() {
+    // Without a real player-level `status`, `is_keeper.status` (false) must
+    // not leak through as a bogus "false" injury status.
+    let player_fields = serde_json::json!([
+        {"player_id": 501},
+        {"name": {"full": "Ada Hitter"}},
+        {"is_keeper": {"status": false, "cost": false, "kept": false}},
+        {"display_position": "OF"}
+    ]);
+    let player = serde_json::json!([
+        player_fields,
+        {"selected_position": [{"coverage_type": "date"}, {"position": "OF"}]}
+    ]);
+    let roster = serde_json::json!({
+        "roster": {"0": {"players": {"0": {"player": player}}}}
+    });
+    let team_fields = serde_json::json!([
+        {"team_key": "mlb.l.1.t.1"},
+        {"name": "Testers"}
+    ]);
+    let team = serde_json::json!({"data": {"team": [team_fields, roster]}});
+    let rosters = parse_team_rosters(&[("mlb.l.1.t.1".to_string(), team)]).unwrap();
+    assert_eq!(rosters.players[0].injury_status, "");
 }
 
 #[test]
