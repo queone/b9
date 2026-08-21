@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.34.3 | AC43: adopt Govna v0.26.0 canon |
 | 0.34.2 | AC42: show Yahoo-available waiver players |
 | 0.34.1 | AC41: adopt Govna v0.24.0 canon |
 | 0.34.0 | Rename b9 to skout |

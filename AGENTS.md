@@ -76,12 +76,12 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 
 ### Contract Integrity
 
-- Apply contract-integrity reporting when governance instructions are contradictory, circular, unexecutable, or repeatedly produce a workflow loop.
+- Apply contract-integrity reporting when governance instructions are contradictory, circular, unexecutable, repeatedly produce a workflow loop, or present demonstrated contract-growth evidence.
 - Define a repeated workflow loop as the same conflict forcing at least two unnecessary phase returns, correction cycles, or Director round-trips.
 - Report a directly demonstrated contradiction, circular dependency, or unexecutable instruction without waiting for repetition.
 - Require repository evidence, an observed workflow consequence, or a directly demonstrable consequence for every finding.
 - Avoid executing a broken or unsafe path solely to produce finding evidence.
-- Exclude wording preferences, harmless redundancy, speculative conflicts, and disagreement with a settled Director decision.
+- Exclude wording preferences, harmless redundancy, raw size, speculative maintainability concerns, speculative conflicts, and disagreement with a settled Director decision.
 - Cite each source path, section heading, short targeted instruction snippet, and operational effect.
 - State whether the finding blocks the active authorized work.
 - Recommend one minimal correction when one viable correction exists.
@@ -90,6 +90,9 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Route `Consumer-local` corrections to `## Project Rules` or the owning repo document.
 - Classify shared phase, approval, scope, role, canon, or template findings as `Govna canon`.
 - Route `Govna canon` corrections to the authoritative source and every applicable consumer path.
+- State `Upstream Govna canon change required.` for every Govna-canon finding observed in a consumer repository.
+- Cite the authoritative upstream section or document for every consumer-observed Govna-canon finding.
+- Prohibit permanent local governance from recording an upstream canon correction.
 - Pair a blocking `Govna canon` recommendation with a temporary consumer mitigation only when the mitigation remains compatible with canon.
 - Mark every temporary consumer mitigation explicitly and state its removal condition.
 - Prohibit a temporary consumer mitigation from overriding or contradicting canon.
@@ -110,6 +113,26 @@ Note: prefer wording that is easiest for an LLM to follow, while staying simple 
 - Continue prohibiting memory entries, `feedback.md`, and session-note artifacts for repository-behavior corrections.
 - Require explicit Director authorization before changing consumer-local governance or govna canon.
 - Prevent contract-integrity reporting from authorizing a new AC phase, governance edit, delegation, commit, publication, or release action.
+
+### Contract Growth
+
+- Run a prospective contract-growth review during Audit or Refine when an active AC proposes governance instructions.
+- Run a measurable contract-growth review after authorized governance edits and before Implement completion.
+- Measure authorized AGENTS.md hunks against the phase-entry baseline while excluding unrelated working-tree changes.
+- Report added, removed, and net AGENTS.md line and rule-shaped-bullet counts.
+- Prevent contract-growth measurements alone from becoming findings.
+- Check every new or rewritten AGENTS.md rule for overlap and placement.
+- Keep shared triggers, authorization boundaries, safety constraints, and required outcomes in AGENTS.md.
+- Place rationale, examples, and domain-specific procedure in an explicitly referenced owning governance document.
+- Preserve short atomic imperative instructions as the default.
+- Prohibit general compression through compound instructions.
+- Prefer thematic `###` groupings and shared invariants over an unbounded flat instruction list.
+- Merge or retire an overlapping instruction only within authorized scope and settled semantics.
+- Report an out-of-scope or decision-bearing overlap without editing it.
+- Return to Refine for an out-of-scope or decision-bearing overlap.
+- Test representative triggers, authorization boundaries, allowed actions, exceptions, and exit conditions after governance restructuring.
+- Record each governance-restructuring scenario input and expected outcome in the closure-audit record.
+- Treat material duplication, misplaced procedural detail, excessive flat density with operational effect, or demonstrated retrieval or execution impairment as contract-growth evidence.
 
 ## Approval Boundaries
 
@@ -172,6 +195,15 @@ Note: this rule does not prohibit batching independent commands.
 
 ### AC-First Workflow
 
+- Evaluate AC ceremony during initial request triage when the Director has not selected Draft.
+- Recommend direct handling when a change is small, bounded, low-risk, and materially simpler without an AC.
+- Treat quick documentation changes across linked references as direct-handling candidates.
+- Treat quick CLI output-formatting changes across a few files as direct-handling candidates.
+- Count production and test source files when estimating change size.
+- Exclude documentation, generated outputs, fixtures, lockfiles, and governance templates from the count.
+- Treat changes exceeding eight counted files as presumptively AC-worthy.
+- Require an AC for architecture, schema, dependency, security, migration, external-integration, destructive, governance, or release decisions regardless of file count.
+- Preserve explicit authorization, scope, documentation, and same-pass test requirements for direct handling.
 - Treat every non-trivial change as AC-first work unless the Director explicitly overrides it.
 - Draft `govna/ac<N>-<slug>.md` before implementation using `govna/ac-template.md`.
 - Define scope, out-of-scope, and acceptance tests in the AC.
@@ -287,7 +319,8 @@ Note: this rule does not prohibit batching independent commands.
 ### Primary And Ancillary Scope
 
 - Capture the resolved current working directory as the primary repository at session entry.
-- Keep the primary repository and current phase visible in every phase report.
+- Track the primary repository and current phase internally.
+- Report the primary repository or current phase only for ancillary work, repository or phase ambiguity, a phase correction, or a repository switch.
 - Label work in another repository or path as `Ancillary work` only after the Director explicitly requests it.
 - Report the ancillary repository or path and authorization separately from the primary phase.
 - Prevent ancillary work from satisfying primary-repository scope, tests, validation, or phase gates.
@@ -377,6 +410,12 @@ Note: the Director flags scope concerns in chat during this window.
 ## Review Style
 
 - Lead each review with findings.
+- Assign Audit findings sequential identifiers in the form `F<#> [High|Medium|Low|Nit]`.
+- Preserve each finding identifier and severity through Refine resolution.
+- Reuse each finding identifier when it resurfaces during Implement or Ratify.
+- Keep one finding sequence for the active AC lifecycle.
+- Start a separate finding sequence for each standalone contract-integrity report.
+- Exclude acceptance tests, verification evidence, workflow mechanics, and non-finding commentary from finding identifiers.
 - Cite file paths and concrete behavior.
 - Skip preamble summaries.
 - Prioritize bugs, regressions, missing tests, and drift from documented behavior.
@@ -384,7 +423,13 @@ Note: the Director flags scope concerns in chat during this window.
 - Prioritize defects that affect the delivered contract, implementation scope, tests, or release safety.
 - Report "no issues" directly when none are found.
 - Note every residual risk or verification gap.
+- Open every substantive phase completion with one short outcome sentence.
 - Keep completions terse with changed items, flat bullets, and a final `Awaiting <specific Director-initiated next>.` line.
+- Focus completion summaries on changed behavior, material verification, findings, corrections, residual risks, and Director decisions.
+- Suppress routine repository labels, phase labels, phase mechanics, expected skips, duplicated status, and expected no-action confirmations.
+- Report suppressed workflow details only when exceptional or actionable.
+- Keep independently useful results, corrections, findings, and risks in separate bullets.
+- Avoid compressing independently useful facts with commas or semicolons.
 - Skip "What's in it", "Main conclusion", and "Next steps" headers unless asked.
 - Never prescribe commit, push, or release actions in Ratify.
 
@@ -398,6 +443,10 @@ Note: the Director triggers those actions; Ratify names what is pending.
 - Always report failures and skipped required gates.
 - Present architectural decisions to the director as: a recommendation when one viable option exists; two bounded options plus a recommendation when two exist; the best two plus a one-line note on the rest when more than two exist.
 - Include the three-part self-review structure (Verified / Red-teamed / Not checked) defined in `govna/roles.md` in every substantial completion report, even when the default is terse.
+- Color `Verified:`, `Red-teamed:`, and `Not checked:` cyan only when the response channel explicitly supports native color or ANSI color.
+- Preserve plain-text self-review headings when response color is unavailable or disabled.
+- Place a section's sole item on the heading line without a bullet.
+- Use terse flat bullets when a self-review section has multiple items.
 - Start every Package completion report with the plain, unbulleted, unindented line `Package complete.`.
 - Insert exactly one blank line after `Package complete.` before `Verified:`.
 - Keep `Verified:`, `Red-teamed:`, `Not checked:`, and `Run below to release:` in the Package completion report.
@@ -458,7 +507,7 @@ Note: the Director triggers those actions; Ratify names what is pending.
 - Avoid product or vendor names in identifiers.
 - Use product or vendor names only when an identifier names a real product-specific artifact or compatibility surface.
 
-Note: `CLAUDE.md` is an example of an exempt identifier — it names the Claude Code-readable symlink that mirrors AGENTS.md.
+Note: `CLAUDE.md` is an example of an exempt identifier — it names a product-specific compatibility symlink that mirrors AGENTS.md.
 
 ### Tool Use
 

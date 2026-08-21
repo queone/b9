@@ -26,6 +26,10 @@ Effective implementation scope avoids repeating settled Director decisions for d
 
 Evidence-triggered reporting distinguishes contract defects from implementation defects without inviting ambient opinion. Classification routes consumer-local, canon, or unclear findings but never grants editing authority. Blocking findings stop unsafe or decision-bearing work; unchanged acknowledged findings stay silent; authorized corrections land only in their owning governance document.
 
+## Why Contract Growth Is Reviewed
+
+Contract-growth review applies only to proposed or authorized governance changes. Measurements trigger inspection, not findings. Atomicity reduces dropped qualifiers; hierarchy and shared invariants reduce whole-contract dilution. Consumer evidence routes shared defects upstream without granting editing authority.
+
 ## Why Implement Can Close Bounded Completeness Gaps
 
 Implement and its closure audit can expose a missed path inside an already settled outcome. Requiring a new Director phase instruction for that deterministic omission adds ceremony without adding a decision. The bounded exception therefore continues the original Implement authority only when repository evidence identifies the gap, an active acceptance test already requires the correction class, the artifact family is already named, and only one materially valid outcome exists. Pre-Implementation Verification protects the corrected AC, reporting keeps the transition visible, and the three-round limit returns repeated or decision-bearing churn to the Director.

@@ -23,6 +23,7 @@ This file defines Operator and Director ownership. `AGENTS.md` is authoritative.
 - Challenge assumptions or underspecified behavior.
 - Cite findings by file and line.
 - Order findings by severity.
+- Assign stable severity-qualified finding identifiers under `AGENTS.md` Review Style.
 - Use objective review language.
 - Run `./build.sh` only when reviewing code changes or build-output claims.
 - Skip `./build.sh` for AC critique, doc-only review, and design discussion.
@@ -39,6 +40,9 @@ This file defines Operator and Director ownership. `AGENTS.md` is authoritative.
 - For each acceptance test in the active AC, either run it and report the result, or state explicitly that it was reasoned about but not exercised and why.
 
 - Report `Verified`, `Red-teamed`, and `Not checked` as distinct completion sections.
+- Keep each independently useful self-review item distinct.
+- Place a sole self-review item on its heading line.
+- Use terse flat bullets for multiple self-review items.
 - Cite non-trivial findings.
 - State explicitly when a section has no findings.
 - Treat implementation without self-review evidence as incomplete.
@@ -54,6 +58,7 @@ This file defines Operator and Director ownership. `AGENTS.md` is authoritative.
 - Follow `AGENTS.md` Review Style.
 - Use one-line acknowledgments for trivial signals.
 - Use structured summaries for substantive completions or Director decisions.
+- Keep substantive summaries focused on task results and actionable exceptions.
 
 ## What the Operator Must Defer
 
