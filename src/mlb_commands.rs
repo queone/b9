@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::cache::DiskCache;
 use crate::domain::{
     BattingStats, MlbRosterPlayer, MlbSlateRow, MlbStanding, MlbTeam, MlbTeamTotals, PitchingStats,
 };
@@ -18,7 +19,7 @@ use crate::providers::mlb::{
 };
 use crate::providers::oddsshark::OddsSharkClient;
 use crate::store::{RosterWrite, SeasonStatWrite, Store, SyncMode, SyncOrigin};
-use crate::terminal::detected_help_color_mode;
+use crate::terminal::{detected_help_color_mode, report_elapsed_with};
 use crate::transport::HttpClient;
 
 const DIRECTORY_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -59,7 +60,7 @@ pub fn show_teams(query: Option<&str>, force: bool) -> Result<String, MlbCommand
         },
     )?;
     let selected = resolve_teams_interactively(&teams, query)?;
-    let games = mlb.fetch_schedule(&date).unwrap_or_default();
+    let games = cached_schedule(&mlb, &date, force);
     let (records, records_refreshed) = match cached(
         &mut store,
         "mlb_team_records",
@@ -442,6 +443,26 @@ pub fn show_probables(force: bool) -> Result<String, MlbCommandError> {
         rows.len() as i64,
     )?;
     Ok(render_slate(&rows, &warnings, detected_help_color_mode()))
+}
+
+/// Fetch one day's schedule through the disk-cached path when available and
+/// not forced, falling back to an uncached fetch otherwise.
+fn cached_schedule(mlb: &MlbClient, date: &str, force: bool) -> Vec<ScheduleGame> {
+    let start = std::time::Instant::now();
+    if !force
+        && let Ok(cache) = DiskCache::production()
+        && let Ok(cached) = mlb.fetch_schedule_cached(date, &cache)
+    {
+        report_elapsed_with(
+            "mlb schedule fetch",
+            start,
+            &format!("{:?}", cached.cache_status),
+        );
+        return cached.games;
+    }
+    let games = mlb.fetch_schedule(date).unwrap_or_default();
+    report_elapsed_with("mlb schedule fetch", start, "uncached");
+    games
 }
 
 fn production(command: &str) -> Result<(Arc<HttpClient>, Store, String), MlbCommandError> {

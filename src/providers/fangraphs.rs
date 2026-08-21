@@ -1,5 +1,5 @@
 use super::ProviderError;
-use crate::transport::{HttpClient, HttpMethod, HttpRequest};
+use crate::transport::{HttpClient, HttpHeader, HttpMethod, HttpRequest};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -102,7 +102,10 @@ impl FangraphsClient {
             .execute(HttpRequest {
                 method: HttpMethod::Get,
                 url: url.into(),
-                headers: vec![],
+                headers: vec![HttpHeader {
+                    name: "Accept".into(),
+                    value: "application/json".into(),
+                }],
                 body: vec![],
                 timeout: Duration::from_secs(20),
                 body_limit: 16 * 1024 * 1024,

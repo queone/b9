@@ -142,8 +142,16 @@ fn flatten_into(value: &Value, output: &mut Map<String, Value>) {
                 // reads; its own `status`/`cost`/`kept` fields would
                 // otherwise shadow the real player-level `status` (injury
                 // designator) under first-wins hoisting whenever a player
-                // has no injury status of their own.
-                if key == "is_keeper" {
+                // has no injury status of their own. `eligible_positions`
+                // and `eligible_positions_to_add` are read directly via
+                // `map.get(...)` below; recursing into them would let their
+                // first listed `position` shadow the real assigned slot
+                // from `selected_position`, which always comes later in
+                // wire order.
+                if matches!(
+                    key.as_str(),
+                    "is_keeper" | "eligible_positions" | "eligible_positions_to_add"
+                ) {
                     continue;
                 }
                 if matches!(value, Value::Array(_) | Value::Object(_)) {

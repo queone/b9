@@ -4,7 +4,6 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use crate::analysis::pqs::sort_by_pqs;
 use crate::cache::DiskCache;
 use crate::config;
 use crate::domain::{GameIndicator, Matchup, PlayerGameLog, StoredFantasyPlayer};
@@ -17,7 +16,7 @@ use crate::providers::yahoo_fantasy::YahooFantasySource;
 use crate::providers::yahoo_public::YahooPublicClient;
 use crate::store::{Store, StoredFantasyTeam, WaiverCandidate};
 use crate::store::{SyncMode, SyncRunStatus};
-use crate::terminal::detected_help_color_mode;
+use crate::terminal::{detected_help_color_mode, report_elapsed, report_elapsed_with};
 use crate::transport::HttpClient;
 
 /// One roster and player-pool command failure.
@@ -80,13 +79,33 @@ pub(crate) fn populate_game_statuses(
     let http = Arc::new(http);
     let client = MlbClient::production(http.clone());
     let date = utc_date(SystemTime::now());
-    let Ok(mut games) = client.fetch_schedule(&date) else {
+    let cache = DiskCache::production().ok();
+    let schedule_start = std::time::Instant::now();
+    let games = match &cache {
+        Some(cache) => client.fetch_schedule_cached(&date, cache).map(|cached| {
+            report_elapsed_with(
+                "mlb schedule fetch",
+                schedule_start,
+                &format!("{:?}", cached.cache_status),
+            );
+            cached.games
+        }),
+        None => {
+            let result = client.fetch_schedule(&date);
+            report_elapsed_with("mlb schedule fetch", schedule_start, "uncached");
+            result
+        }
+    };
+    let Ok(mut games) = games else {
         return;
     };
-    if let Ok(cache) = DiskCache::production()
-        && let Ok(lineups) = RotowireClient::production(http).fetch_cached(&cache)
-    {
-        overlay_rotowire_lineups(identities, &mut games, &lineups);
+    if let Some(cache) = &cache {
+        let rotowire_start = std::time::Instant::now();
+        let lineups = RotowireClient::production(http).fetch_cached(cache);
+        report_elapsed("rotowire lineup fetch", rotowire_start);
+        if let Ok(lineups) = lineups {
+            overlay_rotowire_lineups(identities, &mut games, &lineups);
+        }
     }
     apply_game_statuses(players, &games);
 }
@@ -434,14 +453,14 @@ fn show_weekly_totals(
         .map_err(|failure| error("rt", failure))?
         .ok_or_else(|| error("rt", "league current week is unavailable"))?;
     let (matchup, stale) = if requested == "true" {
-        weekly_matchup(store, &source, league, current_week)?
+        weekly_matchup(store, &source, league, current_week, team_key)?
     } else if let Ok(week) = requested.parse::<i32>() {
         if week <= 0 {
             return Err(error("rt", "week must be positive"));
         }
-        weekly_matchup(store, &source, league, week)?
+        weekly_matchup(store, &source, league, week, team_key)?
     } else {
-        resolve_date_matchup(store, &source, league, current_week, requested)?
+        resolve_date_matchup(store, &source, league, current_week, requested, team_key)?
     };
     let team = matchup
         .teams
@@ -466,6 +485,7 @@ fn weekly_matchup(
     source: &impl YahooFantasySource,
     league: &str,
     week: i32,
+    team_key: &str,
 ) -> Result<(Matchup, bool), PlayerCommandError> {
     let scope = format!("{league}:{week}");
     let (matchups, stale) = crate::matchup::cached_or_fetch_at(
@@ -476,9 +496,15 @@ fn weekly_matchup(
         || source.scoreboard(league, Some(week)),
     )
     .map_err(|failure| error("rt", failure))?;
+    // The scoreboard returns every pairing for the week, not just the
+    // caller's own — filtering by week alone (as this used to) silently
+    // picks whichever pairing happens to come first, which only matched
+    // the requested team by coincidence.
     let matchup = matchups
         .into_iter()
-        .find(|matchup| matchup.week == week)
+        .find(|matchup| {
+            matchup.week == week && matchup.teams.iter().any(|team| team.team_key == team_key)
+        })
         .ok_or_else(|| error("rt", "requested week has no matchup"))?;
     Ok((matchup, stale))
 }
@@ -489,12 +515,13 @@ fn resolve_date_matchup(
     league: &str,
     current_week: i32,
     date: &str,
+    team_key: &str,
 ) -> Result<(Matchup, bool), PlayerCommandError> {
     if !is_iso_date(date) {
         return Err(error("rt", "weekly date must use YYYY-MM-DD"));
     }
     for week in 1..=current_week {
-        let (matchup, stale) = weekly_matchup(store, source, league, week)?;
+        let (matchup, stale) = weekly_matchup(store, source, league, week, team_key)?;
         if matchup.week_start.as_str() <= date && date <= matchup.week_end.as_str() {
             return Ok((matchup, stale));
         }
@@ -677,13 +704,16 @@ pub fn sort_waiver_players(
         .filter(|player| !waiver_eligible(player, requested_position, candidates))
         .cloned()
         .collect::<Vec<_>>();
-    sort_by_pqs(&mut qualified);
-    remaining.sort_by(|left, right| {
-        left.rank
-            .unwrap_or(i64::MAX)
-            .cmp(&right.rank.unwrap_or(i64::MAX))
-            .then_with(|| left.name.cmp(&right.name))
-    });
+    fn by_rank(players: &mut [StoredFantasyPlayer]) {
+        players.sort_by(|left, right| {
+            left.rank
+                .unwrap_or(i64::MAX)
+                .cmp(&right.rank.unwrap_or(i64::MAX))
+                .then_with(|| left.name.cmp(&right.name))
+        });
+    }
+    by_rank(&mut qualified);
+    by_rank(&mut remaining);
     for (target, ranked) in players
         .iter_mut()
         .zip(qualified.into_iter().chain(remaining))
@@ -1375,6 +1405,29 @@ mod tests {
                 teams: [team("mlb.l.1.t.1", "One"), team("mlb.l.1.t.2", "Two")],
             }
         }
+
+        fn matchup_between(week: i32, start: &str, end: &str, left: &str, right: &str) -> Matchup {
+            let team = |key: &str, name: &str| MatchupTeam {
+                team_key: key.into(),
+                team_id: 1,
+                name: name.into(),
+                is_current_login: false,
+                stats: HashMap::new(),
+                wins: 0,
+                losses: 0,
+                ties: 0,
+                completed_games: 0,
+                live_games: 0,
+                remaining_games: 0,
+            };
+            Matchup {
+                week,
+                week_start: start.into(),
+                week_end: end.into(),
+                status: "postevent".into(),
+                teams: [team(left, "Other"), team(right, "Other Two")],
+            }
+        }
     }
 
     impl YahooFantasySource for WeeklySource {
@@ -1404,6 +1457,14 @@ mod tests {
             let matchup = match week {
                 1 => Self::matchup(1, "2026-03-26", "2026-04-05"),
                 2 => Self::matchup(2, "2026-04-06", "2026-04-12"),
+                // Two pairings sharing the same week — the requested team
+                // is only in the second, not the first.
+                3 => {
+                    return Ok(vec![
+                        Self::matchup_between(3, "2026-04-13", "2026-04-19", "other.1", "other.2"),
+                        Self::matchup(3, "2026-04-13", "2026-04-19"),
+                    ]);
+                }
                 _ => return Err(YahooFantasyError::Incomplete("unknown week")),
             };
             Ok(vec![matchup])
@@ -1421,15 +1482,46 @@ mod tests {
             requested_weeks: RefCell::new(Vec::new()),
         };
 
-        let (numbered, stale) = weekly_matchup(&mut store, &source, "mlb.l.1", 2).unwrap();
+        let (numbered, stale) =
+            weekly_matchup(&mut store, &source, "mlb.l.1", 2, "mlb.l.1.t.1").unwrap();
         assert_eq!(numbered.week, 2);
         assert!(!stale);
 
-        let (dated, stale) =
-            resolve_date_matchup(&mut store, &source, "mlb.l.1", 2, "2026-04-09").unwrap();
+        let (dated, stale) = resolve_date_matchup(
+            &mut store,
+            &source,
+            "mlb.l.1",
+            2,
+            "2026-04-09",
+            "mlb.l.1.t.1",
+        )
+        .unwrap();
         assert_eq!(dated.week, 2);
         assert!(!stale);
         assert_eq!(*source.requested_weeks.borrow(), vec![2, 1]);
+    }
+
+    #[test]
+    fn weekly_matchup_finds_the_pairing_that_contains_the_requested_team() {
+        // The scoreboard returns every pairing for the week, not just the
+        // caller's own; the requested team's pairing here is second, not
+        // first, so a week-only filter would silently return the wrong
+        // matchup.
+        let directory = tempdir().unwrap();
+        let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
+        let source = WeeklySource {
+            requested_weeks: RefCell::new(Vec::new()),
+        };
+
+        let (matchup, _) =
+            weekly_matchup(&mut store, &source, "mlb.l.1", 3, "mlb.l.1.t.2").unwrap();
+
+        assert!(
+            matchup
+                .teams
+                .iter()
+                .any(|team| team.team_key == "mlb.l.1.t.2")
+        );
     }
 
     #[test]

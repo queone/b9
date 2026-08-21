@@ -271,6 +271,7 @@ where
     };
 
     if matches.get_flag("debug") {
+        crate::terminal::set_debug_timing(true);
         let command = matches.subcommand_name().unwrap_or("root");
         let league = if matches.get_one::<String>("league").is_some() {
             "override"

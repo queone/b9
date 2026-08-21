@@ -199,6 +199,15 @@ pub fn render_dashboard(
     if !has_snapshot {
         output.push_str("No local snapshot; run skout sync.\n");
     }
+    if status.savant_bbe_unavailable {
+        output.push_str(&format!(
+            "{}\n",
+            terminal::dim(
+                "Savant: EV/BRL%/HH%/GB% unavailable — Baseball Savant's own export is not currently populating BBE",
+                mode
+            )
+        ));
+    }
     output
 }
 
@@ -293,6 +302,34 @@ mod tests {
         assert!(output.contains("Unmatched players: 6"));
         assert!(output.contains("League: 431.l.12345"));
         assert!(!output.contains("No local snapshot"));
+    }
+
+    #[test]
+    fn savant_bbe_unavailable_is_surfaced_and_hidden_when_populated() {
+        let degraded = StoreStatus {
+            savant_bbe_unavailable: true,
+            ..StoreStatus::default()
+        };
+        let output = render_dashboard(
+            Path::new("/db"),
+            Path::new("/config.json"),
+            &Config::default(),
+            &degraded,
+            0,
+            HelpColorMode::Plain,
+        );
+        assert!(output.contains("Savant: EV/BRL%/HH%/GB% unavailable"));
+
+        let healthy = StoreStatus::default();
+        let output = render_dashboard(
+            Path::new("/db"),
+            Path::new("/config.json"),
+            &Config::default(),
+            &healthy,
+            0,
+            HelpColorMode::Plain,
+        );
+        assert!(!output.contains("Savant:"));
     }
 
     #[test]
@@ -1062,6 +1099,7 @@ fn synchronize_for_origin_reporting(
                 origin,
                 force,
                 |store| {
+                    let fetch_start = std::time::Instant::now();
                     let rows = if group == "batting" {
                         savant.fetch_batting(season)
                     } else {
@@ -1070,6 +1108,7 @@ fn synchronize_for_origin_reporting(
                     .map_err(|error| {
                         format!("fetch Savant {group}: {error}; prior {group} data was retained")
                     })?;
+                    crate::terminal::report_elapsed(&format!("savant {group} fetch"), fetch_start);
                     let count = rows.len() as i64;
                     store
                         .replace_statcast_snapshot(season, group, &rows)
@@ -1100,7 +1139,9 @@ fn synchronize_for_origin_reporting(
                     FangraphsClient, LeaderRow, ProjectionRow as FgProjection, resolve_mlbam_id,
                 };
                 let client = FangraphsClient::new(http.clone());
+                let leaderboard_start = std::time::Instant::now();
                 let leaders:Vec<LeaderRow>=client.fetch_json(&format!("https://www.fangraphs.com/api/leaders/major-league/data?pos=all&stats=bat&lg=all&qual=0&season={season}&season1={season}&type=8&month=0&pageItems=2000&ind=0")).map_err(|e|format!("fetch FanGraphs leaderboard: {e}; prior data was retained"))?;
+                crate::terminal::report_elapsed("fangraphs leaderboard fetch", leaderboard_start);
                 if leaders.len() < 100 {
                     return Err("validate FanGraphs leaderboard: fewer than 100 rows; prior data was retained".into());
                 }
@@ -1121,6 +1162,7 @@ fn synchronize_for_origin_reporting(
                     .collect::<Vec<_>>();
                 let systems = [("steamer", 0.40), ("zips", 0.35), ("atc", 0.25)];
                 let mut raw = Vec::new();
+                let projections_start = std::time::Instant::now();
                 for (system, _) in systems {
                     for group in ["bat", "pit"] {
                         let rows:Vec<FgProjection>=client.fetch_json(&format!("https://www.fangraphs.com/api/projections?type={system}&stats={group}&pos=all&season={season}&sortstat=ADP&sortorder=desc&page=1_5000")).map_err(|e|format!("fetch FanGraphs {system} projections: {e}; prior data was retained"))?;
@@ -1158,6 +1200,7 @@ fn synchronize_for_origin_reporting(
                         }
                     }
                 }
+                crate::terminal::report_elapsed("fangraphs projections fetch", projections_start);
                 if raw.len() < 100 {
                     return Err("validate FanGraphs projections: fewer than 100 resolved rows; prior data was retained".into());
                 }

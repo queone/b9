@@ -247,6 +247,7 @@ fn hitter_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String 
         &player.status
     };
     let status = fit(status_value, 8);
+    let status = style_game_indicator(&status, player.game_indicator, false, mode);
     let hand = if player.hand.is_empty() {
         "-"
     } else {
@@ -325,6 +326,7 @@ fn pitcher_pool_row(player: &StoredFantasyPlayer, mode: HelpColorMode) -> String
         &player.status
     };
     let status = fit(status_value, 8);
+    let status = style_game_indicator(&status, player.game_indicator, false, mode);
     let hand = if player.hand.is_empty() {
         "-"
     } else {

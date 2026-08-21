@@ -110,6 +110,41 @@ fn parse_team_rosters_handles_yahoo_real_array_of_single_key_field_shape() {
 }
 
 #[test]
+fn parse_team_rosters_resolves_selected_position_not_first_eligible_position() {
+    // A real player's `eligible_positions` (multiple positions they could
+    // play) and `selected_position` (their one actual assigned slot) both
+    // use the field name `position`. `eligible_positions` appears earlier
+    // in wire order; first-wins hoisting must not let its first entry
+    // shadow the real assigned slot from `selected_position`.
+    let player_fields = serde_json::json!([
+        {"player_id": 501},
+        {"name": {"full": "Ada Bencher"}},
+        {"display_position": "1B,OF"},
+        {"eligible_positions": [
+            {"position": "1B"},
+            {"position": "OF"},
+            {"position": "Util"}
+        ]},
+        {"eligible_positions_to_add": []}
+    ]);
+    let player = serde_json::json!([
+        player_fields,
+        {"selected_position": [{"coverage_type": "date"}, {"position": "BN"}]}
+    ]);
+    let roster = serde_json::json!({
+        "roster": {"0": {"players": {"0": {"player": player}}}}
+    });
+    let team_fields = serde_json::json!([
+        {"team_key": "mlb.l.1.t.1"},
+        {"name": "Testers"}
+    ]);
+    let team = serde_json::json!({"data": {"team": [team_fields, roster]}});
+    let rosters = parse_team_rosters(&[("mlb.l.1.t.1".to_string(), team)]).unwrap();
+    assert_eq!(rosters.slots.len(), 1);
+    assert_eq!(rosters.slots[0].slot_position, Position::from("BN"));
+}
+
+#[test]
 fn parse_team_rosters_leaves_injury_status_blank_when_is_keeper_is_the_only_status_field() {
     // Without a real player-level `status`, `is_keeper.status` (false) must
     // not leak through as a bogus "false" injury status.

@@ -179,24 +179,25 @@ fn waiver_sort_keeps_qualified_players_first_and_orders_fallbacks() {
     tied_fallback.name = "Ada Fallback".into();
     tied_fallback.rank = Some(1);
     tied_fallback.mlbam_id = None;
-    let mut expected_qualified = vec![first.clone(), second.clone()];
-    skout::analysis::pqs::sort_by_pqs(&mut expected_qualified);
     let mut players = vec![ranked_fallback, first, tied_fallback, second];
 
     sort_waiver_players(&mut players, None, &candidates);
 
+    // Qualified candidates stay ahead of the rest, both groups ordered by
+    // rank/YR (tied here at rank None, so tie-broken by name) rather than
+    // PQS.
     assert_eq!(
-        players[..2]
+        players
             .iter()
             .map(|player| player.name.as_str())
             .collect::<Vec<_>>(),
-        expected_qualified
-            .iter()
-            .map(|player| player.name.as_str())
-            .collect::<Vec<_>>()
+        [
+            "Ada Qualified",
+            "Zed Qualified",
+            "Ada Fallback",
+            "Zed Fallback"
+        ]
     );
-    assert_eq!(players[2].name, "Ada Fallback");
-    assert_eq!(players[3].name, "Zed Fallback");
 }
 
 #[test]

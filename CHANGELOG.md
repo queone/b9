@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.35.0 | AC46: fix roster slots, waiver sort, display parity, and sync performance |
 | 0.34.5 | AC45: recover degraded sync providers |
 | 0.34.4 | AC44: stabilize Yahoo public roster acquisition |
 | 0.34.3 | AC43: adopt Govna v0.26.0 canon |

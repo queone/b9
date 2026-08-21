@@ -3,6 +3,31 @@
 use std::io::IsTerminal;
 use std::io::{self, Write};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
+
+static DEBUG_TIMING: AtomicBool = AtomicBool::new(false);
+
+/// Enable or disable `--debug` timing reports for the remainder of this process.
+pub fn set_debug_timing(enabled: bool) {
+    DEBUG_TIMING.store(enabled, Ordering::Relaxed);
+}
+
+/// Print one elapsed-time diagnostic line to stderr when `--debug` is active;
+/// a no-op otherwise. Scoped to the network-fetch boundaries this command
+/// surface is actually slow at, not a general profiling framework.
+pub fn report_elapsed(label: &str, start: Instant) {
+    if DEBUG_TIMING.load(Ordering::Relaxed) {
+        eprintln!("skout debug: {label} took {:?}", start.elapsed());
+    }
+}
+
+/// `report_elapsed` with an extra detail suffix (e.g. a cache hit/miss status).
+pub fn report_elapsed_with(label: &str, start: Instant, detail: &str) {
+    if DEBUG_TIMING.load(Ordering::Relaxed) {
+        eprintln!("skout debug: {label} took {:?} ({detail})", start.elapsed());
+    }
+}
 
 /// Explicit help color mode used by renderers and deterministic tests.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -63,6 +63,7 @@ pub struct StoreStatus {
     pub unmatched_player_count: i64,
     pub fangraphs_sync: Option<String>,
     pub fantasypros_sync: Option<String>,
+    pub savant_bbe_unavailable: bool,
 }
 
 /// Durable provider fields used by the local status dashboard.
@@ -174,6 +175,19 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
     };
     let fangraphs_sync = provider_state("fangraphs")?;
     let fantasypros_sync = provider_state("fantasypros")?;
+    // Baseball Savant's own leaderboard export currently leaves `bbe` blank
+    // on every row, so exit velocity/barrel%/hard-hit%/GB% resolve to null
+    // even though the sync step itself reports success — surface that
+    // distinctly rather than letting four silently blank columns look like
+    // a parsing bug.
+    let (savant_batting_rows, savant_batting_with_ev): (i64, i64) = connection
+        .query_row(
+            "SELECT COUNT(*), COUNT(exit_velo_avg) FROM statcast_seasons WHERE stat_group='batting' AND season=(SELECT MAX(season) FROM statcast_seasons WHERE stat_group='batting')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| StoreError::operation("read Savant BBE coverage", path, error))?;
+    let savant_bbe_unavailable = savant_batting_rows > 0 && savant_batting_with_ev == 0;
     Ok(StoreStatus {
         latest_sync_status,
         latest_sync_at,
@@ -191,6 +205,7 @@ pub fn inspect_status_at(path: &Path, league_key: &str) -> Result<StoreStatus, S
         unmatched_player_count,
         fangraphs_sync,
         fantasypros_sync,
+        savant_bbe_unavailable,
     })
 }
 
