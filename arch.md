@@ -138,7 +138,7 @@ Historical scoreboards and player rows are stored as versioned command snapshots
 
 ### Roster and Player Pools
 
-Roster and pool commands read normalized Yahoo ownership and eligibility together with MLB season facts, Savant metrics, FanGraphs projections, and FantasyPros ECR. Shared MLBAM identity is the statistics join boundary, including role-distinct two-way-player rows. Waiver filtering requires durable active-roster membership and role-relative usage floors before analysis and sorting.
+Roster and pool commands read normalized Yahoo ownership and eligibility together with MLB season facts, Savant metrics, FanGraphs projections, and FantasyPros ECR. Shared MLBAM identity is the statistics join boundary, including role-distinct two-way-player rows. Waiver views include every Yahoo free agent; active-roster membership, resolved identity, role-relative usage floors, and injury status determine PQS-first ranking rather than inclusion.
 
 Player detail cards may refresh an MLB game log on demand and retain a compatible per-player snapshot for labeled fallback. Analysis consumes durable facts; it does not call providers or own persistence.
 
