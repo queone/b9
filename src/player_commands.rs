@@ -1012,7 +1012,7 @@ fn game_logs(
                                 opponent: format!(
                                     "{} {}",
                                     if entry.is_home { "vs" } else { "@" },
-                                    entry.opponent_abbreviation
+                                    mlb_team_abbreviation(entry.opponent_team_id)
                                 ),
                                 status: String::new(),
                                 batting_order: 0,
@@ -1050,7 +1050,7 @@ fn game_logs(
                                 opponent: format!(
                                     "{}{}",
                                     if entry.is_home { "" } else { "@" },
-                                    entry.opponent_abbreviation
+                                    mlb_team_abbreviation(entry.opponent_team_id)
                                 ),
                                 status: String::new(),
                                 batting_order: 0,

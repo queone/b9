@@ -216,6 +216,99 @@ fn pitcher_detail_uses_pitching_statcast_and_missing_value_fallbacks() {
 }
 
 #[test]
+fn detail_hides_injuries_unless_the_player_is_actually_on_the_il() {
+    // MLBAM can carry a leftover injury_note (e.g. a historical note) on a
+    // player with no active status at all — that must not render an
+    // INJURIES section for a fully active player. Same for DTD, which is
+    // day-to-day, not an IL designation.
+    let mut healthy_with_stray_note = hitter();
+    healthy_with_stray_note.injury_note = "Loose bodies in left elbow".into();
+    let output = render_detail(
+        &healthy_with_stray_note,
+        &[],
+        None,
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
+    assert!(!output.contains("INJURIES"));
+
+    let mut day_to_day = hitter();
+    day_to_day.status = "DTD".into();
+    let output = render_detail(
+        &day_to_day,
+        &[],
+        None,
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
+    assert!(!output.contains("INJURIES"));
+
+    let mut on_the_il = hitter();
+    on_the_il.status = "IL10".into();
+    let output = render_detail(
+        &on_the_il,
+        &[],
+        None,
+        None,
+        false,
+        "2026-04-10",
+        HelpColorMode::Plain,
+    );
+    assert!(output.contains("INJURIES\nIL10\n"));
+}
+
+#[test]
+fn pitcher_detail_lists_every_real_start_across_the_season_without_gap_rows() {
+    // Starting pitchers don't appear every day; the game log must list every
+    // real start across the full season (like the hitter branch already
+    // does), not just the last 10 calendar days with `-` placeholder rows
+    // for days they didn't pitch.
+    let mut player = hitter();
+    player.role = "P".into();
+    let logs = vec![
+        PlayerGameLog {
+            date: "2026-04-02".into(),
+            game_id: 1,
+            opponent: "vs BOS".into(),
+            status: String::new(),
+            batting_order: 0,
+            line: "IP 6.0  QS 1  W 1  SV 0  K 7  ERA 2.85  WHIP 0.96".into(),
+        },
+        PlayerGameLog {
+            date: "2026-08-16".into(),
+            game_id: 2,
+            opponent: "@ SD".into(),
+            status: String::new(),
+            batting_order: 0,
+            line: "IP 6.0  QS 1  W 0  SV 0  K 7  ERA 2.85  WHIP 0.96".into(),
+        },
+    ];
+    let output = render_detail(
+        &player,
+        &logs,
+        None,
+        None,
+        false,
+        "2026-08-21",
+        HelpColorMode::Plain,
+    );
+    assert!(output.contains("Apr 02"));
+    assert!(output.contains("Aug 16"));
+    assert_eq!(
+        output
+            .lines()
+            .filter(|line| line.starts_with("Apr ") || line.starts_with("Aug "))
+            .count(),
+        2,
+        "{output}"
+    );
+}
+
+#[test]
 fn weekly_totals_follow_league_category_order() {
     let output = render_weekly_totals(
         "Operators",

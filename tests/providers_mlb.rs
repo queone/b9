@@ -651,13 +651,13 @@ fn statistics_fixtures_decode_complete_records_and_bulk_identity() {
     assert_eq!(hitter_log[0].date, "2026-04-01");
     assert_eq!(hitter_log[0].game_id, 800010);
     assert!(hitter_log[0].is_home);
-    assert_eq!(hitter_log[0].opponent_abbreviation, "BOS");
+    assert_eq!(hitter_log[0].opponent_team_id, 111);
     assert_eq!(hitter_log[0].stat.on_base_plus_slugging, "2.417");
     let pitcher_log = client.fetch_pitcher_game_log(600001, 2026).unwrap();
     assert_eq!(pitcher_log.len(), 10);
     assert_eq!(pitcher_log[0].game_id, 800011);
     assert!(!pitcher_log[0].is_home);
-    assert_eq!(pitcher_log[0].opponent_abbreviation, "TOR");
+    assert_eq!(pitcher_log[0].opponent_team_id, 141);
     assert_eq!(pitcher_log[0].stat.innings_pitched, "6.0");
 }
 

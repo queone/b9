@@ -370,3 +370,12 @@ CREATE TABLE IF NOT EXISTS mlb_odds (
     fetched_at      INTEGER NOT NULL,
     PRIMARY KEY (game_pk, market, side, player_mlbam_id, sportsbook)
 );
+
+-- fantasy_players (src/store/fantasy.rs) filters and joins on these columns
+-- via correlated subqueries; none of the three tables' primary keys lead
+-- with the column this query filters by, so each needed its own index.
+-- Kept identical to store.rs's FANTASY_PLAYERS_INDEXES so a fresh database
+-- and one migrated from an earlier version end up the same.
+CREATE INDEX IF NOT EXISTS idx_mlb_team_active_rosters_mlbam_id ON mlb_team_active_rosters(mlbam_id);
+CREATE INDEX IF NOT EXISTS idx_players_mlbam_id ON players(mlbam_id);
+CREATE INDEX IF NOT EXISTS idx_yahoo_roster_slots_player_id ON yahoo_roster_slots(player_id);

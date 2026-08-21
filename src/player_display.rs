@@ -799,15 +799,7 @@ pub fn render_detail(
         mode,
     ));
     output.push('\n');
-    if player.role == "P" {
-        for date in recent_dates(today) {
-            if let Some(log) = logs.iter().find(|log| log.date == date) {
-                output.push_str(&detail_log_row(player, &date, log, mode));
-            } else {
-                output.push_str(&empty_detail_log_row(player, &date));
-            }
-        }
-    } else if logs.iter().any(|log| log.game_id > 0) {
+    if logs.iter().any(|log| log.game_id > 0) {
         for log in logs {
             output.push_str(&detail_log_row(player, &log.date, log, mode));
         }
@@ -820,14 +812,12 @@ pub fn render_detail(
             }
         }
     }
-    if !player.status.is_empty() || !player.injury_note.is_empty() {
+    if player.status.starts_with("IL") {
         output.push('\n');
         output.push_str(&table_heading("INJURIES", mode));
         output.push('\n');
         if player.injury_note.is_empty() {
             output.push_str(&player.status);
-        } else if player.status.is_empty() {
-            output.push_str(&player.injury_note);
         } else {
             output.push_str(&format!("{}: {}", player.status, player.injury_note));
         }

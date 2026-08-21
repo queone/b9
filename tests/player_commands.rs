@@ -103,15 +103,6 @@ fn yahoo_results_show_only_the_stale_notice() {
     assert!(with_yahoo_result_notice(true, "POOL\n".into()).starts_with("STALE —"));
 }
 #[test]
-fn evaluation_uses_name_as_a_stable_tie_breaker() {
-    let mut players = vec![player(1, "B", "OF"), player(2, "B", "OF")];
-    players[0].name = "Zed".into();
-    players[1].name = "Ada".into();
-    skout::analysis::pqs::sort_by_pqs(&mut players);
-    assert_eq!(players[0].name, "Ada");
-}
-
-#[test]
 fn yahoo_availability_includes_low_data_and_injured_players() {
     for role in ["B", "P"] {
         let mut missing_identity = player(10, role, if role == "B" { "OF" } else { "SP" });

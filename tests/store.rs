@@ -94,7 +94,21 @@ fn fresh_store_has_the_exact_schema_and_connection_policy() {
         );
     }
     assert!(!schema.to_uppercase().contains("FOREIGN KEY"));
-    assert!(!schema.to_uppercase().contains("CREATE INDEX"));
+    // AC47: `fantasy_players` needed indexes on columns three tables' primary
+    // keys don't lead with — the "no indexes" default no longer holds
+    // unconditionally, but each addition should still be a deliberate,
+    // named, single-column-purpose index, not a return to unindexed lookups
+    // dressed up differently.
+    for contract in [
+        "CREATE INDEX IF NOT EXISTS idx_mlb_team_active_rosters_mlbam_id ON mlb_team_active_rosters(mlbam_id)",
+        "CREATE INDEX IF NOT EXISTS idx_players_mlbam_id ON players(mlbam_id)",
+        "CREATE INDEX IF NOT EXISTS idx_yahoo_roster_slots_player_id ON yahoo_roster_slots(player_id)",
+    ] {
+        assert!(
+            schema.contains(contract),
+            "missing index contract {contract}"
+        );
+    }
 }
 
 #[test]
@@ -286,6 +300,70 @@ fn version_three_migration_adds_computed_statcast_rates_without_losing_rows() {
         )
         .unwrap();
     assert_eq!(row, (0.401, None, None, None));
+}
+
+fn schema_has_index(connection: &Connection, name: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name=?1",
+            [name],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap()
+        > 0
+}
+
+#[test]
+fn version_five_migration_adds_fantasy_players_indexes_without_losing_rows() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("version-five.db");
+    Store::open_at(&path).unwrap().close().unwrap();
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "INSERT INTO players (mlbam_id, name, synced_at) VALUES (501, 'Kept Player', 1)",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute("UPDATE schema_version SET version=5", [])
+        .unwrap();
+    drop(connection);
+
+    let store = Store::open_at(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), CURRENT_SCHEMA_VERSION);
+    store.close().unwrap();
+
+    let connection = Connection::open(&path).unwrap();
+    for index in [
+        "idx_mlb_team_active_rosters_mlbam_id",
+        "idx_players_mlbam_id",
+        "idx_yahoo_roster_slots_player_id",
+    ] {
+        assert!(schema_has_index(&connection, index), "missing {index}");
+    }
+    assert_eq!(
+        connection
+            .query_row("SELECT name FROM players WHERE mlbam_id=501", [], |row| row
+                .get::<_, String>(0))
+            .unwrap(),
+        "Kept Player"
+    );
+}
+
+#[test]
+fn fresh_store_has_the_fantasy_players_indexes() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("fresh-indexes.db");
+    Store::open_at(&path).unwrap().close().unwrap();
+    let connection = Connection::open(&path).unwrap();
+    for index in [
+        "idx_mlb_team_active_rosters_mlbam_id",
+        "idx_players_mlbam_id",
+        "idx_yahoo_roster_slots_player_id",
+    ] {
+        assert!(schema_has_index(&connection, index), "missing {index}");
+    }
 }
 
 #[test]

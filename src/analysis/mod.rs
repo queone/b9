@@ -2,7 +2,6 @@
 
 pub mod blend;
 pub mod pitcher_role;
-pub mod pqs;
 pub mod statcast_blend;
 pub mod waiver;
 pub mod window_proj;

@@ -42,7 +42,29 @@ pub use statcast::StatcastWrite;
 pub use sync_runs::{SyncMode, SyncOrigin, SyncRun, SyncRunStatus};
 
 /// The current schema version for skout-owned databases.
-pub const CURRENT_SCHEMA_VERSION: i64 = 5;
+pub const CURRENT_SCHEMA_VERSION: i64 = 6;
+
+/// Indexes `fantasy_players` needs, paired with the table each depends on —
+/// kept identical to the block appended to `schema.sql` so a fresh database
+/// and a migrated one end up the same. `CREATE INDEX`, unlike `CREATE TABLE`,
+/// has no `IF NOT EXISTS`-style guard against a missing *table*, and a
+/// database that reached schema v1 by a path other than `schema.sql` is not
+/// guaranteed to already have every table these indexes target — each is
+/// applied only when its table is actually present.
+const FANTASY_PLAYERS_INDEXES: &[(&str, &str)] = &[
+    (
+        "mlb_team_active_rosters",
+        "CREATE INDEX IF NOT EXISTS idx_mlb_team_active_rosters_mlbam_id ON mlb_team_active_rosters(mlbam_id)",
+    ),
+    (
+        "players",
+        "CREATE INDEX IF NOT EXISTS idx_players_mlbam_id ON players(mlbam_id)",
+    ),
+    (
+        "yahoo_roster_slots",
+        "CREATE INDEX IF NOT EXISTS idx_yahoo_roster_slots_player_id ON yahoo_roster_slots(player_id)",
+    ),
+];
 
 /// Read-only production status fields used by `skout st`.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -704,19 +726,26 @@ fn migrate(connection: &mut Connection, path: &Path, schema: &str) -> Result<(),
         migrate_v1_to_v2(connection, path)?;
         migrate_v2_to_v3(connection, path)?;
         migrate_v3_to_v4(connection, path)?;
-        return migrate_v4_to_v5(connection, path);
+        migrate_v4_to_v5(connection, path)?;
+        return migrate_v5_to_v6(connection, path);
     }
     if version == 2 {
         migrate_v2_to_v3(connection, path)?;
         migrate_v3_to_v4(connection, path)?;
-        return migrate_v4_to_v5(connection, path);
+        migrate_v4_to_v5(connection, path)?;
+        return migrate_v5_to_v6(connection, path);
     }
     if version == 3 {
         migrate_v3_to_v4(connection, path)?;
-        return migrate_v4_to_v5(connection, path);
+        migrate_v4_to_v5(connection, path)?;
+        return migrate_v5_to_v6(connection, path);
     }
     if version == 4 {
-        return migrate_v4_to_v5(connection, path);
+        migrate_v4_to_v5(connection, path)?;
+        return migrate_v5_to_v6(connection, path);
+    }
+    if version == 5 {
+        return migrate_v5_to_v6(connection, path);
     }
     Err(StoreError::unsupported(
         path,
@@ -749,6 +778,40 @@ fn migrate_v4_to_v5(connection: &mut Connection, path: &Path) -> Result<(), Stor
     ).map_err(|error| StoreError::operation("apply version-five schema migration", path, error))?;
     transaction
         .execute("UPDATE schema_version SET version=5", [])
+        .map_err(|error| StoreError::operation("write schema version", path, error))?;
+    transaction
+        .commit()
+        .map_err(|error| StoreError::operation("commit schema migration", path, error))
+}
+
+/// Index the columns `fantasy_players`'s correlated subqueries filter and
+/// join on — that query previously ran unindexed scans of `players` (9,000+
+/// rows), `mlb_team_active_rosters`, and `yahoo_roster_slots`, none of which
+/// have a primary key usable for these lookups (each leads with a different
+/// column than the one this query filters by).
+fn migrate_v5_to_v6(connection: &mut Connection, path: &Path) -> Result<(), StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| StoreError::operation("begin schema migration", path, error))?;
+    for (table, index_sql) in FANTASY_PLAYERS_INDEXES {
+        let table_exists: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get(0),
+            )
+            .map_err(|error| {
+                StoreError::operation("check version-six migration target table", path, error)
+            })?;
+        if table_exists == 0 {
+            continue;
+        }
+        transaction.execute(index_sql, []).map_err(|error| {
+            StoreError::operation("apply version-six schema migration", path, error)
+        })?;
+    }
+    transaction
+        .execute("UPDATE schema_version SET version=6", [])
         .map_err(|error| StoreError::operation("write schema version", path, error))?;
     transaction
         .commit()

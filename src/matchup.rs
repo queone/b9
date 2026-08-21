@@ -531,9 +531,11 @@ fn apply_roster_statuses(
     mine: &mut RosterWeekStats,
     opponent: &mut RosterWeekStats,
 ) -> Result<(), MatchupError> {
+    let query_start = std::time::Instant::now();
     let identities = store
         .fantasy_players(league_key)
         .map_err(|error| contextual("read roster status identities", error))?;
+    crate::terminal::report_elapsed("matchup fantasy_players query", query_start);
     let roster_ids = mine
         .players
         .iter()
@@ -549,7 +551,9 @@ fn apply_roster_statuses(
         })
         .cloned()
         .collect::<Vec<_>>();
+    let overlay_start = std::time::Instant::now();
     crate::player_commands::populate_game_statuses(&mut roster_players, &identities);
+    crate::terminal::report_elapsed("matchup game status overlay", overlay_start);
     apply_resolved_roster_statuses(&mut mine.players, &roster_players);
     apply_resolved_roster_statuses(&mut opponent.players, &roster_players);
     Ok(())
@@ -760,10 +764,16 @@ fn show_weekly_matchup(
         None
     };
     if let Some(day) = &daily_date {
+        let start = std::time::Instant::now();
         apply_daily_stats(store, &mut mine, &mut opponent, day, http.clone())?;
+        crate::terminal::report_elapsed("matchup daily stats overlay", start);
     }
+    let start = std::time::Instant::now();
     apply_roster_statuses(store, league_key, &mut mine, &mut opponent)?;
+    crate::terminal::report_elapsed("matchup roster statuses", start);
+    let start = std::time::Instant::now();
     let odds = acquire_odds_context(store, http, &mine, &opponent).unwrap_or_default();
+    crate::terminal::report_elapsed("matchup odds context", start);
     let stale = scoreboard_stale || mine_stale || opponent_stale;
     let teams = store
         .fantasy_teams(league_key)

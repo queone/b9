@@ -394,7 +394,7 @@ pub struct HittingGameLogEntry {
     pub date: String,
     pub game_id: i64,
     pub is_home: bool,
-    pub opponent_abbreviation: String,
+    pub opponent_team_id: i64,
     pub stat: HittingStats,
 }
 
@@ -404,7 +404,7 @@ pub struct PitchingGameLogEntry {
     pub date: String,
     pub game_id: i64,
     pub is_home: bool,
-    pub opponent_abbreviation: String,
+    pub opponent_team_id: i64,
     pub stat: PitchingStats,
 }
 
@@ -1445,7 +1445,15 @@ struct GameLogWire<T> {
     #[serde(default, rename = "isHome")]
     is_home: bool,
     #[serde(default)]
-    opponent: AbbreviationWire,
+    opponent: TeamIdWire,
+}
+
+/// The `gameLog` endpoint's `opponent` object carries a numeric team `id`
+/// but no `abbreviation` — the abbreviation is resolved locally from the id.
+#[derive(Default, Deserialize)]
+struct TeamIdWire {
+    #[serde(default)]
+    id: i64,
 }
 
 #[derive(Default, Deserialize)]
@@ -1460,7 +1468,7 @@ impl From<GameLogWire<HittingStats>> for HittingGameLogEntry {
             date: value.date,
             game_id: value.game.game_id,
             is_home: value.is_home,
-            opponent_abbreviation: value.opponent.abbreviation,
+            opponent_team_id: value.opponent.id,
             stat: value.stat,
         }
     }
@@ -1472,7 +1480,7 @@ impl From<GameLogWire<PitchingStats>> for PitchingGameLogEntry {
             date: value.date,
             game_id: value.game.game_id,
             is_home: value.is_home,
-            opponent_abbreviation: value.opponent.abbreviation,
+            opponent_team_id: value.opponent.id,
             stat: value.stat,
         }
     }
