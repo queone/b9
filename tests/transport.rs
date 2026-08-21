@@ -58,6 +58,21 @@ fn request(url: String) -> HttpRequest {
 }
 
 #[test]
+fn response_read_errors_report_kind_without_body_bytes() {
+    let error = ExecutorError::Read {
+        detail: "response body read failed".into(),
+        source: std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "request-secret response-secret",
+        ),
+    };
+    let display = error.to_string();
+    assert!(display.contains("response body read failed (UnexpectedEof)"));
+    assert!(!display.contains("request-secret"));
+    assert!(!display.contains("response-secret"));
+}
+
+#[test]
 fn validating_client_preserves_exact_injected_contract() {
     let executor = Arc::new(RecordingExecutor::default());
     let client = HttpClient::new(executor.clone());

@@ -55,6 +55,7 @@ const RANK_BATCH_SIZE: usize = 50;
 const FREE_AGENT_PAGE_SIZE: usize = 25;
 const MAX_FREE_AGENT_PAGES: usize = 20;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const LEAGUE_ROSTER_TIMEOUT: Duration = Duration::from_secs(30);
 const BODY_LIMIT: usize = 8 * 1024 * 1024;
 const HIDDEN_PLACEHOLDER: &str = "--hidden--";
 
@@ -206,6 +207,14 @@ impl YahooPublicClient {
     }
 
     fn get_json(&self, url: String) -> Result<serde_json::Value, YahooFantasyError> {
+        self.get_json_with_timeout(url, REQUEST_TIMEOUT)
+    }
+
+    fn get_json_with_timeout(
+        &self,
+        url: String,
+        timeout: Duration,
+    ) -> Result<serde_json::Value, YahooFantasyError> {
         let response = self
             .http
             .execute(HttpRequest {
@@ -216,7 +225,7 @@ impl YahooPublicClient {
                     value: "application/json".into(),
                 }],
                 body: Vec::new(),
-                timeout: REQUEST_TIMEOUT,
+                timeout,
                 body_limit: BODY_LIMIT,
             })
             .map_err(|error| YahooFantasyError::Provider(error.to_string()))?;
@@ -442,9 +451,12 @@ impl YahooFantasySource for YahooPublicClient {
         validate_key(league_key)?;
         parse_league_rosters(
             league_key,
-            &self.get_json(format!(
-                "{PUBLIC_FANTASY_URL}/league/{league_key}/teams/roster/players;out=ranks,percent_owned,percent_started?format=json"
-            ))?,
+            &self.get_json_with_timeout(
+                format!(
+                    "{PUBLIC_FANTASY_URL}/league/{league_key}/teams/roster/players;out=ranks,percent_owned,percent_started?format=json"
+                ),
+                LEAGUE_ROSTER_TIMEOUT,
+            )?,
         )
     }
 

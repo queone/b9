@@ -63,7 +63,7 @@ impl YahooFantasySource for Source {
     }
 
     fn free_agents(&self, _: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
-        Ok(Vec::new())
+        Ok(vec![player(103, "Katherine Free Agent")])
     }
 
     fn scoreboard(&self, _: &str, week: Option<i32>) -> Result<Vec<Matchup>, YahooFantasyError> {
@@ -228,9 +228,19 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
     .unwrap();
     assert_eq!(
         (summary.teams, summary.players, summary.roster_slots),
-        (2, 2, 2)
+        (2, 3, 2)
     );
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+    let prior_players = store.fantasy_players("mlb.l.1").unwrap();
+    assert_eq!(prior_players.len(), 3);
+    assert_eq!(
+        prior_players
+            .iter()
+            .find(|player| player.yahoo_player_id == Some(103))
+            .unwrap()
+            .owner,
+        None
+    );
     assert!(
         store
             .command_snapshot("match_scoreboard", "yahoo", "mlb.l.1:1")
@@ -257,6 +267,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
         .is_err()
     );
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
+    assert_eq!(store.fantasy_players("mlb.l.1").unwrap(), prior_players);
 }
 
 #[test]
@@ -437,8 +448,8 @@ fn local_status_reports_real_identities_once_a_league_has_synced() {
     )
     .unwrap();
     let after = inspect_status_at(store.path(), "mlb.l.1").unwrap();
-    assert_eq!(after.yahoo_identity_count, 2);
-    assert_eq!(after.unmatched_player_count, 2);
+    assert_eq!(after.yahoo_identity_count, 3);
+    assert_eq!(after.unmatched_player_count, 3);
 }
 
 #[test]

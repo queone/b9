@@ -194,9 +194,10 @@ impl fmt::Display for ExecutorError {
                 formatter,
                 "read HTTP response: body exceeds {limit} bytes; raise the provider-specific limit only after verifying the response"
             ),
-            Self::Read { detail, .. } => write!(
+            Self::Read { detail, source } => write!(
                 formatter,
-                "read HTTP response: {detail}; retry when the provider is responsive"
+                "read HTTP response: {detail} ({:?}); retry when the provider is responsive",
+                source.kind()
             ),
         }
     }

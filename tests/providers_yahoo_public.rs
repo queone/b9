@@ -28,9 +28,16 @@ const NO_FREE_AGENTS: &[u8] = br#"{"fantasy_content":{"league":[{}, {"players":{
 // teams and a handful of players. Manager nicknames were already redacted by
 // Yahoo (`--hidden--`) in the real response; no other PII is present.
 
+type RecordedRequest = (
+    String,
+    Vec<skout::transport::HttpHeader>,
+    std::time::Duration,
+    usize,
+);
+
 struct FakeExecutor {
     responses: Mutex<VecDeque<Result<HttpResponse, ExecutorError>>>,
-    requests: Mutex<Vec<(String, Vec<skout::transport::HttpHeader>)>>,
+    requests: Mutex<Vec<RecordedRequest>>,
 }
 
 impl FakeExecutor {
@@ -41,17 +48,19 @@ impl FakeExecutor {
         }
     }
 
-    fn requests(&self) -> Vec<(String, Vec<skout::transport::HttpHeader>)> {
+    fn requests(&self) -> Vec<RecordedRequest> {
         self.requests.lock().unwrap().clone()
     }
 }
 
 impl HttpExecutor for FakeExecutor {
     fn execute(&self, request: ValidatedRequest) -> Result<HttpResponse, ExecutorError> {
-        self.requests
-            .lock()
-            .unwrap()
-            .push((request.url().to_owned(), request.headers()));
+        self.requests.lock().unwrap().push((
+            request.url().to_owned(),
+            request.headers(),
+            request.timeout(),
+            request.body_limit(),
+        ));
         self.responses
             .lock()
             .unwrap()
@@ -133,6 +142,7 @@ fn valid_fixture_parses_league_teams_rosters_and_matchup_pairing() {
     // No cookies, no auth header — a normal Accept header only.
     let requests = executor.requests();
     assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].2, std::time::Duration::from_secs(10));
     assert!(requests[0].0.contains("league_id=170874"));
     assert!(requests[0].0.contains("format=json"));
     for header in &requests[0].1 {
@@ -161,6 +171,11 @@ fn public_rank_supplement_batches_roster_ids_and_ignores_position_rank() {
         Some(216)
     );
     let requests = executor.requests();
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.2 == std::time::Duration::from_secs(10))
+    );
     assert!(
         requests[1]
             .0
@@ -195,6 +210,11 @@ fn public_standings_supplement_populates_budget_waiver_and_moves_without_auth() 
     assert_eq!(yankees.waiver_priority, 1);
     assert_eq!(yankees.moves, 29);
     let requests = executor.requests();
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.2 == std::time::Duration::from_secs(10))
+    );
     assert_eq!(
         requests[1].0,
         "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/standings?format=json"
@@ -324,6 +344,7 @@ fn public_scoreboard_uses_authoritative_team_totals_without_auth() {
                 && team.stats.get("7").map(String::as_str) == Some("11"))
     );
     let requests = executor.requests();
+    assert_eq!(requests[0].2, std::time::Duration::from_secs(10));
     assert_eq!(
         requests[0].0,
         "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json"
@@ -402,6 +423,7 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
         response(200, NO_FREE_AGENTS),
         response(200, MATCHUP),
         response(200, WEEKLY_STATS),
+        response(200, WEEKLY_STATS),
     ]));
     let client = client(executor.clone());
 
@@ -421,11 +443,19 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
             .len(),
         1
     );
+    assert_eq!(
+        client
+            .roster_day_stats("mlb.l.1.t.1", 7, "2026-05-11")
+            .unwrap()
+            .players
+            .len(),
+        1
+    );
 
-    let urls = executor
-        .requests()
+    let requests = executor.requests();
+    let urls = requests
         .into_iter()
-        .map(|(url, headers)| {
+        .map(|(url, headers, _, _)| {
             assert!(headers.iter().all(|header| {
                 !header.name.eq_ignore_ascii_case("authorization")
                     && !header.name.eq_ignore_ascii_case("cookie")
@@ -443,6 +473,16 @@ fn fantasy_source_uses_exact_public_paths_without_credentials() {
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/players;status=A;start=25;count=25;out=ranks,percent_owned,percent_started?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.1/scoreboard;week=7?format=json",
             "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.1/roster;week=7/players/stats;type=week;week=7?format=json",
+            "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/team/mlb.l.1.t.1/roster;date=2026-05-11/players/stats;type=date;date=2026-05-11?format=json",
         ]
     );
+    let requests = executor.requests();
+    assert_eq!(requests[2].2, std::time::Duration::from_secs(30));
+    assert_eq!(requests[2].3, 8 * 1024 * 1024);
+    assert!(
+        requests.iter().enumerate().all(|(index, request)| {
+            index == 2 || request.2 == std::time::Duration::from_secs(10)
+        })
+    );
+    assert!(requests.iter().all(|request| request.3 == 8 * 1024 * 1024));
 }

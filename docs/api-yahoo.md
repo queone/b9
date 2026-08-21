@@ -30,7 +30,9 @@ A full Yahoo league key such as `469.l.170874` is preserved. A bare ID is normal
 
 - Send only HTTPS GET requests through the shared validating transport.
 - Send an `Accept` header and never send `Authorization`, `Cookie`, OAuth parameters, refresh tokens, or browser headers.
-- Apply a ten-second request timeout and an eight-MiB response limit.
+- Apply a 30-second timeout to the combined league-roster request.
+- Apply a ten-second timeout to every other Yahoo request.
+- Apply an eight-MiB response limit to every Yahoo request.
 - Bound free-agent pagination to 20 pages of 25 players.
 - Reject invalid league and team keys before request construction.
 - Reject non-success responses without retaining response bodies in diagnostics.
