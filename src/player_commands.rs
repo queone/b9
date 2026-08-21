@@ -592,16 +592,11 @@ pub fn show_pool(
         };
     }
     let waiver_candidates = if waiver {
-        let candidates = store
-            .waiver_candidates()
-            .map_err(|failure| error(role, failure))?;
-        if candidates.is_empty() {
-            return Err(error(
-                role,
-                "active MLB roster data is unavailable; run skout sync and retry",
-            ));
-        }
-        Some(candidates)
+        Some(
+            store
+                .waiver_candidates()
+                .map_err(|failure| error(role, failure))?,
+        )
     } else {
         None
     };
@@ -613,18 +608,18 @@ pub fn show_pool(
                     .split(',')
                     .any(|position| position.eq_ignore_ascii_case(value))
             })
-            && waiver_candidates
-                .as_ref()
-                .is_none_or(|candidates| waiver_eligible(player, position, candidates))
+            && (!waiver || yahoo_pickup_available(player))
     });
     if waiver && sort.is_none() {
-        sort_by_pqs(&mut players);
+        sort_waiver_players(
+            &mut players,
+            position,
+            waiver_candidates.as_deref().unwrap_or_default(),
+        );
     } else {
         sort_pool_players(&mut players, sort.unwrap_or("rank"));
     }
-    let limit = argument
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(20);
+    let limit = player_pool_limit(argument);
     players.truncate(limit);
     let output = render_players(
         if role == "B" { "HITTERS" } else { "PITCHERS" },
@@ -632,6 +627,51 @@ pub fn show_pool(
         detected_help_color_mode(),
     );
     yahoo_result_notice(&store, output)
+}
+
+/// Return whether Yahoo marks a player as available in the selected league.
+#[must_use]
+pub fn yahoo_pickup_available(player: &StoredFantasyPlayer) -> bool {
+    player.owner.is_none()
+}
+
+/// Return the displayed player-pool limit for an optional numeric argument.
+#[must_use]
+pub fn player_pool_limit(argument: Option<&str>) -> usize {
+    argument
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(20)
+}
+
+/// Rank enriched waiver candidates before other Yahoo-available players.
+pub fn sort_waiver_players(
+    players: &mut [StoredFantasyPlayer],
+    requested_position: Option<&str>,
+    candidates: &[WaiverCandidate],
+) {
+    let mut qualified = players
+        .iter()
+        .filter(|player| waiver_eligible(player, requested_position, candidates))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut remaining = players
+        .iter()
+        .filter(|player| !waiver_eligible(player, requested_position, candidates))
+        .cloned()
+        .collect::<Vec<_>>();
+    sort_by_pqs(&mut qualified);
+    remaining.sort_by(|left, right| {
+        left.rank
+            .unwrap_or(i64::MAX)
+            .cmp(&right.rank.unwrap_or(i64::MAX))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    for (target, ranked) in players
+        .iter_mut()
+        .zip(qualified.into_iter().chain(remaining))
+    {
+        *target = ranked;
+    }
 }
 
 fn line_value(line: &str, label: &str) -> f64 {

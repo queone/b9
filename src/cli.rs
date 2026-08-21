@@ -229,10 +229,10 @@ const COMMAND_FLAGS: &[(&str, &str, &str)] = &[
     ),
     ("h", "-s, --sort <FIELD>", "Sort by a displayed field"),
     ("h", "-p, --position <POS>", "Filter by eligible position"),
-    ("h", "-w, --waiver", "Show waiver candidates only"),
+    ("h", "-w, --waiver", "Show available Yahoo pickup players"),
     ("p", "-s, --sort <FIELD>", "Sort by a displayed field"),
     ("p", "-p, --position <POS>", "Filter by eligible position"),
-    ("p", "-w, --waiver", "Show waiver candidates only"),
+    ("p", "-w, --waiver", "Show available Yahoo pickup players"),
 ];
 
 /// Run the skout command using process arguments.
@@ -455,6 +455,7 @@ fn root_command(version: &'static str) -> Command {
                     Arg::new("waiver")
                         .short('w')
                         .long("waiver")
+                        .help("Show available Yahoo pickup players")
                         .action(ArgAction::SetTrue),
                 );
         }

@@ -265,10 +265,14 @@ fn existing_commands_do_not_create_the_production_database() {
 
 #[test]
 fn pool_help_preserves_the_existing_waiver_surface() {
-    let output = Command::new(env!("CARGO_BIN_EXE_skout"))
-        .args(["h", "--help"])
-        .output()
-        .expect("run hitter help");
-    assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("--waiver"));
+    for command in ["h", "p"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_skout"))
+            .args([command, "--help"])
+            .output()
+            .expect("run player-pool help");
+        assert!(output.status.success());
+        let help = String::from_utf8_lossy(&output.stdout);
+        assert!(help.contains("--waiver"));
+        assert!(help.contains("Show available Yahoo pickup players"));
+    }
 }

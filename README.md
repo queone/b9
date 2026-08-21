@@ -52,8 +52,8 @@ skout p                     # browse pitchers
 skout h 50                  # show 50 hitters
 skout h "player name"       # hitter detail card
 skout p "player name"       # pitcher detail card
-skout h -w                  # hitter waiver candidates
-skout p -w                  # pitcher waiver candidates
+skout h -w                  # available Yahoo hitters to pick up
+skout p -w                  # available Yahoo pitchers to pick up
 skout h -s ops              # sort by a displayed field
 skout h -p OF               # filter by eligible position
 
@@ -75,7 +75,7 @@ skout reset                 # explicitly delete the local skout database
 
 Use `-l <league-key>` on fantasy commands to override the saved league for one run. Use `-d` or `--debug` to print operation diagnostics. Run `skout --help` for the complete command surface.
 
-Player-pool views incorporate PQS analysis, FanGraphs projections and closer roles, FantasyPros ECR, and locally synchronized Yahoo rank and ownership when available. Fixed-width tables use semantic color in supported 256-color terminals and equivalent plain text when redirected, when `NO_COLOR` is set, or when `TERM=dumb`.
+Player-pool views incorporate PQS analysis, FanGraphs projections and closer roles, FantasyPros ECR, and locally synchronized Yahoo rank and ownership when available. Waiver views include every Yahoo-available player, including IL, NA, and SUSP players. Players that pass the active-roster, identity, season-usage, and injury-status ranking gates appear first by PQS; remaining free agents follow by Yahoo rank and name. Fixed-width tables use semantic color in supported 256-color terminals and equivalent plain text when redirected, when `NO_COLOR` is set, or when `TERM=dumb`.
 
 ## Example Use Case
 
