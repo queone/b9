@@ -17,6 +17,7 @@ use tempfile::tempdir;
 
 struct Source {
     fail_rosters: bool,
+    fail_available_players: bool,
 }
 
 impl YahooFantasySource for Source {
@@ -63,6 +64,11 @@ impl YahooFantasySource for Source {
     }
 
     fn free_agents(&self, _: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
+        if self.fail_available_players {
+            return Err(YahooFantasyError::Incomplete(
+                "available players are incomplete",
+            ));
+        }
         Ok(vec![player(103, "Katherine Free Agent")])
     }
 
@@ -219,6 +225,7 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
     let summary = synchronize_with(
         &Source {
             fail_rosters: false,
+            fail_available_players: false,
         },
         &mut store,
         "mlb.l.1",
@@ -258,7 +265,10 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
     assert!(status.league_synced_at.is_some());
     assert!(
         synchronize_with(
-            &Source { fail_rosters: true },
+            &Source {
+                fail_rosters: false,
+                fail_available_players: true,
+            },
             &mut store,
             "mlb.l.1",
             "mlb.l.1.t.1",
@@ -268,6 +278,16 @@ fn synchronization_is_complete_and_retains_prior_rows_on_fetch_failure() {
     );
     assert_eq!(store.fantasy_teams("mlb.l.1").unwrap().len(), 2);
     assert_eq!(store.fantasy_players("mlb.l.1").unwrap(), prior_players);
+    let failed = store.dashboard_status().unwrap();
+    assert_eq!(failed.provider_failure_count, 1);
+    assert_eq!(failed.last_run_status.as_deref(), Some("failed"));
+    assert!(
+        failed
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("available players are incomplete")
+    );
 }
 
 #[test]
@@ -276,6 +296,7 @@ fn public_merge_updates_team_transactions_and_preserves_other_supplements() {
     let mut store = Store::open_at(directory.path().join("skout.db")).unwrap();
     let source = Source {
         fail_rosters: false,
+        fail_available_players: false,
     };
     let mut identities = |_| Vec::new();
     synchronize_with(
@@ -400,7 +421,10 @@ fn circuit_opens_after_five_failures_and_closes_on_recovery() {
     for _ in 0..5 {
         assert!(
             synchronize_with_origin(
-                &Source { fail_rosters: true },
+                &Source {
+                    fail_rosters: true,
+                    fail_available_players: false,
+                },
                 &mut store,
                 "mlb.l.1",
                 "mlb.l.1.t.1",
@@ -416,6 +440,7 @@ fn circuit_opens_after_five_failures_and_closes_on_recovery() {
     synchronize_with_origin(
         &Source {
             fail_rosters: false,
+            fail_available_players: false,
         },
         &mut store,
         "mlb.l.1",
@@ -440,6 +465,7 @@ fn local_status_reports_real_identities_once_a_league_has_synced() {
     synchronize_with(
         &Source {
             fail_rosters: false,
+            fail_available_players: false,
         },
         &mut store,
         "mlb.l.1",
@@ -465,6 +491,7 @@ fn injected_sync_origins_remain_durably_decodable() {
         synchronize_with_origin(
             &Source {
                 fail_rosters: false,
+                fail_available_players: false,
             },
             &mut store,
             "mlb.l.1",

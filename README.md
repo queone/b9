@@ -75,7 +75,7 @@ skout reset                 # explicitly delete the local skout database
 
 Use `-l <league-key>` on fantasy commands to override the saved league for one run. Use `-d` or `--debug` to print operation diagnostics. Run `skout --help` for the complete command surface.
 
-Player-pool views incorporate PQS analysis, FanGraphs projections and closer roles, FantasyPros ECR, and locally synchronized Yahoo rank and ownership when available. Waiver views include every Yahoo-available player, including IL, NA, and SUSP players. Players that pass the active-roster, identity, season-usage, and injury-status ranking gates appear first by PQS; remaining free agents follow by Yahoo rank and name. Fixed-width tables use semantic color in supported 256-color terminals and equivalent plain text when redirected, when `NO_COLOR` is set, or when `TERM=dumb`.
+Player-pool views incorporate PQS analysis, FanGraphs projections and closer roles, FantasyPros ECR, and locally synchronized Yahoo rank and ownership when available. Waiver views draw from a complete, bounded Yahoo available-player snapshot and include IL, NA, and SUSP players. Players that pass the active-roster, identity, season-usage, and injury-status ranking gates appear first by PQS; remaining available players follow by Yahoo rank and name. Fixed-width tables use semantic color in supported 256-color terminals and equivalent plain text when redirected, when `NO_COLOR` is set, or when `TERM=dumb`.
 
 ## Example Use Case
 

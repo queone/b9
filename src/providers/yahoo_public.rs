@@ -52,8 +52,8 @@ const PUBLIC_PLAYERS_URL: &str =
     "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2/league/mlb.l.public/players";
 const PUBLIC_FANTASY_URL: &str = "https://pub-api-ro.fantasysports.yahoo.com/fantasy/v2";
 const RANK_BATCH_SIZE: usize = 50;
-const FREE_AGENT_PAGE_SIZE: usize = 25;
-const MAX_FREE_AGENT_PAGES: usize = 20;
+const FREE_AGENT_PAGE_SIZE: usize = 100;
+const MAX_FREE_AGENT_DATA_PAGES: usize = 40;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const BODY_LIMIT: usize = 8 * 1024 * 1024;
 const HIDDEN_PLACEHOLDER: &str = "--hidden--";
@@ -465,23 +465,28 @@ impl YahooFantasySource for YahooPublicClient {
     fn free_agents(&self, league_key: &str) -> Result<Vec<FantasyPlayer>, YahooFantasyError> {
         validate_key(league_key)?;
         let mut players = BTreeMap::new();
-        for page in 0..MAX_FREE_AGENT_PAGES {
+        for page in 0..=MAX_FREE_AGENT_DATA_PAGES {
             let offset = page * FREE_AGENT_PAGE_SIZE;
             let rows = parse_free_agents(&self.get_json(format!(
                 "{PUBLIC_FANTASY_URL}/league/{league_key}/players;status=A;start={offset};count={FREE_AGENT_PAGE_SIZE};out=ranks,percent_owned,percent_started?format=json"
             ))?)?;
             if rows.is_empty() {
-                break;
+                return (!players.is_empty())
+                    .then(|| players.into_values().collect())
+                    .ok_or(YahooFantasyError::Incomplete(
+                        "available-player pages contain no players",
+                    ));
+            }
+            if page == MAX_FREE_AGENT_DATA_PAGES {
+                return Err(YahooFantasyError::Incomplete(
+                    "available-player collection exceeds 4,000 players",
+                ));
             }
             for player in rows {
                 players.insert(player.yahoo_player_id, player);
             }
         }
-        (!players.is_empty())
-            .then(|| players.into_values().collect())
-            .ok_or(YahooFantasyError::Incomplete(
-                "free-agent pages contain no players",
-            ))
+        unreachable!("bounded available-player pagination always returns")
     }
 
     fn scoreboard(

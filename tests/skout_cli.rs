@@ -1,6 +1,9 @@
 use std::process::{Command, Output};
 
 use skout::cli::render_root_help;
+use skout::config::{Config, write_at};
+use skout::domain::{FantasyPlayer, FantasyRosterSlot, FantasyTeam, League, Position, ScoringType};
+use skout::store::{FantasySnapshotWrite, IdentityCandidate, PositionWrite, Store};
 use skout::terminal::HelpColorMode;
 
 fn skout(arguments: &[&str]) -> Output {
@@ -8,6 +11,104 @@ fn skout(arguments: &[&str]) -> Output {
         .args(arguments)
         .output()
         .expect("run skout")
+}
+
+fn available_pitcher_home() -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("temporary HOME");
+    let config_dir = home.path().join(".config/skout");
+    write_at(
+        config_dir.join("config.json"),
+        &Config {
+            current_league: "mlb.l.1".into(),
+            current_team_key: "mlb.l.1.t.1".into(),
+            pull_public_league_id: String::new(),
+        },
+    )
+    .unwrap();
+    let mut players = (1..=25)
+        .map(|id| FantasyPlayer {
+            yahoo_player_id: id,
+            name: format!("Pitcher {id}"),
+            mlb_team: "NYY".into(),
+            display_position: "SP".into(),
+            position_type: "P".into(),
+            eligible_positions: vec![Position::StartingPitcher],
+            injury_status: String::new(),
+            percent_owned: Some(1.0),
+            percentage_started: Some(1.0),
+            yahoo_rank: Some(id),
+        })
+        .collect::<Vec<_>>();
+    players.push(FantasyPlayer {
+        yahoo_player_id: 12540,
+        name: "Bryce Miller".into(),
+        mlb_team: "SEA".into(),
+        display_position: "SP".into(),
+        position_type: "P".into(),
+        eligible_positions: vec![Position::StartingPitcher, Position::Other("P".into())],
+        injury_status: String::new(),
+        percent_owned: Some(54.0),
+        percentage_started: Some(50.0),
+        yahoo_rank: Some(254),
+    });
+    let mut store = Store::open_at(config_dir.join("skout.db")).unwrap();
+    store
+        .replace_fantasy_snapshot(&FantasySnapshotWrite {
+            league: League {
+                league_key: "mlb.l.1".into(),
+                name: "CLI Test League".into(),
+                season: 2026,
+                num_teams: 1,
+                scoring_type: ScoringType::HeadToHead,
+                roster_positions: vec![Position::StartingPitcher],
+                batting_categories: Vec::new(),
+                pitching_categories: Vec::new(),
+            },
+            current_week: Some(1),
+            categories: Vec::new(),
+            positions: vec![PositionWrite {
+                position: "SP".into(),
+                count: 1,
+            }],
+            teams: vec![FantasyTeam {
+                team_key: "mlb.l.1.t.1".into(),
+                league_key: "mlb.l.1".into(),
+                team_id: 1,
+                name: "Operators".into(),
+                manager_name: "Operator".into(),
+                is_owned_by_current_login: true,
+                waiver_priority: 1,
+                faab_balance: 100,
+                wins: 0,
+                losses: 0,
+                ties: 0,
+                moves: 0,
+                rank: 1,
+            }],
+            players,
+            slots: vec![FantasyRosterSlot {
+                team_key: "mlb.l.1.t.1".into(),
+                yahoo_player_id: 1,
+                slot_position: Position::StartingPitcher,
+            }],
+        })
+        .unwrap();
+    assert_eq!(
+        store
+            .reconcile_mlb_identities(&[IdentityCandidate {
+                mlbam_id: 682243,
+                name: "Bryce Miller".into(),
+                team: "SEA".into(),
+                role: "P".into(),
+            }])
+            .unwrap(),
+        1
+    );
+    store
+        .save_command_snapshot("player-game-log", "mlb", "682243", "v1", "[]")
+        .unwrap();
+    drop(store);
+    home
 }
 
 #[test]
@@ -275,4 +376,46 @@ fn pool_help_preserves_the_existing_waiver_surface() {
         assert!(help.contains("--waiver"));
         assert!(help.contains("Show available Yahoo pickup players"));
     }
+}
+
+#[test]
+fn available_pitcher_survives_executable_lookup_and_expanded_waiver_view() {
+    let home = available_pitcher_home();
+    let expanded = Command::new(env!("CARGO_BIN_EXE_skout"))
+        .args(["p", "1000", "-w"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run expanded pitcher waiver view");
+    assert!(expanded.status.success());
+    assert!(
+        String::from_utf8(expanded.stdout)
+            .unwrap()
+            .contains("Bryce Miller")
+    );
+
+    let default = Command::new(env!("CARGO_BIN_EXE_skout"))
+        .args(["p", "-w"])
+        .env("HOME", home.path())
+        .output()
+        .expect("run default pitcher waiver view");
+    assert!(default.status.success());
+    assert!(
+        !String::from_utf8(default.stdout)
+            .unwrap()
+            .contains("Bryce Miller")
+    );
+
+    let exact = Command::new(env!("CARGO_BIN_EXE_skout"))
+        .args(["p", "bryce miller"])
+        .env("HOME", home.path())
+        .env("HTTPS_PROXY", "http://127.0.0.1:9")
+        .env("ALL_PROXY", "http://127.0.0.1:9")
+        .output()
+        .expect("run exact pitcher lookup");
+    assert!(exact.status.success());
+    assert!(
+        String::from_utf8(exact.stdout)
+            .unwrap()
+            .contains("Bryce Miller")
+    );
 }

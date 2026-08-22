@@ -18,7 +18,7 @@ skout acquires read-only Yahoo fantasy data without OAuth, cookies, browser stat
 - Fetch `/league/{league_key}/settings?format=json` for categories, roster positions, season, and current week.
 - Fetch `/league/{league_key}/standings?format=json` for team records, rank, waiver priority, budget, and move counts.
 - Fetch `/team/{team_key}/roster/players;out=ranks,percent_owned?format=json` once per league team for complete league rosters; the combined `/league/{league_key}/teams/roster/players...` request was retired after it returned a multi-megabyte response that was observed truncated mid-transfer.
-- Fetch `/league/{league_key}/players;status=A;start={offset};count=25;out=ranks,percent_owned?format=json` until the first empty page for active free agents.
+- Fetch `/league/{league_key}/players;status=A;start={offset};count=100;out=ranks,percent_owned?format=json` until the first empty page for all available players, including players on waivers.
 - Fetch `/league/{league_key}/scoreboard[;week={week}]?format=json` for current or historical matchup scoreboards.
 - Fetch `/team/{team_key}/roster;week={week}/players/stats;type=week;week={week}?format=json` for weekly roster statistics.
 - Fetch `/team/{team_key}/roster;date={date}/players/stats;type=date;date={date}?format=json` for one active-season matchup day.
@@ -31,7 +31,8 @@ A full Yahoo league key such as `469.l.170874` is preserved. A bare ID is normal
 - Send only HTTPS GET requests through the shared validating transport.
 - Send an `Accept` header and never send `Authorization`, `Cookie`, OAuth parameters, refresh tokens, or browser headers.
 - Apply a ten-second timeout and an eight-MiB response limit to every Yahoo request, including each per-team roster request.
-- Bound free-agent pagination to 20 pages of 25 players.
+- Bound available-player acquisition to 40 data pages of 100 players plus one required empty termination request.
+- Reject a nonempty termination page as an incomplete collection.
 - Reject invalid league and team keys before request construction.
 - Reject non-success responses without retaining response bodies in diagnostics.
 - Avoid retrying access denial, evading blocking, or enumerating league ids.
@@ -46,14 +47,14 @@ Primary-team matching uses this precedence:
 2. case-insensitive exact team name;
 3. unique case-insensitive team-name substring.
 
-Ambiguous, missing, or stale selections fail without guessing. Synchronization fetches settings, standings, complete rosters, and all free-agent pages before validating the selected team and atomically replacing the prior complete fantasy snapshot. A failed or incomplete acquisition leaves the prior snapshot intact and records a visible provider failure.
+Ambiguous, missing, or stale selections fail without guessing. Synchronization fetches settings, standings, complete rosters, and all available-player pages before validating the selected team and atomically replacing the prior complete fantasy snapshot. A failed or incomplete acquisition leaves the prior snapshot intact and records a visible provider failure.
 
 ## Command behavior
 
 - Use public Yahoo data for foreground `sync`.
 - Use public Yahoo scoreboards and period statistics for `m` and `rt --weekly`, including explicit weeks and active-season `MMM-DD` matchup days.
 - Require MLBAM identity reconciliation before daily matchup overlays; report unresolved players instead of silently applying an empty overlay.
-- Populate waiver candidates from the complete public free-agent snapshot.
+- Populate waiver candidates from the complete public available-player snapshot.
 - Report missing or empty Yahoo available-player data instead of rendering silent waiver output.
 - Keep `st` local-only.
 - Keep the command surface free of Yahoo authentication, credential cleanup, and roster-mutation operations.

@@ -3,6 +3,7 @@
 | Version | Summary |
 |---------|---------|
 | Unreleased | |
+| 0.36.1 | AC48: complete Yahoo available-player pagination |
 | 0.36.0 | AC47: speed up commands; fix pitcher game log, opponents, injuries display |
 | 0.35.0 | AC46: fix roster slots, waiver sort, display parity, and sync performance |
 | 0.34.5 | AC45: recover degraded sync providers |
